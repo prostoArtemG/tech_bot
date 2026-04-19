@@ -36,6 +36,11 @@ async def start_handler(message: Message):
 async def products_handler(message: Message):
     await message.answer("Список товаров пока пуст")
 
+# ===== КНОПКА ПРОДАЖА =====
+@router.message(lambda m: m.text == "🛒 Продажа")
+async def sale_handler(message: Message):
+    await message.answer("Раздел продажи пока в разработке")
+
 # ===== ЗАПУСК =====
 async def main():
     bot = Bot(token=BOT_TOKEN)
