@@ -43,9 +43,7 @@ class Database:
 		await self.execute("""
 		CREATE TABLE IF NOT EXISTS products (
 			id SERIAL PRIMARY KEY,
-			category TEXT,
-			brand TEXT,
-			model TEXT,
+			name TEXT NOT NULL,
 			price NUMERIC(12, 2) NOT NULL DEFAULT 0,
 			created_at TIMESTAMP NOT NULL DEFAULT NOW()
 		);
@@ -68,15 +66,23 @@ class Database:
 
 		await self.execute("""
 		ALTER TABLE products
+		ADD COLUMN IF NOT EXISTS name TEXT;
+		""")
+
+		await self.execute("""
+		ALTER TABLE products
 		ADD COLUMN IF NOT EXISTS price NUMERIC(12, 2) NOT NULL DEFAULT 0;
 		""")
 
 	async def add_product(self, category: str, brand: str, model: str, price: float):
+		name = f"{brand} {model}".strip()
+
 		await self.execute(
 			"""
-			INSERT INTO products (category, brand, model, price)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO products (name, category, brand, model, price)
+			VALUES ($1, $2, $3, $4, $5)
 			""",
+			name,
 			category,
 			brand,
 			model,
