@@ -43,26 +43,50 @@ class Database:
 		await self.execute("""
 		CREATE TABLE IF NOT EXISTS products (
 			id SERIAL PRIMARY KEY,
-			name TEXT NOT NULL,
+			category TEXT,
+			brand TEXT,
+			model TEXT,
 			price NUMERIC(12, 2) NOT NULL DEFAULT 0,
 			created_at TIMESTAMP NOT NULL DEFAULT NOW()
 		);
 		""")
 
-	async def add_product(self, name: str, price: float):
+		await self.execute("""
+		ALTER TABLE products
+		ADD COLUMN IF NOT EXISTS category TEXT;
+		""")
+
+		await self.execute("""
+		ALTER TABLE products
+		ADD COLUMN IF NOT EXISTS brand TEXT;
+		""")
+
+		await self.execute("""
+		ALTER TABLE products
+		ADD COLUMN IF NOT EXISTS model TEXT;
+		""")
+
+		await self.execute("""
+		ALTER TABLE products
+		ADD COLUMN IF NOT EXISTS price NUMERIC(12, 2) NOT NULL DEFAULT 0;
+		""")
+
+	async def add_product(self, category: str, brand: str, model: str, price: float):
 		await self.execute(
 			"""
-			INSERT INTO products (name, price)
-			VALUES ($1, $2)
+			INSERT INTO products (category, brand, model, price)
+			VALUES ($1, $2, $3, $4)
 			""",
-			name,
+			category,
+			brand,
+			model,
 			price
 		)
 
 	async def list_products(self):
 		return await self.fetch(
 			"""
-			SELECT id, name, price
+			SELECT id, category, brand, model, price
 			FROM products
 			ORDER BY id DESC
 			"""

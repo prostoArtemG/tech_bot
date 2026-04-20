@@ -20,7 +20,9 @@ router = Router()
 
 
 class AddProductState(StatesGroup):
-    waiting_for_name = State()
+    waiting_for_category = State()
+    waiting_for_brand = State()
+    waiting_for_model = State()
     waiting_for_price = State()
 
 
@@ -76,19 +78,45 @@ async def sale_handler(message: Message):
 
 @router.message(lambda m: m.text == "➕ Добавить товар")
 async def add_product_start_handler(message: Message, state: FSMContext):
-    await state.set_state(AddProductState.waiting_for_name)
-    await message.answer("Введите название товара:")
+    await state.set_state(AddProductState.waiting_for_category)
+    await message.answer("Введите категорию товара:\nНапример: Стиральная машина")
 
 
-@router.message(AddProductState.waiting_for_name)
-async def add_product_name_handler(message: Message, state: FSMContext):
-    name = (message.text or "").strip()
+@router.message(AddProductState.waiting_for_category)
+async def add_product_category_handler(message: Message, state: FSMContext):
+    category = (message.text or "").strip()
 
-    if not name:
-        await message.answer("Название не может быть пустым. Введите название товара:")
+    if not category:
+        await message.answer("Категория не может быть пустой. Введите категорию:")
         return
 
-    await state.update_data(product_name=name)
+    await state.update_data(category=category)
+    await state.set_state(AddProductState.waiting_for_brand)
+    await message.answer("Введите бренд:\nНапример: Samsung")
+
+
+@router.message(AddProductState.waiting_for_brand)
+async def add_product_brand_handler(message: Message, state: FSMContext):
+    brand = (message.text or "").strip()
+
+    if not brand:
+        await message.answer("Бренд не может быть пустым. Введите бренд:")
+        return
+
+    await state.update_data(brand=brand)
+    await state.set_state(AddProductState.waiting_for_model)
+    await message.answer("Введите модель:\nНапример: WW90T554CAT")
+
+
+@router.message(AddProductState.waiting_for_model)
+async def add_product_model_handler(message: Message, state: FSMContext):
+    model = (message.text or "").strip()
+
+    if not model:
+        await message.answer("Модель не может быть пустой. Введите модель:")
+        return
+
+    await state.update_data(model=model)
     await state.set_state(AddProductState.waiting_for_price)
     await message.answer("Введите цену товара, например: 18000")
 
@@ -108,13 +136,19 @@ async def add_product_price_handler(message: Message, state: FSMContext):
         return
 
     data = await state.get_data()
-    product_name = data["product_name"]
+    category = data["category"]
+    brand = data["brand"]
+    model = data["model"]
 
-    await db.add_product(product_name, price)
+    await db.add_product(category, brand, model, price)
 
     await state.clear()
     await message.answer(
-        f"✅ Товар добавлен:\n\nНазвание: {product_name}\nЦена: {price:.2f} грн",
+        "✅ Товар добавлен:\n\n"
+        f"Категория: {category}\n"
+        f"Бренд: {brand}\n"
+        f"Модель: {model}\n"
+        f"Цена: {price:.2f} грн",
         reply_markup=products_kb
     )
 
@@ -129,7 +163,14 @@ async def list_products_handler(message: Message):
 
     lines = ["📦 Список товаров:\n"]
     for row in rows:
-        lines.append(f"{row['id']}. {row['name']} — {float(row['price']):.2f} грн")
+        category = row["category"] or "-"
+        brand = row["brand"] or "-"
+        model = row["model"] or "-"
+        price = float(row["price"])
+
+        lines.append(
+            f"{row['id']}. {category} | {brand} | {model} | {price:.2f} грн"
+        )
 
     await message.answer("\n".join(lines))
 
