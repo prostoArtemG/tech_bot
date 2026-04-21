@@ -724,6 +724,51 @@ async def find_customer_hint_handler(message: Message):
     await message.answer("Напиши часть имени, телефона или города, и я подскажу совпадения.\n\nПример: Иван или 099")
 
 
+@router.message(lambda m: m.text == "💰 Прибыль")
+async def profit_menu_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "Раздел прибыли:",
+        reply_markup=profit_kb
+    )
+
+
+@router.message(lambda m: m.text == "💰 Прибыль за сегодня")
+async def today_profit_handler(message: Message):
+    stats = await db.get_today_profit_stats()
+
+    revenue = float(stats["revenue"] or 0)
+    cost = float(stats["cost"] or 0)
+    profit = revenue - cost
+
+    text = (
+        "💰 Прибыль за сегодня\n\n"
+        f"Выручка: {revenue:.2f} грн\n"
+        f"Закупки: {cost:.2f} грн\n"
+        f"Прибыль: {profit:.2f} грн"
+    )
+
+    await message.answer(text, reply_markup=profit_kb)
+
+
+@router.message(lambda m: m.text == "💰 Прибыль за месяц")
+async def month_profit_handler(message: Message):
+    stats = await db.get_month_profit_stats()
+
+    revenue = float(stats["revenue"] or 0)
+    cost = float(stats["cost"] or 0)
+    profit = revenue - cost
+
+    text = (
+        "💰 Прибыль за месяц\n\n"
+        f"Выручка: {revenue:.2f} грн\n"
+        f"Закупки: {cost:.2f} грн\n"
+        f"Прибыль: {profit:.2f} грн"
+    )
+
+    await message.answer(text, reply_markup=profit_kb)
+
+
 @router.message(lambda m: m.text not in {
     "📦 Товары", "🛒 Продажа", "🧾 История продаж", "👤 Клиенты",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",

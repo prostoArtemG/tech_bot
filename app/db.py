@@ -327,5 +327,31 @@ class Database:
             """
         )
 
+    async def get_today_profit_stats(self):
+        return await self.fetchrow(
+            """
+            SELECT
+                COALESCE((SELECT SUM(total_amount) FROM sales WHERE created_at::date = CURRENT_DATE), 0) AS revenue,
+                COALESCE((SELECT SUM(total_amount) FROM purchases WHERE created_at::date = CURRENT_DATE), 0) AS cost
+            """
+        )
+
+    async def get_month_profit_stats(self):
+        return await self.fetchrow(
+            """
+            SELECT
+                COALESCE((
+                    SELECT SUM(total_amount)
+                    FROM sales
+                    WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+                ), 0) AS revenue,
+                COALESCE((
+                    SELECT SUM(total_amount)
+                    FROM purchases
+                    WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+                ), 0) AS cost
+            """
+        )
+
 
 db = Database(DATABASE_URL)
