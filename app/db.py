@@ -80,6 +80,17 @@ class Database:
         """)
 
         await self.execute("""
+        CREATE TABLE IF NOT EXISTS customers (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL UNIQUE,
+            city TEXT,
+            comment TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS sales (
             id SERIAL PRIMARY KEY,
             product_id INTEGER,
@@ -88,6 +99,11 @@ class Database:
             total_amount NUMERIC(12,2),
             created_at TIMESTAMP DEFAULT NOW()
         );
+        """)
+
+        await self.execute("""
+        ALTER TABLE sales
+        ADD COLUMN IF NOT EXISTS customer_id INTEGER;
         """)
 
     async def add_product(self, category: str, brand: str, model: str, price: float):
@@ -114,6 +130,20 @@ class Database:
             """
         )
 
+    async def search_products(self, query: str):
+        return await self.fetch(
+            """
+            SELECT id, category, brand, model, price, stock_qty
+            FROM products
+            WHERE LOWER(COALESCE(brand, '')) LIKE LOWER($1)
+               OR LOWER(COALESCE(model, '')) LIKE LOWER($1)
+               OR LOWER(COALESCE(category, '')) LIKE LOWER($1)
+            ORDER BY id DESC
+            LIMIT 10
+            """,
+            f"%{query}%"
+        )
+
     async def get_product_by_id(self, product_id: int):
         return await self.fetchrow(
             """
@@ -135,31 +165,66 @@ class Database:
             stock_qty
         )
 
-    async def search_products(self, query: str):
+    async def get_customer_by_phone(self, phone: str):
+        return await self.fetchrow(
+            """
+            SELECT id, name, phone, city, comment
+            FROM customers
+            WHERE phone = $1
+            """,
+            phone
+        )
+
+    async def create_customer(self, name: str, phone: str, city: str, comment: str | None = None):
+        return await self.fetchrow(
+            """
+            INSERT INTO customers (name, phone, city, comment)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, name, phone, city, comment
+            """,
+            name,
+            phone,
+            city,
+            comment
+        )
+
+    async def list_customers(self):
         return await self.fetch(
             """
-            SELECT id, category, brand, model, price, stock_qty
-            FROM products
-            WHERE LOWER(brand) LIKE LOWER($1)
-               OR LOWER(model) LIKE LOWER($1)
+            SELECT id, name, phone, city
+            FROM customers
             ORDER BY id DESC
-            LIMIT 10
+            LIMIT 50
+            """
+        )
+
+    async def search_customers(self, query: str):
+        return await self.fetch(
+            """
+            SELECT id, name, phone, city
+            FROM customers
+            WHERE LOWER(name) LIKE LOWER($1)
+               OR phone LIKE $1
+               OR LOWER(COALESCE(city, '')) LIKE LOWER($1)
+            ORDER BY id DESC
+            LIMIT 20
             """,
             f"%{query}%"
         )
 
-    async def create_sale(self, product_id: int, qty: int, price: float):
+    async def create_sale(self, product_id: int, qty: int, price: float, customer_id: int):
         total = qty * price
 
         await self.execute(
             """
-            INSERT INTO sales (product_id, qty, sale_price, total_amount)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO sales (product_id, qty, sale_price, total_amount, customer_id)
+            VALUES ($1, $2, $3, $4, $5)
             """,
             product_id,
             qty,
             price,
-            total
+            total,
+            customer_id
         )
 
         return total
