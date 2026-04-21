@@ -32,6 +32,13 @@ class EditStockState(StatesGroup):
     waiting_for_new_stock = State()
 
 
+class ReceiptState(StatesGroup):
+    waiting_for_query = State()
+    waiting_for_product_id = State()
+    waiting_for_qty = State()
+    waiting_for_purchase_price = State()
+
+
 class SaleState(StatesGroup):
     waiting_for_query = State()
     waiting_for_product_id = State()
@@ -55,6 +62,7 @@ products_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="➕ Добавить товар")],
         [KeyboardButton(text="📋 Список товаров")],
         [KeyboardButton(text="✏️ Изменить остаток")],
+        [KeyboardButton(text="➕ Приход")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -273,6 +281,117 @@ async def edit_stock_new_stock_handler(message: Message, state: FSMContext):
     )
 
 
+@router.message(lambda m: m.text == "➕ Приход")
+async def receipt_start_handler(message: Message, state: FSMContext):
+    await state.set_state(ReceiptState.waiting_for_query)
+    await message.answer("Введите бренд, модель или категорию товара для прихода:")
+
+
+@router.message(ReceiptState.waiting_for_query)
+async def receipt_search_handler(message: Message, state: FSMContext):
+    query = (message.text or "").strip()
+
+    rows = await db.search_products(query)
+
+    if not rows:
+        await message.answer("Ничего не найдено. Попробуй ещё:")
+        return
+
+    lines = ["Найдено:\n"]
+    for row in rows:
+        lines.append(
+            f"{row['id']}. {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'} | "
+            f"Цена: {float(row['price']):.2f} грн | Остаток: {row['stock_qty']} шт"
+        )
+
+    await state.set_state(ReceiptState.waiting_for_product_id)
+    await message.answer("\n".join(lines) + "\n\nВведите ID товара:")
+
+
+@router.message(ReceiptState.waiting_for_product_id)
+async def receipt_product_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if not raw_id.isdigit():
+        await message.answer("Введите корректный ID товара")
+        return
+
+    product_id = int(raw_id)
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await message.answer("Товар не найден")
+        return
+
+    await state.update_data(product_id=product_id)
+    await state.set_state(ReceiptState.waiting_for_qty)
+
+    await message.answer(
+        f"Товар:\n{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
+        f"Текущий остаток: {product['stock_qty']} шт\n\n"
+        "Введите количество для прихода:"
+    )
+
+
+@router.message(ReceiptState.waiting_for_qty)
+async def receipt_qty_handler(message: Message, state: FSMContext):
+    raw_qty = (message.text or "").strip()
+
+    if not raw_qty.isdigit():
+        await message.answer("Введите корректное количество")
+        return
+
+    qty = int(raw_qty)
+    if qty <= 0:
+        await message.answer("Количество должно быть больше 0")
+        return
+
+    await state.update_data(qty=qty)
+    await state.set_state(ReceiptState.waiting_for_purchase_price)
+    await message.answer("Введите закупочную цену за 1 шт, например: 15000")
+
+
+@router.message(ReceiptState.waiting_for_purchase_price)
+async def receipt_purchase_price_handler(message: Message, state: FSMContext):
+    raw_price = (message.text or "").strip().replace(",", ".")
+
+    try:
+        purchase_price = float(raw_price)
+    except ValueError:
+        await message.answer("Закупочная цена должна быть числом. Например: 15000")
+        return
+
+    if purchase_price < 0:
+        await message.answer("Закупочная цена не может быть отрицательной. Введите заново:")
+        return
+
+    data = await state.get_data()
+    product_id = data["product_id"]
+    qty = data["qty"]
+
+    product = await db.get_product_by_id(product_id)
+    if not product:
+        await state.clear()
+        await message.answer("Товар не найден", reply_markup=menu_kb)
+        return
+
+    total_amount = await db.create_purchase(product_id, qty, purchase_price)
+
+    new_stock = (product["stock_qty"] or 0) + qty
+    await db.update_stock_qty(product_id, new_stock)
+
+    await state.clear()
+    await message.answer(
+        "✅ Приход сохранён\n\n"
+        f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
+        f"Количество: {qty} шт\n"
+        f"Закупочная цена: {purchase_price:.2f} грн\n"
+        f"Сумма прихода: {total_amount:.2f} грн\n"
+        f"Новый остаток: {new_stock} шт",
+        reply_markup=products_kb
+    )
+
+
 @router.message(lambda m: m.text == "🛒 Продажа")
 async def sale_start_handler(message: Message, state: FSMContext):
     await state.set_state(SaleState.waiting_for_query)
@@ -484,7 +603,7 @@ async def find_customer_hint_handler(message: Message):
 
 @router.message(lambda m: m.text not in {
     "📦 Товары", "🛒 Продажа", "👤 Клиенты",
-    "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток",
+    "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
     "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад"
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):

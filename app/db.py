@@ -106,6 +106,17 @@ class Database:
         ADD COLUMN IF NOT EXISTS customer_id INTEGER;
         """)
 
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS purchases (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            qty INTEGER NOT NULL,
+            purchase_price NUMERIC(12,2) NOT NULL,
+            total_amount NUMERIC(12,2) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
     async def add_product(self, category: str, brand: str, model: str, price: float):
         name = f"{brand} {model}".strip()
 
@@ -164,6 +175,22 @@ class Database:
             product_id,
             stock_qty
         )
+
+    async def create_purchase(self, product_id: int, qty: int, purchase_price: float):
+        total_amount = qty * purchase_price
+
+        await self.execute(
+            """
+            INSERT INTO purchases (product_id, qty, purchase_price, total_amount)
+            VALUES ($1, $2, $3, $4)
+            """,
+            product_id,
+            qty,
+            purchase_price,
+            total_amount
+        )
+
+        return total_amount
 
     async def get_customer_by_phone(self, phone: str):
         return await self.fetchrow(
