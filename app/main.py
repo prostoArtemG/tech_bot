@@ -91,6 +91,16 @@ reports_kb = ReplyKeyboardMarkup(
 )
 
 
+profit_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="💰 Прибыль за сегодня")],
+        [KeyboardButton(text="💰 Прибыль за месяц")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
 def normalize_phone(phone: str) -> str:
     return re.sub(r"[^\d+]", "", phone.strip())
 
@@ -127,6 +137,15 @@ async def reports_menu_handler(message: Message, state: FSMContext):
     await message.answer(
         "Раздел отчётов:",
         reply_markup=reports_kb
+    )
+
+
+@router.message(lambda m: m.text == "💰 Прибыль")
+async def profit_menu_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "Раздел прибыли:",
+        reply_markup=profit_kb
     )
 
 
