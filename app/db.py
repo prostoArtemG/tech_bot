@@ -256,5 +256,29 @@ class Database:
 
         return total
 
+    async def get_today_sales_stats(self):
+        return await self.fetchrow(
+            """
+            SELECT
+                COUNT(*) AS sales_count,
+                COALESCE(SUM(qty), 0) AS total_qty,
+                COALESCE(SUM(total_amount), 0) AS revenue
+            FROM sales
+            WHERE created_at::date = CURRENT_DATE
+            """
+        )
+
+    async def get_today_purchases_stats(self):
+        return await self.fetchrow(
+            """
+            SELECT
+                COUNT(*) AS purchases_count,
+                COALESCE(SUM(qty), 0) AS total_qty,
+                COALESCE(SUM(total_amount), 0) AS total_cost
+            FROM purchases
+            WHERE created_at::date = CURRENT_DATE
+            """
+        )
+
 
 db = Database(DATABASE_URL)

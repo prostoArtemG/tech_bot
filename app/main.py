@@ -53,6 +53,7 @@ menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📦 Товары")],
         [KeyboardButton(text="🛒 Продажа")],
         [KeyboardButton(text="👤 Клиенты")],
+        [KeyboardButton(text="📈 Отчёты")],
     ],
     resize_keyboard=True
 )
@@ -72,6 +73,15 @@ customers_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Список клиентов")],
         [KeyboardButton(text="🔍 Найти клиента")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+reports_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📅 Отчёт за сегодня")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -106,6 +116,14 @@ async def customers_menu_handler(message: Message, state: FSMContext):
     await message.answer(
         "Раздел клиентов:",
         reply_markup=customers_kb
+    )
+
+@router.message(lambda m: m.text == "📈 Отчёты")
+async def reports_menu_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "Раздел отчётов:",
+        reply_markup=reports_kb
     )
 
 
@@ -596,6 +614,32 @@ async def list_customers_handler(message: Message):
     await message.answer("\n".join(lines))
 
 
+@router.message(lambda m: m.text == "📅 Отчёт за сегодня")
+async def today_report_handler(message: Message):
+    sales_stats = await db.get_today_sales_stats()
+    purchase_stats = await db.get_today_purchases_stats()
+
+    sales_count = int(sales_stats["sales_count"] or 0)
+    sold_qty = int(sales_stats["total_qty"] or 0)
+    revenue = float(sales_stats["revenue"] or 0)
+
+    purchases_count = int(purchase_stats["purchases_count"] or 0)
+    purchased_qty = int(purchase_stats["total_qty"] or 0)
+    total_cost = float(purchase_stats["total_cost"] or 0)
+
+    text = (
+        "📈 Отчёт за сегодня\n\n"
+        f"Продаж: {sales_count}\n"
+        f"Продано единиц: {sold_qty}\n"
+        f"Выручка: {revenue:.2f} грн\n\n"
+        f"Приходов: {purchases_count}\n"
+        f"Принято единиц: {purchased_qty}\n"
+        f"Сумма закупок: {total_cost:.2f} грн"
+    )
+
+    await message.answer(text, reply_markup=reports_kb)
+
+
 @router.message(lambda m: m.text == "🔍 Найти клиента")
 async def find_customer_hint_handler(message: Message):
     await message.answer("Напиши часть имени, телефона или города, и я подскажу совпадения.\n\nПример: Иван или 099")
@@ -604,7 +648,8 @@ async def find_customer_hint_handler(message: Message):
 @router.message(lambda m: m.text not in {
     "📦 Товары", "🛒 Продажа", "👤 Клиенты",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
-    "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад"
+    "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад",
+    "📈 Отчёты", "📅 Отчёт за сегодня",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
