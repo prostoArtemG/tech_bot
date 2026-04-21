@@ -79,6 +79,17 @@ class Database:
         ADD COLUMN IF NOT EXISTS stock_qty INTEGER NOT NULL DEFAULT 0;
         """)
 
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS sales (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER,
+            qty INTEGER,
+            sale_price NUMERIC(12,2),
+            total_amount NUMERIC(12,2),
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+        """)
+
     async def add_product(self, category: str, brand: str, model: str, price: float):
         name = f"{brand} {model}".strip()
 
@@ -123,6 +134,35 @@ class Database:
             product_id,
             stock_qty
         )
+
+    async def search_products(self, query: str):
+        return await self.fetch(
+            """
+            SELECT id, category, brand, model, price, stock_qty
+            FROM products
+            WHERE LOWER(brand) LIKE LOWER($1)
+               OR LOWER(model) LIKE LOWER($1)
+            ORDER BY id DESC
+            LIMIT 10
+            """,
+            f"%{query}%"
+        )
+
+    async def create_sale(self, product_id: int, qty: int, price: float):
+        total = qty * price
+
+        await self.execute(
+            """
+            INSERT INTO sales (product_id, qty, sale_price, total_amount)
+            VALUES ($1, $2, $3, $4)
+            """,
+            product_id,
+            qty,
+            price,
+            total
+        )
+
+        return total
 
 
 db = Database(DATABASE_URL)
