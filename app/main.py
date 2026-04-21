@@ -26,6 +26,11 @@ class AddProductState(StatesGroup):
     waiting_for_price = State()
 
 
+class EditStockState(StatesGroup):
+    waiting_for_product_id = State()
+    waiting_for_new_stock = State()
+
+
 menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары")],
@@ -38,6 +43,7 @@ products_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="➕ Добавить товар")],
         [KeyboardButton(text="📋 Список товаров")],
+        [KeyboardButton(text="✏️ Изменить остаток")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -148,7 +154,8 @@ async def add_product_price_handler(message: Message, state: FSMContext):
         f"Категория: {category}\n"
         f"Бренд: {brand}\n"
         f"Модель: {model}\n"
-        f"Цена: {price:.2f} грн",
+        f"Цена: {price:.2f} грн\n"
+        f"Остаток: 0 шт",
         reply_markup=products_kb
     )
 
@@ -167,12 +174,75 @@ async def list_products_handler(message: Message):
         brand = row["brand"] or "-"
         model = row["model"] or "-"
         price = float(row["price"])
+        stock_qty = row["stock_qty"] or 0
 
         lines.append(
-            f"{row['id']}. {category} | {brand} | {model} | {price:.2f} грн"
+            f"{row['id']}. {category} | {brand} | {model} | {price:.2f} грн | Остаток: {stock_qty} шт"
         )
 
     await message.answer("\n".join(lines))
+
+
+@router.message(lambda m: m.text == "✏️ Изменить остаток")
+async def edit_stock_start_handler(message: Message, state: FSMContext):
+    await state.set_state(EditStockState.waiting_for_product_id)
+    await message.answer("Введите ID товара, у которого хотите изменить остаток:")
+
+
+@router.message(EditStockState.waiting_for_product_id)
+async def edit_stock_product_id_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if not raw_id.isdigit():
+        await message.answer("ID товара должен быть числом. Введите ID:")
+        return
+
+    product_id = int(raw_id)
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await message.answer("Товар с таким ID не найден. Введите корректный ID:")
+        return
+
+    await state.update_data(product_id=product_id)
+
+    category = product["category"] or "-"
+    brand = product["brand"] or "-"
+    model = product["model"] or "-"
+    stock_qty = product["stock_qty"] or 0
+
+    await state.set_state(EditStockState.waiting_for_new_stock)
+    await message.answer(
+        "Текущий товар:\n"
+        f"{product['id']}. {category} | {brand} | {model}\n"
+        f"Текущий остаток: {stock_qty} шт\n\n"
+        "Введите новый остаток:"
+    )
+
+
+@router.message(EditStockState.waiting_for_new_stock)
+async def edit_stock_new_stock_handler(message: Message, state: FSMContext):
+    raw_stock = (message.text or "").strip()
+
+    if not raw_stock.isdigit():
+        await message.answer("Остаток должен быть целым числом 0 или больше. Введите заново:")
+        return
+
+    new_stock = int(raw_stock)
+
+    data = await state.get_data()
+    product_id = data["product_id"]
+
+    await db.update_stock_qty(product_id, new_stock)
+    product = await db.get_product_by_id(product_id)
+
+    await state.clear()
+    await message.answer(
+        "✅ Остаток обновлён:\n\n"
+        f"{product['id']}. {product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
+        f"Новый остаток: {product['stock_qty']} шт",
+        reply_markup=products_kb
+    )
 
 
 async def main():
