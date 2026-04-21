@@ -52,8 +52,10 @@ menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары")],
         [KeyboardButton(text="🛒 Продажа")],
+        [KeyboardButton(text="🧾 История продаж")],
         [KeyboardButton(text="👤 Клиенты")],
         [KeyboardButton(text="📈 Отчёты")],
+        [KeyboardButton(text="💰 Прибыль")],
     ],
     resize_keyboard=True
 )
@@ -615,6 +617,37 @@ async def list_customers_handler(message: Message):
     await message.answer("\n".join(lines))
 
 
+@router.message(lambda m: m.text == "🧾 История продаж")
+async def sales_history_handler(message: Message):
+    rows = await db.list_recent_sales()
+
+    if not rows:
+        await message.answer("История продаж пока пустая.")
+        return
+
+    lines = ["🧾 Последние продажи:\n"]
+
+    for row in rows:
+        category = row["category"] or "-"
+        brand = row["brand"] or "-"
+        model = row["model"] or "-"
+        customer_name = row["customer_name"] or "Без имени"
+        customer_phone = row["customer_phone"] or "-"
+        qty = row["qty"] or 0
+        sale_price = float(row["sale_price"] or 0)
+        total_amount = float(row["total_amount"] or 0)
+        created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
+
+        lines.append(
+            f"#{row['id']} | {created_at}\n"
+            f"{category} | {brand} | {model}\n"
+            f"Клиент: {customer_name} | {customer_phone}\n"
+            f"Кол-во: {qty} | Цена: {sale_price:.2f} грн | Сумма: {total_amount:.2f} грн\n"
+        )
+
+    await message.answer("\n".join(lines))
+
+
 @router.message(lambda m: m.text == "📅 Отчёт за сегодня")
 async def today_report_handler(message: Message):
     sales_stats = await db.get_today_sales_stats()
@@ -673,10 +706,11 @@ async def find_customer_hint_handler(message: Message):
 
 
 @router.message(lambda m: m.text not in {
-    "📦 Товары", "🛒 Продажа", "👤 Клиенты",
+    "📦 Товары", "🛒 Продажа", "🧾 История продаж", "👤 Клиенты",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
     "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
+    "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()

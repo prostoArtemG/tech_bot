@@ -256,6 +256,29 @@ class Database:
 
         return total
 
+    async def list_recent_sales(self, limit: int = 20):
+        return await self.fetch(
+            """
+            SELECT
+                s.id,
+                s.qty,
+                s.sale_price,
+                s.total_amount,
+                s.created_at,
+                p.category,
+                p.brand,
+                p.model,
+                c.name AS customer_name,
+                c.phone AS customer_phone
+            FROM sales s
+            LEFT JOIN products p ON p.id = s.product_id
+            LEFT JOIN customers c ON c.id = s.customer_id
+            ORDER BY s.created_at DESC
+            LIMIT $1
+            """,
+            limit
+        )
+
     async def get_today_sales_stats(self):
         return await self.fetchrow(
             """
