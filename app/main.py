@@ -48,10 +48,15 @@ class SaleState(StatesGroup):
     waiting_for_customer_city = State()
 
 
+class CancelSaleState(StatesGroup):
+    waiting_for_sale_id = State()
+
+
 menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары")],
         [KeyboardButton(text="🛒 Продажа")],
+        [KeyboardButton(text="❌ Отмена продажи")],
         [KeyboardButton(text="🧾 История продаж")],
         [KeyboardButton(text="👤 Клиенты")],
         [KeyboardButton(text="📈 Отчёты")],
@@ -257,6 +262,73 @@ async def list_products_handler(message: Message):
         )
 
     await message.answer("\n".join(lines))
+
+@router.message(lambda m: m.text == "❌ Отмена продажи")
+async def cancel_sale_start_handler(message: Message, state: FSMContext):
+    rows = await db.list_recent_sales(limit=10)
+
+    if not rows:
+        await message.answer("История продаж пока пустая.")
+        return
+
+    lines = ["❌ Последние продажи для отмены:\n"]
+
+    for row in rows:
+        status = row.get("status", "completed")
+        status_text = "✅ completed" if status == "completed" else "❌ cancelled"
+        created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
+        brand = row["brand"] or "-"
+        model = row["model"] or "-"
+        qty = row["qty"] or 0
+        total_amount = float(row["total_amount"] or 0)
+
+        lines.append(
+            f"#{row['id']} | {created_at} | {status_text}\n"
+            f"{brand} {model} | Кол-во: {qty} | Сумма: {total_amount:.2f} грн\n"
+        )
+
+    await state.set_state(CancelSaleState.waiting_for_sale_id)
+    await message.answer("\n".join(lines) + "\nВведите ID продажи для отмены:")
+
+
+@router.message(CancelSaleState.waiting_for_sale_id)
+async def cancel_sale_id_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if not raw_id.isdigit():
+        await message.answer("ID продажи должен быть числом. Введите корректный ID:")
+        return
+
+    sale_id = int(raw_id)
+    sale = await db.get_sale_by_id(sale_id)
+
+    if not sale:
+        await message.answer("Продажа не найдена. Введите корректный ID:")
+        return
+
+    if sale["status"] == "cancelled":
+        await message.answer("Эта продажа уже отменена.")
+        return
+
+    product = await db.get_product_by_id(sale["product_id"])
+    if not product:
+        await state.clear()
+        await message.answer("Товар по этой продаже не найден.", reply_markup=menu_kb)
+        return
+
+    new_stock = (product["stock_qty"] or 0) + (sale["qty"] or 0)
+    await db.update_stock_qty(sale["product_id"], new_stock)
+    await db.cancel_sale(sale_id)
+
+    await state.clear()
+    await message.answer(
+        "✅ Продажа отменена\n\n"
+        f"Продажа ID: {sale['id']}\n"
+        f"Товар: {sale['brand'] or '-'} {sale['model'] or '-'}\n"
+        f"Возвращено на склад: {sale['qty']} шт\n"
+        f"Новый остаток: {new_stock} шт",
+        reply_markup=menu_kb
+    )
 
 
 @router.message(lambda m: m.text == "✏️ Изменить остаток")
@@ -656,9 +728,11 @@ async def sales_history_handler(message: Message):
         sale_price = float(row["sale_price"] or 0)
         total_amount = float(row["total_amount"] or 0)
         created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
+        status = row.get("status", "completed")
+        status_text = "✅ completed" if status == "completed" else "❌ cancelled"
 
         lines.append(
-            f"#{row['id']} | {created_at}\n"
+            f"#{row['id']} | {created_at} | {status_text}\n"
             f"{category} | {brand} | {model}\n"
             f"Клиент: {customer_name} | {customer_phone}\n"
             f"Кол-во: {qty} | Цена: {sale_price:.2f} грн | Сумма: {total_amount:.2f} грн\n"
@@ -770,7 +844,7 @@ async def month_profit_handler(message: Message):
 
 
 @router.message(lambda m: m.text not in {
-    "📦 Товары", "🛒 Продажа", "🧾 История продаж", "👤 Клиенты",
+    "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
     "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",

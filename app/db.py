@@ -107,6 +107,11 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE sales
+        ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS purchases (
             id SERIAL PRIMARY KEY,
             product_id INTEGER NOT NULL,
@@ -244,8 +249,8 @@ class Database:
 
         await self.execute(
             """
-            INSERT INTO sales (product_id, qty, sale_price, total_amount, customer_id)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO sales (product_id, qty, sale_price, total_amount, customer_id, status)
+            VALUES ($1, $2, $3, $4, $5, 'completed')
             """,
             product_id,
             qty,
@@ -264,6 +269,7 @@ class Database:
                 s.qty,
                 s.sale_price,
                 s.total_amount,
+                s.status,
                 s.created_at,
                 p.category,
                 p.brand,
@@ -277,6 +283,40 @@ class Database:
             LIMIT $1
             """,
             limit
+        )
+
+    async def get_sale_by_id(self, sale_id: int):
+        return await self.fetchrow(
+            """
+            SELECT
+                s.id,
+                s.product_id,
+                s.qty,
+                s.sale_price,
+                s.total_amount,
+                s.status,
+                s.created_at,
+                p.category,
+                p.brand,
+                p.model,
+                c.name AS customer_name,
+                c.phone AS customer_phone
+            FROM sales s
+            LEFT JOIN products p ON p.id = s.product_id
+            LEFT JOIN customers c ON c.id = s.customer_id
+            WHERE s.id = $1
+            """,
+            sale_id
+        )
+
+    async def cancel_sale(self, sale_id: int):
+        await self.execute(
+            """
+            UPDATE sales
+            SET status = 'cancelled'
+            WHERE id = $1
+            """,
+            sale_id
         )
 
     async def get_today_sales_stats(self):
