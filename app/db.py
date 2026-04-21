@@ -280,5 +280,29 @@ class Database:
             """
         )
 
+    async def get_month_sales_stats(self):
+        return await self.fetchrow(
+            """
+            SELECT
+                COUNT(*) AS sales_count,
+                COALESCE(SUM(qty), 0) AS total_qty,
+                COALESCE(SUM(total_amount), 0) AS revenue
+            FROM sales
+            WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+            """
+        )
+
+    async def get_month_purchases_stats(self):
+        return await self.fetchrow(
+            """
+            SELECT
+                COUNT(*) AS purchases_count,
+                COALESCE(SUM(qty), 0) AS total_qty,
+                COALESCE(SUM(total_amount), 0) AS total_cost
+            FROM purchases
+            WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+            """
+        )
+
 
 db = Database(DATABASE_URL)
