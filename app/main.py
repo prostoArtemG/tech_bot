@@ -125,9 +125,16 @@ def normalize_phone(phone: str) -> str:
 
 async def get_current_user_role(message: Message) -> str:
     user = await db.get_user_by_telegram_id(message.from_user.id)
+
     if not user:
+        # если вдруг не найден — создаём
+        await db.create_user_if_not_exists(
+            telegram_id=message.from_user.id,
+            full_name=message.from_user.full_name
+        )
         return "seller"
-    return user["role"] or "seller"
+
+    return user["role"]
 
 
 async def get_main_menu_for_user(message: Message):
@@ -168,6 +175,9 @@ async def make_me_admin_handler(message: Message):
 
 @router.message(lambda m: m.text == "📦 Товары")
 async def products_menu_handler(message: Message, state: FSMContext):
+    role = await get_current_user_role(message)
+    await message.answer(f"DEBUG роль: {role}")
+
     if not await require_admin(message):
         return
 
