@@ -52,7 +52,7 @@ class CancelSaleState(StatesGroup):
     waiting_for_sale_id = State()
 
 
-menu_kb = ReplyKeyboardMarkup(
+admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары")],
         [KeyboardButton(text="🛒 Продажа")],
@@ -64,6 +64,19 @@ menu_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+seller_menu_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📦 Товары")],
+        [KeyboardButton(text="🛒 Продажа")],
+        [KeyboardButton(text="🧾 История продаж")],
+        [KeyboardButton(text="👤 Клиенты")],
+    ],
+    resize_keyboard=True
+)
+
+# backward-compatible alias: default to seller menu
+menu_kb = seller_menu_kb
 
 products_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -110,17 +123,54 @@ def normalize_phone(phone: str) -> str:
     return re.sub(r"[^\d+]", "", phone.strip())
 
 
+async def get_current_user_role(message: Message) -> str:
+    user = await db.get_user_by_telegram_id(message.from_user.id)
+    if not user:
+        return "seller"
+    return user["role"] or "seller"
+
+
+async def get_main_menu_for_user(message: Message):
+    role = await get_current_user_role(message)
+    return admin_menu_kb if role == "admin" else seller_menu_kb
+
+
+async def require_admin(message: Message) -> bool:
+    role = await get_current_user_role(message)
+    if role != "admin":
+        await message.answer("⛔ У вас нет доступа к этому разделу.")
+        return False
+    return True
+
+
 @router.message(Command("start"))
 async def start_handler(message: Message, state: FSMContext):
     await state.clear()
+
+    await db.create_user_if_not_exists(
+        telegram_id=message.from_user.id,
+        full_name=message.from_user.full_name
+    )
+
+    menu = await get_main_menu_for_user(message)
+
     await message.answer(
         "Привет! Это tech_bot 🤖",
-        reply_markup=menu_kb
+        reply_markup=menu
     )
+
+
+@router.message(Command("make_me_admin"))
+async def make_me_admin_handler(message: Message):
+    await db.update_user_role(message.from_user.id, "admin")
+    await message.answer("✅ Вам выдана роль admin. Нажмите /start")
 
 
 @router.message(lambda m: m.text == "📦 Товары")
 async def products_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
     await state.clear()
     await message.answer(
         "Раздел товаров:",
@@ -138,6 +188,9 @@ async def customers_menu_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "📈 Отчёты")
 async def reports_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
     await state.clear()
     await message.answer(
         "Раздел отчётов:",
@@ -147,6 +200,9 @@ async def reports_menu_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "💰 Прибыль")
 async def profit_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
     await state.clear()
     await message.answer(
         "Раздел прибыли:",
@@ -157,14 +213,18 @@ async def profit_menu_handler(message: Message, state: FSMContext):
 @router.message(lambda m: m.text == "⬅️ Назад")
 async def back_handler(message: Message, state: FSMContext):
     await state.clear()
+    menu = await get_main_menu_for_user(message)
     await message.answer(
         "Главное меню:",
-        reply_markup=menu_kb
+        reply_markup=menu
     )
 
 
 @router.message(lambda m: m.text == "➕ Добавить товар")
 async def add_product_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
     await state.set_state(AddProductState.waiting_for_category)
     await message.answer("Введите категорию товара:\nНапример: Стиральная машина")
 
@@ -265,6 +325,9 @@ async def list_products_handler(message: Message):
 
 @router.message(lambda m: m.text == "❌ Отмена продажи")
 async def cancel_sale_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
     rows = await db.list_recent_sales(limit=10)
 
     if not rows:
@@ -333,6 +396,8 @@ async def cancel_sale_id_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "✏️ Изменить остаток")
 async def edit_stock_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
     await state.set_state(EditStockState.waiting_for_product_id)
     await message.answer("Введите ID товара, у которого хотите изменить остаток:")
 
@@ -395,6 +460,9 @@ async def edit_stock_new_stock_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "➕ Приход")
 async def receipt_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
     await state.set_state(ReceiptState.waiting_for_query)
     await message.answer("Введите бренд, модель или категорию товара для прихода:")
 

@@ -91,6 +91,16 @@ class Database:
         """)
 
         await self.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            telegram_id BIGINT NOT NULL UNIQUE,
+            full_name TEXT,
+            role TEXT NOT NULL DEFAULT 'seller',
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS sales (
             id SERIAL PRIMARY KEY,
             product_id INTEGER,
@@ -218,6 +228,47 @@ class Database:
             phone,
             city,
             comment
+        )
+
+    async def get_user_by_telegram_id(self, telegram_id: int):
+        return await self.fetchrow(
+            """
+            SELECT id, telegram_id, full_name, role
+            FROM users
+            WHERE telegram_id = $1
+            """,
+            telegram_id
+        )
+
+    async def create_user_if_not_exists(self, telegram_id: int, full_name: str):
+        await self.execute(
+            """
+            INSERT INTO users (telegram_id, full_name)
+            VALUES ($1, $2)
+            ON CONFLICT (telegram_id) DO NOTHING
+            """,
+            telegram_id,
+            full_name
+        )
+
+    async def update_user_role(self, telegram_id: int, role: str):
+        await self.execute(
+            """
+            UPDATE users
+            SET role = $2
+            WHERE telegram_id = $1
+            """,
+            telegram_id,
+            role
+        )
+
+    async def list_users(self):
+        return await self.fetch(
+            """
+            SELECT id, telegram_id, full_name, role
+            FROM users
+            ORDER BY id DESC
+            """
         )
 
     async def list_customers(self):
