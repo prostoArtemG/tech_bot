@@ -29,6 +29,7 @@ router = Router()
 
 class AddProductState(StatesGroup):
     waiting_for_category = State()
+    searching_category = State()
     waiting_for_brand = State()
     waiting_for_brand_manual = State()
     searching_brand = State()
@@ -108,6 +109,7 @@ categories_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="Плита"), KeyboardButton(text="Вытяжка")],
         [KeyboardButton(text="Микроволновка"), KeyboardButton(text="Пылесос")],
         [KeyboardButton(text="Чайник"), KeyboardButton(text="Телевизор")],
+        [KeyboardButton(text="🔍 Поиск категории")],
         [KeyboardButton(text="Другая техника")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -337,6 +339,11 @@ async def add_product_start_handler(message: Message, state: FSMContext):
 async def add_product_category_handler(message: Message, state: FSMContext):
     category = (message.text or "").strip()
 
+    if category == "🔍 Поиск категории":
+        await state.set_state(AddProductState.searching_category)
+        await message.answer("Введите часть названия категории:")
+        return
+
     if category == "⬅️ Назад":
         await state.clear()
         menu = await get_main_menu_for_user(message)
@@ -350,6 +357,30 @@ async def add_product_category_handler(message: Message, state: FSMContext):
         "Выберите бренд:",
         reply_markup=brands_kb
     )
+
+
+@router.message(AddProductState.searching_category)
+async def search_category_handler(message: Message, state: FSMContext):
+    query = (message.text or "").strip().lower()
+
+    categories = [
+        "Телевизоры", "Холодильники", "Стиральные машины", "Смартфоны", "Ноутбуки",
+        "Пылесосы", "Микроволновки", "Плиты", "Утюги", "Кофемашины"
+    ]
+
+    found = [c for c in categories if query in c.lower()]
+
+    if not found:
+        await message.answer("Ничего не найдено. Попробуйте ещё:")
+        return
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=c)] for c in found] + [[KeyboardButton(text="⬅️ Назад")]],
+        resize_keyboard=True
+    )
+
+    await state.set_state(AddProductState.waiting_for_category)
+    await message.answer("Выберите категорию:", reply_markup=keyboard)
 
 
 @router.message(AddProductState.waiting_for_brand)
