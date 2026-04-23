@@ -69,6 +69,7 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="👤 Клиенты")],
         [KeyboardButton(text="📈 Отчёты")],
         [KeyboardButton(text="💰 Прибыль")],
+        [KeyboardButton(text="🌐 Язык")],
     ],
     resize_keyboard=True
 )
@@ -79,6 +80,7 @@ seller_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="🛒 Продажа")],
         [KeyboardButton(text="🧾 История продаж")],
         [KeyboardButton(text="👤 Клиенты")],
+        [KeyboardButton(text="🌐 Язык")],
     ],
     resize_keyboard=True
 )
@@ -153,6 +155,55 @@ profit_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+
+lang_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Русский")],
+        [KeyboardButton(text="Українська")],
+    ],
+    resize_keyboard=True
+)
+
+
+TEXTS = {
+    "ru": {
+        "menu": "Главное меню:",
+        "no_access": "⛔ У вас нет доступа",
+    },
+    "uk": {
+        "menu": "Головне меню:",
+        "no_access": "⛔ У вас немає доступу",
+    }
+}
+
+
+async def t(message: Message, key: str) -> str:
+    user = await db.get_user_by_telegram_id(message.from_user.id)
+    lang = user["language"] if user and user["language"] else "ru"
+    return TEXTS.get(lang, TEXTS["ru"]).get(key, key)
+
+
+@router.message(lambda m: m.text == "🌐 Язык")
+async def choose_language_handler(message: Message, state: FSMContext):
+    await state.set_state("choosing_language")
+    await message.answer("Выберите язык / Оберіть мову:", reply_markup=lang_kb)
+
+
+@router.message(lambda m: m.text in ["Русский", "Українська"])
+async def set_language_handler(message: Message, state: FSMContext):
+    lang = "ru" if message.text == "Русский" else "uk"
+
+    await db.update_user_language(message.from_user.id, lang)
+
+    await state.clear()
+
+    menu = await get_main_menu_for_user(message)
+
+    await message.answer(
+        "Язык обновлён / Мову змінено",
+        reply_markup=menu
+    )
 
 
 def normalize_phone(phone: str) -> str:

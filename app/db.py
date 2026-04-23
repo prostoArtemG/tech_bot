@@ -101,6 +101,11 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'ru';
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS sales (
             id SERIAL PRIMARY KEY,
             product_id INTEGER,
@@ -260,6 +265,17 @@ class Database:
             """,
             telegram_id,
             role
+        )
+
+    async def update_user_language(self, telegram_id: int, language: str):
+        await self.execute(
+            """
+            UPDATE users
+            SET language = $2
+            WHERE telegram_id = $1
+            """,
+            telegram_id,
+            language
         )
 
     async def list_users(self):
