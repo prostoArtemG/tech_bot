@@ -17,6 +17,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("Не найден BOT_TOKEN в .env")
 
+ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
+ADMIN_IDS = {
+    int(x.strip())
+    for x in ADMIN_IDS_RAW.split(",")
+    if x.strip().isdigit()
+}
+
 router = Router()
 
 
@@ -123,18 +130,24 @@ def normalize_phone(phone: str) -> str:
     return re.sub(r"[^\d+]", "", phone.strip())
 
 
+def is_system_admin(telegram_id: int) -> bool:
+    return telegram_id in ADMIN_IDS
+
+
 async def get_current_user_role(message: Message) -> str:
+    if is_system_admin(message.from_user.id):
+        return "admin"
+
     user = await db.get_user_by_telegram_id(message.from_user.id)
 
     if not user:
-        # если вдруг не найден — создаём
         await db.create_user_if_not_exists(
             telegram_id=message.from_user.id,
             full_name=message.from_user.full_name
         )
         return "seller"
 
-    return user["role"]
+    return user["role"] or "seller"
 
 
 async def get_main_menu_for_user(message: Message):
@@ -159,6 +172,9 @@ async def start_handler(message: Message, state: FSMContext):
         full_name=message.from_user.full_name
     )
 
+    if is_system_admin(message.from_user.id):
+        await db.update_user_role(message.from_user.id, "admin")
+
     menu = await get_main_menu_for_user(message)
 
     await message.answer(
@@ -167,17 +183,9 @@ async def start_handler(message: Message, state: FSMContext):
     )
 
 
-@router.message(Command("make_me_admin"))
-async def make_me_admin_handler(message: Message):
-    await db.update_user_role(message.from_user.id, "admin")
-    await message.answer("✅ Вам выдана роль admin. Нажмите /start")
-
 
 @router.message(lambda m: m.text == "📦 Товары")
 async def products_menu_handler(message: Message, state: FSMContext):
-    role = await get_current_user_role(message)
-    await message.answer(f"DEBUG роль: {role}")
-
     if not await require_admin(message):
         return
 
