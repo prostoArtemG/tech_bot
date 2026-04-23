@@ -31,6 +31,7 @@ class AddProductState(StatesGroup):
     waiting_for_category = State()
     waiting_for_brand = State()
     waiting_for_brand_manual = State()
+    searching_brand = State()
     waiting_for_model = State()
     waiting_for_price = State()
 
@@ -121,6 +122,7 @@ brands_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="Gorenje"), KeyboardButton(text="Electrolux")],
         [KeyboardButton(text="Philips"), KeyboardButton(text="Tefal")],
         [KeyboardButton(text="Xiaomi"), KeyboardButton(text="Dyson")],
+        [KeyboardButton(text="🔍 Поиск бренда")],
         [KeyboardButton(text="Другое")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -354,6 +356,11 @@ async def add_product_category_handler(message: Message, state: FSMContext):
 async def add_product_brand_handler(message: Message, state: FSMContext):
     brand = (message.text or "").strip()
 
+    if brand == "🔍 Поиск бренда":
+        await state.set_state(AddProductState.searching_brand)
+        await message.answer("Введите часть названия бренда:")
+        return
+
     if brand == "⬅️ Назад":
         await state.set_state(AddProductState.waiting_for_category)
         await message.answer("Выберите категорию:", reply_markup=categories_kb)
@@ -382,6 +389,31 @@ async def add_product_brand_manual_handler(message: Message, state: FSMContext):
     await state.set_state(AddProductState.waiting_for_model)
 
     await message.answer("Введите модель:")
+
+
+@router.message(AddProductState.searching_brand)
+async def search_brand_handler(message: Message, state: FSMContext):
+    query = (message.text or "").strip().lower()
+
+    brands = [
+        "Samsung", "LG", "Bosch", "Beko", "Gorenje",
+        "Electrolux", "Philips", "Tefal", "Xiaomi",
+        "Dyson", "Braun", "Rowenta", "Zelmer"
+    ]
+
+    found = [b for b in brands if query in b.lower()]
+
+    if not found:
+        await message.answer("Ничего не найдено. Попробуй ещё:")
+        return
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=b)] for b in found] + [[KeyboardButton(text="⬅️ Назад")]],
+        resize_keyboard=True
+    )
+
+    await state.set_state(AddProductState.waiting_for_brand)
+    await message.answer("Выбери бренд:", reply_markup=keyboard)
 
 
 @router.message(AddProductState.waiting_for_model)
