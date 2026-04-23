@@ -30,6 +30,7 @@ router = Router()
 class AddProductState(StatesGroup):
     waiting_for_category = State()
     waiting_for_brand = State()
+    waiting_for_brand_manual = State()
     waiting_for_model = State()
     waiting_for_price = State()
 
@@ -91,6 +92,34 @@ products_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📋 Список товаров")],
         [KeyboardButton(text="✏️ Изменить остаток")],
         [KeyboardButton(text="➕ Приход")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+categories_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Стиральная машина"), KeyboardButton(text="Холодильник")],
+        [KeyboardButton(text="Посудомоечная машина"), KeyboardButton(text="Духовой шкаф")],
+        [KeyboardButton(text="Плита"), KeyboardButton(text="Вытяжка")],
+        [KeyboardButton(text="Микроволновка"), KeyboardButton(text="Пылесос")],
+        [KeyboardButton(text="Чайник"), KeyboardButton(text="Телевизор")],
+        [KeyboardButton(text="Другая техника")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+brands_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Samsung"), KeyboardButton(text="LG")],
+        [KeyboardButton(text="Bosch"), KeyboardButton(text="Beko")],
+        [KeyboardButton(text="Gorenje"), KeyboardButton(text="Electrolux")],
+        [KeyboardButton(text="Philips"), KeyboardButton(text="Tefal")],
+        [KeyboardButton(text="Xiaomi"), KeyboardButton(text="Dyson")],
+        [KeyboardButton(text="Другое")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -244,33 +273,64 @@ async def add_product_start_handler(message: Message, state: FSMContext):
         return
 
     await state.set_state(AddProductState.waiting_for_category)
-    await message.answer("Введите категорию товара:\nНапример: Стиральная машина")
+
+    await message.answer(
+        "Выберите категорию:",
+        reply_markup=categories_kb
+    )
 
 
 @router.message(AddProductState.waiting_for_category)
 async def add_product_category_handler(message: Message, state: FSMContext):
     category = (message.text or "").strip()
 
-    if not category:
-        await message.answer("Категория не может быть пустой. Введите категорию:")
+    if category == "⬅️ Назад":
+        await state.clear()
+        menu = await get_main_menu_for_user(message)
+        await message.answer("Главное меню:", reply_markup=menu)
         return
 
     await state.update_data(category=category)
     await state.set_state(AddProductState.waiting_for_brand)
-    await message.answer("Введите бренд:\nНапример: Samsung")
+
+    await message.answer(
+        "Выберите бренд:",
+        reply_markup=brands_kb
+    )
 
 
 @router.message(AddProductState.waiting_for_brand)
 async def add_product_brand_handler(message: Message, state: FSMContext):
     brand = (message.text or "").strip()
 
-    if not brand:
-        await message.answer("Бренд не может быть пустым. Введите бренд:")
+    if brand == "⬅️ Назад":
+        await state.set_state(AddProductState.waiting_for_category)
+        await message.answer("Выберите категорию:", reply_markup=categories_kb)
+        return
+
+    if brand == "Другое":
+        await state.set_state(AddProductState.waiting_for_brand_manual)
+        await message.answer("Введите бренд вручную:")
         return
 
     await state.update_data(brand=brand)
     await state.set_state(AddProductState.waiting_for_model)
-    await message.answer("Введите модель:\nНапример: WW90T554CAT")
+
+    await message.answer("Введите модель:")
+
+
+@router.message(AddProductState.waiting_for_brand_manual)
+async def add_product_brand_manual_handler(message: Message, state: FSMContext):
+    brand = (message.text or "").strip()
+
+    if not brand:
+        await message.answer("Бренд не может быть пустым. Введите ещё раз:")
+        return
+
+    await state.update_data(brand=brand)
+    await state.set_state(AddProductState.waiting_for_model)
+
+    await message.answer("Введите модель:")
 
 
 @router.message(AddProductState.waiting_for_model)
