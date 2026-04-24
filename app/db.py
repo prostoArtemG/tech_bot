@@ -80,6 +80,26 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(12,2) DEFAULT 0;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS purchase_currency TEXT DEFAULT 'UAH';
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS sku TEXT;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS warranty_months INTEGER DEFAULT 0;
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
@@ -137,19 +157,36 @@ class Database:
         );
         """)
 
-    async def add_product(self, category: str, brand: str, model: str, price: float):
+    async def add_product(
+        self,
+        category: str,
+        brand: str,
+        model: str,
+        price: float,
+        purchase_price: float = 0,
+        purchase_currency: str = "UAH",
+        sku: str | None = None,
+        warranty_months: int = 0,
+    ):
         name = f"{brand} {model}".strip()
 
         await self.execute(
             """
-            INSERT INTO products (name, category, brand, model, price, stock_qty)
-            VALUES ($1, $2, $3, $4, $5, 0)
+            INSERT INTO products (
+                name, category, brand, model, price,
+                purchase_price, purchase_currency, sku, warranty_months, stock_qty
+            )
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0)
             """,
             name,
             category,
             brand,
             model,
-            price
+            price,
+            purchase_price,
+            purchase_currency,
+            sku,
+            warranty_months,
         )
 
     async def list_products(self):

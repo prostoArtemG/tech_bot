@@ -35,6 +35,10 @@ class AddProductState(StatesGroup):
     searching_brand = State()
     waiting_for_model = State()
     waiting_for_price = State()
+    waiting_for_purchase_price = State()
+    waiting_for_currency = State()
+    waiting_for_sku = State()
+    waiting_for_warranty = State()
 
 
 class EditStockState(StatesGroup):
@@ -195,7 +199,13 @@ roles_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-
+currency_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="UAH"), KeyboardButton(text="USD"), KeyboardButton(text="EUR")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
 TEXTS = {
     "ru": {
         "menu": "Главное меню:",
@@ -505,16 +515,85 @@ async def add_product_price_handler(message: Message, state: FSMContext):
     brand = data["brand"]
     model = data["model"]
 
-    await db.add_product(category, brand, model, price)
+    await state.update_data(price=price)
+
+    await state.set_state(AddProductState.waiting_for_purchase_price)
+    await message.answer("Введите закупочную цену (или 0):")
+
+
+@router.message(AddProductState.waiting_for_purchase_price)
+async def add_product_purchase_handler(message: Message, state: FSMContext):
+    raw = (message.text or "").replace(",", ".")
+
+    try:
+        purchase_price = float(raw)
+    except:
+        await message.answer("Введите число")
+        return
+
+    await state.update_data(purchase_price=purchase_price)
+
+    await state.set_state(AddProductState.waiting_for_currency)
+    await message.answer("Выберите валюту закупки:", reply_markup=currency_kb)
+
+
+@router.message(AddProductState.waiting_for_currency)
+async def add_product_currency_handler(message: Message, state: FSMContext):
+    currency = message.text
+
+    if currency not in ["UAH", "USD", "EUR"]:
+        await message.answer("Выберите валюту кнопкой")
+        return
+
+    await state.update_data(currency=currency)
+
+    await state.set_state(AddProductState.waiting_for_sku)
+    await message.answer("Введите артикул (или -):")
+
+
+@router.message(AddProductState.waiting_for_sku)
+async def add_product_sku_handler(message: Message, state: FSMContext):
+    sku = (message.text or "").strip()
+    if sku == "-":
+        sku = None
+
+    await state.update_data(sku=sku)
+
+    await state.set_state(AddProductState.waiting_for_warranty)
+    await message.answer("Введите гарантию (в месяцах, например 12):")
+
+
+@router.message(AddProductState.waiting_for_warranty)
+async def add_product_warranty_handler(message: Message, state: FSMContext):
+    raw = (message.text or "").strip()
+
+    if not raw.isdigit():
+        await message.answer("Введите число месяцев")
+        return
+
+    warranty = int(raw)
+
+    data = await state.get_data()
+
+    await db.add_product(
+        category=data["category"],
+        brand=data["brand"],
+        model=data["model"],
+        price=data["price"],
+        purchase_price=data.get("purchase_price", 0),
+        purchase_currency=data.get("currency", "UAH"),
+        sku=data.get("sku"),
+        warranty_months=warranty,
+    )
 
     await state.clear()
+
     await message.answer(
-        "✅ Товар добавлен:\n\n"
-        f"Категория: {category}\n"
-        f"Бренд: {brand}\n"
-        f"Модель: {model}\n"
-        f"Цена: {price:.2f} грн\n"
-        f"Остаток: 0 шт",
+        f"✅ Товар добавлен\n\n"
+        f"{data['brand']} {data['model']}\n"
+        f"Цена: {data['price']} грн\n"
+        f"Закупка: {data.get('purchase_price', 0)} {data.get('currency', 'UAH')}\n"
+        f"Гарантия: {warranty} мес",
         reply_markup=products_kb
     )
 
