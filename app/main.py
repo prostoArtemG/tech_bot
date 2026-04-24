@@ -122,30 +122,22 @@ products_kb = ReplyKeyboardMarkup(
 
 categories_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Стиральная машина"), KeyboardButton(text="Холодильник")],
-        [KeyboardButton(text="Посудомоечная машина"), KeyboardButton(text="Духовой шкаф")],
-        [KeyboardButton(text="Плита"), KeyboardButton(text="Вытяжка")],
-        [KeyboardButton(text="Микроволновка"), KeyboardButton(text="Пылесос")],
-        [KeyboardButton(text="Чайник"), KeyboardButton(text="Телевизор")],
-        [KeyboardButton(text="🔍 Поиск категории")],
-        [KeyboardButton(text="Другая техника")],
-        [KeyboardButton(text="⬅️ Назад")],
+        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
+        [KeyboardButton(text="❌ Отмена продажи"), KeyboardButton(text="🧾 История продаж")],
+        [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="👥 Пользователи")],
+        [KeyboardButton(text="📈 Отчёты"), KeyboardButton(text="💰 Прибыль")],
+        [KeyboardButton(text="💱 Курсы валют"), KeyboardButton(text="🌐 Язык")],
     ],
     resize_keyboard=True
-)
-
 
 brands_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Samsung"), KeyboardButton(text="LG")],
-        [KeyboardButton(text="Bosch"), KeyboardButton(text="Beko")],
-        [KeyboardButton(text="Gorenje"), KeyboardButton(text="Electrolux")],
-        [KeyboardButton(text="Philips"), KeyboardButton(text="Tefal")],
-        [KeyboardButton(text="Xiaomi"), KeyboardButton(text="Dyson")],
-        [KeyboardButton(text="🔍 Поиск бренда")],
-        [KeyboardButton(text="Другое")],
-        [KeyboardButton(text="⬅️ Назад")],
+    keyboard=[
+        [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
+        [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="🌐 Язык")],
     ],
+    resize_keyboard=True
     resize_keyboard=True
 )
 
