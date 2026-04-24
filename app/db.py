@@ -275,6 +275,29 @@ class Database:
             stock_qty
         )
 
+    async def update_product_field(self, product_id: int, field: str, value):
+        allowed_fields = {
+            "price",
+            "purchase_price",
+            "purchase_currency",
+            "sku",
+            "warranty_months",
+            "model",
+        }
+
+        if field not in allowed_fields:
+            raise ValueError("Недопустимое поле")
+
+        await self.execute(
+            f"""
+            UPDATE products
+            SET {field} = $2
+            WHERE id = $1
+            """,
+            product_id,
+            value
+        )
+
     async def create_purchase(self, product_id: int, qty: int, purchase_price: float):
         total_amount = qty * purchase_price
 

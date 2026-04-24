@@ -71,6 +71,12 @@ class UserRoleState(StatesGroup):
     waiting_for_role = State()
 
 
+class EditProductState(StatesGroup):
+    waiting_for_product_id = State()
+    waiting_for_field = State()
+    waiting_for_value = State()
+
+
 class CurrencyRateState(StatesGroup):
     waiting_for_currency = State()
     waiting_for_rate = State()
@@ -114,6 +120,7 @@ products_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="➕ Приход")],
         [KeyboardButton(text="📥 История приходов")],
         [KeyboardButton(text="⚠️ Мало остатков")],
+        [KeyboardButton(text="✏️ Редактировать товар")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -211,6 +218,17 @@ currency_rates_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="USD")],
         [KeyboardButton(text="EUR")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+edit_product_fields_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Цена продажи"), KeyboardButton(text="Закупка")],
+        [KeyboardButton(text="Валюта закупки"), KeyboardButton(text="Артикул")],
+        [KeyboardButton(text="Гарантия"), KeyboardButton(text="Модель")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1406,10 +1424,11 @@ async def change_role_finish_handler(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
-    "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⚠️ Мало остатков", "⬅️ Назад",
+    "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⚠️ Мало остатков", "✏️ Редактировать товар", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
     "💱 Курсы валют", "USD", "EUR",
+    "Цена продажи", "Закупка", "Валюта закупки", "Артикул", "Гарантия", "Модель",
     "admin", "seller",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
@@ -1469,6 +1488,117 @@ async def main():
     finally:
         await bot.session.close()
         await db.close()
+
+
+@router.message(lambda m: m.text == "✏️ Редактировать товар")
+async def edit_product_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.set_state(EditProductState.waiting_for_product_id)
+    await message.answer("Введите ID товара для редактирования:")
+
+
+@router.message(EditProductState.waiting_for_product_id)
+async def edit_product_id_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if not raw_id.isdigit():
+        await message.answer("ID товара должен быть числом.")
+        return
+
+    product_id = int(raw_id)
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await message.answer("Товар не найден. Введите другой ID:")
+        return
+
+    await state.update_data(product_id=product_id)
+
+    await state.set_state(EditProductState.waiting_for_field)
+    await message.answer(
+        f"Товар:\n{product['brand'] or '-'} {product['model'] or '-'}\n\n"
+        "Что изменить?",
+        reply_markup=edit_product_fields_kb
+    )
+
+
+@router.message(EditProductState.waiting_for_field)
+async def edit_product_field_handler(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+
+    if text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Раздел товаров:", reply_markup=products_kb)
+        return
+
+    field_map = {
+        "Цена продажи": "price",
+        "Закупка": "purchase_price",
+        "Валюта закупки": "purchase_currency",
+        "Артикул": "sku",
+        "Гарантия": "warranty_months",
+        "Модель": "model",
+    }
+
+    if text not in field_map:
+        await message.answer("Выберите поле кнопкой.")
+        return
+
+    await state.update_data(field=field_map[text], field_title=text)
+    await state.set_state(EditProductState.waiting_for_value)
+
+    if field_map[text] == "purchase_currency":
+        await message.answer("Выберите валюту: UAH / USD / EUR", reply_markup=currency_kb)
+    else:
+        await message.answer(f"Введите новое значение для поля: {text}")
+
+
+@router.message(EditProductState.waiting_for_value)
+async def edit_product_value_handler(message: Message, state: FSMContext):
+    value = (message.text or "").strip()
+    data = await state.get_data()
+
+    product_id = data["product_id"]
+    field = data["field"]
+    field_title = data["field_title"]
+
+    if field in {"price", "purchase_price"}:
+        try:
+            value = float(value.replace(",", "."))
+        except ValueError:
+            await message.answer("Введите число.")
+            return
+
+    elif field == "warranty_months":
+        if not value.isdigit():
+            await message.answer("Введите число месяцев.")
+            return
+        value = int(value)
+
+    elif field == "purchase_currency":
+        value = value.upper()
+        if value not in {"UAH", "USD", "EUR"}:
+            await message.answer("Валюта должна быть UAH, USD или EUR.")
+            return
+
+    elif field == "sku":
+        if value == "-":
+            value = None
+
+    await db.update_product_field(product_id, field, value)
+
+    product = await db.get_product_by_id(product_id)
+    await state.clear()
+
+    await message.answer(
+        "✅ Товар обновлён\n\n"
+        f"ID: {product['id']}\n"
+        f"{product['brand'] or '-'} {product['model'] or '-'}\n"
+        f"Изменено: {field_title}",
+        reply_markup=products_kb
+    )
 
 
 @router.message(lambda m: m.text == "📥 История приходов")
