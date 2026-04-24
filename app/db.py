@@ -455,6 +455,26 @@ class Database:
             limit
         )
 
+    async def list_recent_purchases(self, limit: int = 20):
+        return await self.fetch(
+            """
+            SELECT
+                pu.id,
+                pu.qty,
+                pu.purchase_price,
+                pu.total_amount,
+                pu.created_at,
+                p.category,
+                p.brand,
+                p.model
+            FROM purchases pu
+            LEFT JOIN products p ON p.id = pu.product_id
+            ORDER BY pu.created_at DESC
+            LIMIT $1
+            """,
+            limit
+        )
+
     async def get_sale_by_id(self, sale_id: int):
         return await self.fetchrow(
             """

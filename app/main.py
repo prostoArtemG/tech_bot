@@ -112,6 +112,7 @@ products_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📋 Список товаров")],
         [KeyboardButton(text="✏️ Изменить остаток")],
         [KeyboardButton(text="➕ Приход")],
+        [KeyboardButton(text="📥 История приходов")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1412,7 +1413,7 @@ async def change_role_finish_handler(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
-    "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад",
+    "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
     "💱 Курсы валют", "USD", "EUR",
@@ -1454,6 +1455,39 @@ async def main():
     finally:
         await bot.session.close()
         await db.close()
+
+
+@router.message(lambda m: m.text == "📥 История приходов")
+async def purchases_history_handler(message: Message):
+    if not await require_admin(message):
+        return
+
+    rows = await db.list_recent_purchases()
+
+    if not rows:
+        await message.answer("История приходов пока пустая.")
+        return
+
+    lines = ["📥 Последние приходы:\n"]
+
+    for row in rows:
+        category = row["category"] or "-"
+        brand = row["brand"] or "-"
+        model = row["model"] or "-"
+        qty = row["qty"] or 0
+        purchase_price = float(row["purchase_price"] or 0)
+        total_amount = float(row["total_amount"] or 0)
+        created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
+
+        lines.append(
+            f"#{row['id']} | {created_at}\n"
+            f"{category} | {brand} | {model}\n"
+            f"Кол-во: {qty} шт\n"
+            f"Закупка: {purchase_price:.2f}\n"
+            f"Сумма: {total_amount:.2f}\n"
+        )
+
+    await message.answer("\n".join(lines), reply_markup=products_kb)
 
 
 if __name__ == "__main__":
