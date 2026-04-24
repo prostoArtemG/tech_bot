@@ -475,6 +475,17 @@ class Database:
             limit
         )
 
+    async def list_low_stock_products(self, limit_qty: int = 2):
+        return await self.fetch(
+            """
+            SELECT id, category, brand, model, price, stock_qty
+            FROM products
+            WHERE stock_qty <= $1
+            ORDER BY stock_qty ASC, id DESC
+            """,
+            limit_qty
+        )
+
     async def get_sale_by_id(self, sale_id: int):
         return await self.fetchrow(
             """

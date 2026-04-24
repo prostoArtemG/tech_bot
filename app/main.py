@@ -113,6 +113,7 @@ products_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="✏️ Изменить остаток")],
         [KeyboardButton(text="➕ Приход")],
         [KeyboardButton(text="📥 История приходов")],
+        [KeyboardButton(text="⚠️ Мало остатков")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1413,7 +1414,7 @@ async def change_role_finish_handler(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
-    "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⬅️ Назад",
+    "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⚠️ Мало остатков", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
     "💱 Курсы валют", "USD", "EUR",
@@ -1440,6 +1441,27 @@ async def free_customer_search_handler(message: Message, state: FSMContext):
 
     await message.answer("\n".join(lines))
 
+
+@router.message(lambda m: m.text == "⚠️ Мало остатков")
+async def low_stock_handler(message: Message):
+    if not await require_admin(message):
+        return
+
+    rows = await db.list_low_stock_products(limit_qty=2)
+
+    if not rows:
+        await message.answer("✅ Товаров с низким остатком нет.", reply_markup=products_kb)
+        return
+
+    lines = ["⚠️ Мало остатков:\n"]
+
+    for row in rows:
+        lines.append(
+            f"{row['id']}. {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'}\n"
+            f"Цена: {float(row['price'] or 0):.2f} грн | Остаток: {row['stock_qty'] or 0} шт\n"
+        )
+
+    await message.answer("\n".join(lines), reply_markup=products_kb)
 
 async def main():
     bot = Bot(token=BOT_TOKEN)
