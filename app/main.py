@@ -1418,6 +1418,47 @@ async def change_role_finish_handler(message: Message, state: FSMContext):
     )
 
 
+
+@router.message(lambda m: m.text == "✏️ Редактировать товар")
+async def edit_product_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.set_state(EditProductState.waiting_for_product_id)
+    await message.answer("Введите ID товара для редактирования:")
+
+
+@router.message(EditProductState.waiting_for_product_id)
+async def edit_product_id_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if not raw_id.isdigit():
+        await message.answer("ID товара должен быть числом.")
+        return
+
+    product_id = int(raw_id)
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await message.answer("Товар не найден. Введите другой ID:")
+        return
+
+    await state.update_data(product_id=product_id)
+    await state.set_state(EditProductState.waiting_for_field)
+
+    await message.answer(
+        f"Товар:\n"
+        f"ID: {product['id']}\n"
+        f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
+        f"Цена: {float(product['price'] or 0):.2f} грн\n"
+        f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
+        f"Артикул: {product['sku'] or '-'}\n"
+        f"Гарантия: {product['warranty_months'] or 0} мес\n\n"
+        "Что изменить?",
+        reply_markup=edit_product_fields_kb
+    )
+
+
 @router.message(lambda m: m.text not in {
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
