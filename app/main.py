@@ -613,9 +613,18 @@ async def list_products_handler(message: Message):
         model = row["model"] or "-"
         price = float(row["price"])
         stock_qty = row["stock_qty"] or 0
+        purchase_price = float(row["purchase_price"] or 0)
+        purchase_currency = row["purchase_currency"] or "UAH"
+        sku = row["sku"] or "-"
+        warranty_months = row["warranty_months"] or 0
 
         lines.append(
-            f"{row['id']}. {category} | {brand} | {model} | {price:.2f} грн | Остаток: {stock_qty} шт"
+            f"{row['id']}. {category} | {brand} | {model}\n"
+            f"Цена: {price:.2f} грн\n"
+            f"Закупка: {purchase_price:.2f} {purchase_currency}\n"
+            f"Артикул: {sku}\n"
+            f"Гарантия: {warranty_months} мес\n"
+            f"Остаток: {stock_qty} шт\n"
         )
 
     await message.answer("\n".join(lines))

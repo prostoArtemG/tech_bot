@@ -192,7 +192,9 @@ class Database:
     async def list_products(self):
         return await self.fetch(
             """
-            SELECT id, category, brand, model, price, stock_qty
+            SELECT
+                id, category, brand, model, price, stock_qty,
+                purchase_price, purchase_currency, sku, warranty_months
             FROM products
             ORDER BY id DESC
             """
