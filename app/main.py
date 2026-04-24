@@ -87,7 +87,6 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
         [KeyboardButton(text="❌ Отмена продажи"), KeyboardButton(text="🧾 История продаж")],
         [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="👥 Пользователи")],
-        [KeyboardButton(text="📋 Список пользователей"), KeyboardButton(text="🔁 Изменить роль")],
         [KeyboardButton(text="📈 Отчёты"), KeyboardButton(text="💰 Прибыль")],
         [KeyboardButton(text="💱 Курсы валют"), KeyboardButton(text="🌐 Язык")],
         [KeyboardButton(text="❌ Сброс")],
@@ -97,9 +96,9 @@ admin_menu_kb = ReplyKeyboardMarkup(
 
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
-        [KeyboardButton(text="🧾 История продаж"), KeyboardButton(text="👤 Клиенты")],
-        [KeyboardButton(text="🌐 Язык"), KeyboardButton(text="❌ Сброс")],
+        [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
+        [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="🌐 Язык")],
+        [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
 )
@@ -132,14 +131,12 @@ categories_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 
+)
+
 brands_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Samsung"), KeyboardButton(text="LG")],
-    keyboard=[
-        [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
-        [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="🌐 Язык")],
     ],
-    resize_keyboard=True
     resize_keyboard=True
 )
 
