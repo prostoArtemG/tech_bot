@@ -157,6 +157,19 @@ class Database:
         );
         """)
 
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        """)
+
+        await self.execute("""
+        INSERT INTO settings (key, value)
+        VALUES ('usd_rate', '40'), ('eur_rate', '43')
+        ON CONFLICT (key) DO NOTHING;
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -498,6 +511,41 @@ class Database:
                 ), 0) AS cost
             """
         )
+
+    async def get_setting(self, key: str, default: str | None = None):
+        row = await self.fetchrow(
+            """
+            SELECT value
+            FROM settings
+            WHERE key = $1
+            """,
+            key
+        )
+        return row["value"] if row else default
+
+
+    async def set_setting(self, key: str, value: str):
+        await self.execute(
+            """
+            INSERT INTO settings (key, value)
+            VALUES ($1, $2)
+            ON CONFLICT (key)
+            DO UPDATE SET value = EXCLUDED.value
+            """,
+            key,
+            value
+        )
+
+
+    async def get_currency_rates(self):
+        usd = await self.get_setting("usd_rate", "40")
+        eur = await self.get_setting("eur_rate", "43")
+
+        return {
+            "USD": float(usd),
+            "EUR": float(eur),
+            "UAH": 1.0,
+        }
 
 
 db = Database(DATABASE_URL)

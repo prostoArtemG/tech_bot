@@ -71,6 +71,11 @@ class UserRoleState(StatesGroup):
     waiting_for_role = State()
 
 
+class CurrencyRateState(StatesGroup):
+    waiting_for_currency = State()
+    waiting_for_rate = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары")],
@@ -79,6 +84,7 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="🧾 История продаж")],
         [KeyboardButton(text="👤 Клиенты")],
         [KeyboardButton(text="👥 Пользователи")],
+        [KeyboardButton(text="💱 Курсы валют")],
         [KeyboardButton(text="📈 Отчёты")],
         [KeyboardButton(text="💰 Прибыль")],
         [KeyboardButton(text="🌐 Язык")],
@@ -202,6 +208,15 @@ roles_kb = ReplyKeyboardMarkup(
 currency_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="UAH"), KeyboardButton(text="USD"), KeyboardButton(text="EUR")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+currency_rates_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="USD")],
+        [KeyboardButton(text="EUR")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1228,6 +1243,76 @@ async def users_menu_handler(message: Message, state: FSMContext):
         reply_markup=users_kb
     )
 
+
+@router.message(lambda m: m.text == "💱 Курсы валют")
+async def currency_rates_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    rates = await db.get_currency_rates()
+
+    await state.set_state(CurrencyRateState.waiting_for_currency)
+
+    await message.answer(
+        "💱 Курсы валют\n\n"
+        f"USD: {rates['USD']:.2f} грн\n"
+        f"EUR: {rates['EUR']:.2f} грн\n\n"
+        "Выберите валюту для изменения:",
+        reply_markup=currency_rates_kb
+    )
+
+
+@router.message(CurrencyRateState.waiting_for_currency)
+async def currency_rate_choose_handler(message: Message, state: FSMContext):
+    currency = (message.text or "").strip().upper()
+
+    if currency == "⬅️ НАЗАД":
+        await state.clear()
+        menu = await get_main_menu_for_user(message)
+        await message.answer("Главное меню:", reply_markup=menu)
+        return
+
+    if currency not in {"USD", "EUR"}:
+        await message.answer("Выберите валюту кнопкой: USD или EUR")
+        return
+
+    await state.update_data(currency=currency)
+    await state.set_state(CurrencyRateState.waiting_for_rate)
+
+    await message.answer(f"Введите новый курс {currency} к гривне:")
+
+
+@router.message(CurrencyRateState.waiting_for_rate)
+async def currency_rate_save_handler(message: Message, state: FSMContext):
+    raw_rate = (message.text or "").strip().replace(",", ".")
+
+    try:
+        rate = float(raw_rate)
+    except ValueError:
+        await message.answer("Курс должен быть числом. Например: 40.5")
+        return
+
+    if rate <= 0:
+        await message.answer("Курс должен быть больше 0.")
+        return
+
+    data = await state.get_data()
+    currency = data["currency"]
+
+    key = "usd_rate" if currency == "USD" else "eur_rate"
+
+    await db.set_setting(key, str(rate))
+
+    rates = await db.get_currency_rates()
+
+    await state.clear()
+    await message.answer(
+        "✅ Курс обновлён\n\n"
+        f"USD: {rates['USD']:.2f} грн\n"
+        f"EUR: {rates['EUR']:.2f} грн",
+        reply_markup=currency_rates_kb
+    )
+
 @router.message(lambda m: m.text == "📋 Список пользователей")
 async def list_users_handler(message: Message):
     if not await require_admin(message):
@@ -1327,6 +1412,7 @@ async def change_role_finish_handler(message: Message, state: FSMContext):
     "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
+    "💱 Курсы валют", "USD", "EUR",
     "admin", "seller",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
