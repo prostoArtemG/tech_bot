@@ -1116,6 +1116,8 @@ async def sales_history_handler(message: Message):
         qty = row["qty"] or 0
         sale_price = float(row["sale_price"] or 0)
         total_amount = float(row["total_amount"] or 0)
+        cost_total = float(row["cost_total_uah"] or 0)
+        profit = float(row["profit_uah"] or 0)
         created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
         status = row.get("status", "completed")
         status_text = "✅ completed" if status == "completed" else "❌ cancelled"
@@ -1125,6 +1127,7 @@ async def sales_history_handler(message: Message):
             f"{category} | {brand} | {model}\n"
             f"Клиент: {customer_name} | {customer_phone}\n"
             f"Кол-во: {qty} | Цена: {sale_price:.2f} грн | Сумма: {total_amount:.2f} грн\n"
+            f"Себестоимость: {cost_total:.2f} грн | Прибыль: {profit:.2f} грн\n"
         )
 
     await message.answer("\n".join(lines))
@@ -1202,7 +1205,7 @@ async def today_profit_handler(message: Message):
 
     revenue = float(stats["revenue"] or 0)
     cost = float(stats["cost"] or 0)
-    profit = revenue - cost
+    profit = float(stats["profit"] or 0)
 
     text = (
         "💰 Прибыль за сегодня\n\n"
@@ -1220,7 +1223,7 @@ async def month_profit_handler(message: Message):
 
     revenue = float(stats["revenue"] or 0)
     cost = float(stats["cost"] or 0)
-    profit = revenue - cost
+    profit = float(stats["profit"] or 0)
 
     text = (
         "💰 Прибыль за месяц\n\n"

@@ -147,6 +147,31 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE sales
+        ADD COLUMN IF NOT EXISTS purchase_price_snapshot NUMERIC(12,2) DEFAULT 0;
+        """)
+
+        await self.execute("""
+        ALTER TABLE sales
+        ADD COLUMN IF NOT EXISTS purchase_currency_snapshot TEXT DEFAULT 'UAH';
+        """)
+
+        await self.execute("""
+        ALTER TABLE sales
+        ADD COLUMN IF NOT EXISTS currency_rate_snapshot NUMERIC(12,4) DEFAULT 1;
+        """)
+
+        await self.execute("""
+        ALTER TABLE sales
+        ADD COLUMN IF NOT EXISTS cost_total_uah NUMERIC(12,2) DEFAULT 0;
+        """)
+
+        await self.execute("""
+        ALTER TABLE sales
+        ADD COLUMN IF NOT EXISTS profit_uah NUMERIC(12,2) DEFAULT 0;
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS purchases (
             id SERIAL PRIMARY KEY,
             product_id INTEGER NOT NULL,
@@ -230,7 +255,9 @@ class Database:
     async def get_product_by_id(self, product_id: int):
         return await self.fetchrow(
             """
-            SELECT id, category, brand, model, price, stock_qty
+            SELECT
+                id, category, brand, model, price, stock_qty,
+                purchase_price, purchase_currency, sku, warranty_months
             FROM products
             WHERE id = $1
             """,
@@ -364,18 +391,40 @@ class Database:
         )
 
     async def create_sale(self, product_id: int, qty: int, price: float, customer_id: int):
+        product = await self.get_product_by_id(product_id)
+
+        if not product:
+            raise ValueError("Товар не найден")
+
+        rates = await self.get_currency_rates()
+
+        purchase_price = float(product["purchase_price"] or 0)
+        purchase_currency = product["purchase_currency"] or "UAH"
+        currency_rate = float(rates.get(purchase_currency, 1))
+
         total = qty * price
+        cost_total_uah = qty * purchase_price * currency_rate
+        profit_uah = total - cost_total_uah
 
         await self.execute(
             """
-            INSERT INTO sales (product_id, qty, sale_price, total_amount, customer_id, status)
-            VALUES ($1, $2, $3, $4, $5, 'completed')
+            INSERT INTO sales (
+                product_id, qty, sale_price, total_amount, customer_id, status,
+                purchase_price_snapshot, purchase_currency_snapshot,
+                currency_rate_snapshot, cost_total_uah, profit_uah
+            )
+            VALUES ($1,$2,$3,$4,$5,'completed',$6,$7,$8,$9,$10)
             """,
             product_id,
             qty,
             price,
             total,
-            customer_id
+            customer_id,
+            purchase_price,
+            purchase_currency,
+            currency_rate,
+            cost_total_uah,
+            profit_uah,
         )
 
         return total
@@ -388,6 +437,8 @@ class Database:
                 s.qty,
                 s.sale_price,
                 s.total_amount,
+                s.cost_total_uah,
+                s.profit_uah,
                 s.status,
                 s.created_at,
                 p.category,
@@ -490,8 +541,12 @@ class Database:
         return await self.fetchrow(
             """
             SELECT
-                COALESCE((SELECT SUM(total_amount) FROM sales WHERE created_at::date = CURRENT_DATE), 0) AS revenue,
-                COALESCE((SELECT SUM(total_amount) FROM purchases WHERE created_at::date = CURRENT_DATE), 0) AS cost
+                COALESCE(SUM(total_amount), 0) AS revenue,
+                COALESCE(SUM(cost_total_uah), 0) AS cost,
+                COALESCE(SUM(profit_uah), 0) AS profit
+            FROM sales
+            WHERE created_at::date = CURRENT_DATE
+              AND status = 'completed'
             """
         )
 
@@ -499,16 +554,12 @@ class Database:
         return await self.fetchrow(
             """
             SELECT
-                COALESCE((
-                    SELECT SUM(total_amount)
-                    FROM sales
-                    WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
-                ), 0) AS revenue,
-                COALESCE((
-                    SELECT SUM(total_amount)
-                    FROM purchases
-                    WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
-                ), 0) AS cost
+                COALESCE(SUM(total_amount), 0) AS revenue,
+                COALESCE(SUM(cost_total_uah), 0) AS cost,
+                COALESCE(SUM(profit_uah), 0) AS profit
+            FROM sales
+            WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+              AND status = 'completed'
             """
         )
 
