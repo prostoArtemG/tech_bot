@@ -62,6 +62,11 @@ class CancelSaleState(StatesGroup):
     waiting_for_sale_id = State()
 
 
+class UserRoleState(StatesGroup):
+    waiting_for_telegram_id = State()
+    waiting_for_role = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары")],
@@ -69,6 +74,7 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="❌ Отмена продажи")],
         [KeyboardButton(text="🧾 История продаж")],
         [KeyboardButton(text="👤 Клиенты")],
+        [KeyboardButton(text="👥 Пользователи")],
         [KeyboardButton(text="📈 Отчёты")],
         [KeyboardButton(text="💰 Прибыль")],
         [KeyboardButton(text="🌐 Язык")],
@@ -165,6 +171,26 @@ lang_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Русский")],
         [KeyboardButton(text="Українська")],
+    ],
+    resize_keyboard=True
+)
+
+
+users_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Список пользователей")],
+        [KeyboardButton(text="🔁 Изменить роль")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+roles_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="admin")],
+        [KeyboardButton(text="seller")],
+        [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
 )
@@ -1103,12 +1129,117 @@ async def month_profit_handler(message: Message):
     await message.answer(text, reply_markup=profit_kb)
 
 
+@router.message(lambda m: m.text == "👥 Пользователи")
+async def users_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.clear()
+    await message.answer(
+        "Раздел пользователей:",
+        reply_markup=users_kb
+    )
+
+@router.message(lambda m: m.text == "📋 Список пользователей")
+async def list_users_handler(message: Message):
+    if not await require_admin(message):
+        return
+
+    rows = await db.list_users()
+
+    if not rows:
+        await message.answer("Пользователей пока нет.")
+        return
+
+    lines = ["👥 Пользователи:\n"]
+
+    for row in rows:
+        lines.append(
+            f"ID: {row['id']}\n"
+            f"Telegram ID: {row['telegram_id']}\n"
+            f"Имя: {row['full_name'] or '-'}\n"
+            f"Роль: {row['role']}\n"
+        )
+
+    await message.answer("\n".join(lines), reply_markup=users_kb)
+
+@router.message(lambda m: m.text == "🔁 Изменить роль")
+async def change_role_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.set_state(UserRoleState.waiting_for_telegram_id)
+    await message.answer(
+        "Введите Telegram ID пользователя, которому нужно изменить роль:",
+        reply_markup=users_kb
+    )
+
+
+@router.message(UserRoleState.waiting_for_telegram_id)
+async def change_role_telegram_id_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if raw_id == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Раздел пользователей:", reply_markup=users_kb)
+        return
+
+    if not raw_id.isdigit():
+        await message.answer("Telegram ID должен быть числом. Введите ещё раз:")
+        return
+
+    telegram_id = int(raw_id)
+    user = await db.get_user_by_telegram_id(telegram_id)
+
+    if not user:
+        await message.answer("Пользователь с таким Telegram ID не найден.")
+        return
+
+    await state.update_data(target_telegram_id=telegram_id)
+    await state.set_state(UserRoleState.waiting_for_role)
+
+    await message.answer(
+        f"Пользователь: {user['full_name'] or '-'}\n"
+        f"Текущая роль: {user['role']}\n\n"
+        "Выберите новую роль:",
+        reply_markup=roles_kb
+    )
+
+@router.message(UserRoleState.waiting_for_role)
+async def change_role_finish_handler(message: Message, state: FSMContext):
+    role = (message.text or "").strip()
+
+    if role == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Раздел пользователей:", reply_markup=users_kb)
+        return
+
+    if role not in {"admin", "seller"}:
+        await message.answer("Выберите роль кнопкой: admin или seller")
+        return
+
+    data = await state.get_data()
+    telegram_id = data["target_telegram_id"]
+
+    await db.update_user_role(telegram_id, role)
+
+    await state.clear()
+    await message.answer(
+        f"✅ Роль обновлена\n\n"
+        f"Telegram ID: {telegram_id}\n"
+        f"Новая роль: {role}",
+        reply_markup=users_kb
+    )
+
+
 @router.message(lambda m: m.text not in {
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
+    "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
     "📋 Список клиентов", "🔍 Найти клиента", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
+    "admin", "seller",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
