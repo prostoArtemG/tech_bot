@@ -84,27 +84,22 @@ class CurrencyRateState(StatesGroup):
 
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📦 Товары")],
-        [KeyboardButton(text="🛒 Продажа")],
-        [KeyboardButton(text="❌ Отмена продажи")],
-        [KeyboardButton(text="🧾 История продаж")],
-        [KeyboardButton(text="👤 Клиенты")],
-        [KeyboardButton(text="👥 Пользователи")],
-        [KeyboardButton(text="💱 Курсы валют")],
-        [KeyboardButton(text="📈 Отчёты")],
-        [KeyboardButton(text="💰 Прибыль")],
-        [KeyboardButton(text="🌐 Язык")],
+        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
+        [KeyboardButton(text="❌ Отмена продажи"), KeyboardButton(text="🧾 История продаж")],
+        [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="👥 Пользователи")],
+        [KeyboardButton(text="📋 Список пользователей"), KeyboardButton(text="🔁 Изменить роль")],
+        [KeyboardButton(text="📈 Отчёты"), KeyboardButton(text="💰 Прибыль")],
+        [KeyboardButton(text="💱 Курсы валют"), KeyboardButton(text="🌐 Язык")],
+        [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
 )
 
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📦 Товары")],
-        [KeyboardButton(text="🛒 Продажа")],
-        [KeyboardButton(text="🧾 История продаж")],
-        [KeyboardButton(text="👤 Клиенты")],
-        [KeyboardButton(text="🌐 Язык")],
+        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
+        [KeyboardButton(text="🧾 История продаж"), KeyboardButton(text="👤 Клиенты")],
+        [KeyboardButton(text="🌐 Язык"), KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
 )
@@ -725,6 +720,12 @@ async def cancel_sale_id_handler(message: Message, state: FSMContext):
         f"Новый остаток: {new_stock} шт",
         reply_markup=menu_kb
     )
+
+
+@router.message(lambda m: m.text == "❌ Сброс")
+async def reset_state_handler(message: Message, state: FSMContext):
+    await state.finish()
+    await message.answer("Состояние сброшено.", reply_markup=menu_kb)
 
 
 @router.message(lambda m: m.text == "✏️ Изменить остаток")
@@ -1429,7 +1430,7 @@ async def change_role_finish_handler(message: Message, state: FSMContext):
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
     "💱 Курсы валют", "USD", "EUR",
     "Цена продажи", "Закупка", "Валюта закупки", "Артикул", "Гарантия", "Модель",
-    "admin", "seller",
+    "admin", "seller", "❌ Сброс",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
