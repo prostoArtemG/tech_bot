@@ -1551,17 +1551,6 @@ async def main():
     finally:
         await bot.session.close()
         await db.close()
-
-
-@router.message(lambda m: m.text == "✏️ Редактировать товар")
-async def edit_product_start_handler(message: Message, state: FSMContext):
-    if not await require_admin(message):
-        return
-
-    await state.set_state(EditProductState.waiting_for_query)
-    await message.answer("Введите бренд, модель или категорию товара:")
-
-
 @router.message(EditProductState.waiting_for_product_id)
 async def edit_product_id_handler(message: Message, state: FSMContext):
     raw_id = (message.text or "").strip()
