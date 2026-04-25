@@ -83,6 +83,11 @@ class CurrencyRateState(StatesGroup):
     waiting_for_rate = State()
 
 
+class FindProductState(StatesGroup):
+    waiting_for_query = State()
+    waiting_for_product_id = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
@@ -111,6 +116,7 @@ products_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="➕ Добавить товар")],
         [KeyboardButton(text="📋 Список товаров")],
+        [KeyboardButton(text="🔍 Найти товар")],
         [KeyboardButton(text="✏️ Изменить остаток")],
         [KeyboardButton(text="➕ Приход")],
         [KeyboardButton(text="📥 История приходов")],
@@ -1451,6 +1457,64 @@ async def edit_product_search_handler(message: Message, state: FSMContext):
     await message.answer("\n".join(lines) + "\n\nВведите ID товара из списка:")
 
 
+@router.message(lambda m: m.text == "🔍 Найти товар")
+async def find_product_start(message: Message, state: FSMContext):
+    await state.set_state(FindProductState.waiting_for_query)
+    await message.answer("Введите бренд, модель или категорию товара:")
+
+
+@router.message(FindProductState.waiting_for_query)
+async def find_product_search(message: Message, state: FSMContext):
+    query = (message.text or "").strip()
+
+    rows = await db.search_products(query)
+
+    if not rows:
+        await message.answer("Ничего не найдено. Попробуй ещё:")
+        return
+
+    lines = ["Найдено:\n"]
+
+    for row in rows:
+        lines.append(
+            f"{row['id']}. {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'} | "
+            f"{float(row['price'] or 0):.2f} грн | Остаток: {row['stock_qty'] or 0} шт"
+        )
+
+    await state.set_state(FindProductState.waiting_for_product_id)
+    await message.answer("\n".join(lines) + "\n\nВведите ID товара:")
+
+
+@router.message(FindProductState.waiting_for_product_id)
+async def find_product_show(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if not raw_id.isdigit():
+        await message.answer("Введите ID товара числом.")
+        return
+
+    product_id = int(raw_id)
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await message.answer("Товар не найден.")
+        return
+
+    await state.clear()
+
+    await message.answer(
+        f"📦 Товар\n\n"
+        f"ID: {product['id']}\n"
+        f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n\n"
+        f"Цена: {float(product['price'] or 0):.2f} грн\n"
+        f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
+        f"Артикул: {product['sku'] or '-'}\n"
+        f"Гарантия: {product['warranty_months'] or 0} мес\n"
+        f"Остаток: {product['stock_qty'] or 0} шт",
+        reply_markup=products_kb
+    )
+
+
 
 @router.message(EditProductState.waiting_for_product_id)
 async def edit_product_id_handler(message: Message, state: FSMContext):
@@ -1533,7 +1597,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
-    "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⚠️ Мало остатков", "✏️ Редактировать товар", "⬅️ Назад",
+    "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⚠️ Мало остатков", "✏️ Редактировать товар", "🔍 Найти товар", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
     "💱 Курсы валют", "USD", "EUR",
