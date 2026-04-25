@@ -1483,6 +1483,52 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
     )
 
 
+@router.message(EditProductState.waiting_for_value)
+async def edit_product_value_handler(message: Message, state: FSMContext):
+    value = (message.text or "").strip()
+    data = await state.get_data()
+
+    product_id = data["product_id"]
+    field = data["field"]
+    field_title = data.get("field_title", field)
+
+    if field in {"price", "purchase_price"}:
+        try:
+            value = float(value.replace(",", "."))
+        except ValueError:
+            await message.answer("Введите число.")
+            return
+
+    elif field == "warranty_months":
+        if not value.isdigit():
+            await message.answer("Введите число месяцев.")
+            return
+        value = int(value)
+
+    elif field == "purchase_currency":
+        value = value.upper()
+        if value not in {"UAH", "USD", "EUR"}:
+            await message.answer("Валюта должна быть UAH, USD или EUR.")
+            return
+
+    elif field == "sku":
+        if value == "-":
+            value = None
+
+    await db.update_product_field(product_id, field, value)
+
+    product = await db.get_product_by_id(product_id)
+    await state.clear()
+
+    await message.answer(
+        "✅ Товар обновлён\n\n"
+        f"ID: {product['id']}\n"
+        f"{product['brand'] or '-'} {product['model'] or '-'}\n"
+        f"Изменено: {field_title}",
+        reply_markup=products_kb
+    )
+
+
 @router.message(lambda m: m.text not in {
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
