@@ -72,6 +72,7 @@ class UserRoleState(StatesGroup):
 
 
 class EditProductState(StatesGroup):
+    waiting_for_query = State()
     waiting_for_product_id = State()
     waiting_for_field = State()
     waiting_for_value = State()
@@ -1424,8 +1425,31 @@ async def edit_product_start_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
 
+    await state.set_state(EditProductState.waiting_for_query)
+    await message.answer("Введите бренд, модель или категорию товара:")
+
+
+@router.message(EditProductState.waiting_for_query)
+async def edit_product_search_handler(message: Message, state: FSMContext):
+    query = (message.text or "").strip()
+
+    rows = await db.search_products(query)
+
+    if not rows:
+        await message.answer("Ничего не найдено. Попробуй ещё:")
+        return
+
+    lines = ["Найдено:\n"]
+
+    for row in rows:
+        lines.append(
+            f"{row['id']}. {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'} | "
+            f"{float(row['price'] or 0):.2f} грн | Остаток: {row['stock_qty'] or 0} шт"
+        )
+
     await state.set_state(EditProductState.waiting_for_product_id)
-    await message.answer("Введите ID товара для редактирования:")
+    await message.answer("\n".join(lines) + "\n\nВведите ID товара из списка:")
+
 
 
 @router.message(EditProductState.waiting_for_product_id)
@@ -1534,8 +1558,8 @@ async def edit_product_start_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
 
-    await state.set_state(EditProductState.waiting_for_product_id)
-    await message.answer("Введите ID товара для редактирования:")
+    await state.set_state(EditProductState.waiting_for_query)
+    await message.answer("Введите бренд, модель или категорию товара:")
 
 
 @router.message(EditProductState.waiting_for_product_id)
