@@ -98,16 +98,15 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
-    @router.callback_query(lambda c: c.data == "cancel_flow")
-    async def cancel_flow_callback(callback: CallbackQuery, state: FSMContext):
-        await state.clear()
-        menu = await get_main_menu_for_user(callback.message)
-        await callback.message.answer("Действие отменено. Главное меню:", reply_markup=menu)
-        await callback.answer()
-
-
 )
 
+
+@router.callback_query(lambda c: c.data == "cancel_flow")
+async def cancel_flow_callback(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    menu = await get_main_menu_for_user(callback.message)
+    await callback.message.answer("Действие отменено. Главное меню:", reply_markup=menu)
+    await callback.answer()
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
