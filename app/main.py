@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from dotenv import load_dotenv
 
 from app.db import db
@@ -925,17 +925,20 @@ async def sale_search_handler(message: Message, state: FSMContext):
     if not rows:
         await message.answer("Ничего не найдено. Попробуй ещё:")
         return
-
-    lines = ["Найдено:\n"]
-
-    for row in rows:
-        lines.append(
-            f"{row['id']}. {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'} | "
-            f"{float(row['price']):.2f} грн | Остаток: {row['stock_qty']}"
-        )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{row['brand'] or '-'} {row['model'] or '-'} | {float(row['price'] or 0):.0f} грн | {row['stock_qty'] or 0} шт",
+                    callback_data=f"sale_product:{row['id']}"
+                )
+            ]
+            for row in rows
+        ]
+    )
 
     await state.set_state(SaleState.waiting_for_product_id)
-    await message.answer("\n".join(lines) + "\n\nВведите ID товара:")
+    await message.answer("Выберите товар:", reply_markup=keyboard)
 
 
 @router.message(SaleState.waiting_for_product_id)
@@ -962,6 +965,30 @@ async def sale_product_handler(message: Message, state: FSMContext):
         f"Остаток: {product['stock_qty']}\n\n"
         "Введите количество:"
     )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("sale_product:"))
+async def sale_product_callback_handler(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split(":")[1])
+
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await callback.message.answer("Товар не найден.")
+        await callback.answer()
+        return
+
+    await state.update_data(product_id=product_id)
+    await state.set_state(SaleState.waiting_for_qty)
+
+    await callback.message.answer(
+        f"Товар:\n{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
+        f"Цена: {float(product['price']):.2f} грн\n"
+        f"Остаток: {product['stock_qty']}\n\n"
+        "Введите количество:"
+    )
+
+    await callback.answer()
 
 
 @router.message(SaleState.waiting_for_qty)
