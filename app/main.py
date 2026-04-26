@@ -98,6 +98,14 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
+    @router.callback_query(lambda c: c.data == "cancel_flow")
+    async def cancel_flow_callback(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        menu = await get_main_menu_for_user(callback.message)
+        await callback.message.answer("Действие отменено. Главное меню:", reply_markup=menu)
+        await callback.answer()
+
+
 )
 
 seller_menu_kb = ReplyKeyboardMarkup(
@@ -232,6 +240,51 @@ edit_product_fields_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+def inline_categories_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Стиральная машина", callback_data="add_category:Стиральная машина"),
+                InlineKeyboardButton(text="Холодильник", callback_data="add_category:Холодильник"),
+            ],
+            [
+                InlineKeyboardButton(text="Пылесос", callback_data="add_category:Пылесос"),
+                InlineKeyboardButton(text="Микроволновка", callback_data="add_category:Микроволновка"),
+            ],
+            [
+                InlineKeyboardButton(text="Телевизор", callback_data="add_category:Телевизор"),
+                InlineKeyboardButton(text="Бойлер", callback_data="add_category:Бойлер"),
+            ],
+            [
+                InlineKeyboardButton(text="🔍 Поиск категории", callback_data="add_category_search"), InlineKeyboardButton(text="Другая техника", callback_data="add_category:Другая техника"),
+            ],
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
+            ],
+        ]
+    )
+
+
+def inline_brands_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Samsung", callback_data="add_brand:Samsung"), InlineKeyboardButton(text="LG", callback_data="add_brand:LG"),
+            ],
+            [
+                InlineKeyboardButton(text="Bosch", callback_data="add_brand:Bosch"), InlineKeyboardButton(text="Beko", callback_data="add_brand:Beko"),
+            ],
+            [
+                InlineKeyboardButton(text="Philips", callback_data="add_brand:Philips"), InlineKeyboardButton(text="Xiaomi", callback_data="add_brand:Xiaomi"),
+            ],
+            [
+                InlineKeyboardButton(text="🔍 Поиск бренда", callback_data="add_brand_search"), InlineKeyboardButton(text="Другое", callback_data="add_brand_manual"),
+            ],
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
+            ],
+        ]
+    )
 TEXTS = {
     "ru": {
         "menu": "Главное меню:",
@@ -368,7 +421,7 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
             return
         await state.clear()
         await state.set_state(AddProductState.waiting_for_category)
-        await message.answer("Выберите категорию:", reply_markup=categories_kb)
+        await message.answer("Выберите категорию:", reply_markup=inline_categories_kb())
         return
 
 @router.message(lambda m: m.text == "📦 Товары")
@@ -431,10 +484,9 @@ async def add_product_start_handler(message: Message, state: FSMContext):
         return
 
     await state.set_state(AddProductState.waiting_for_category)
-
     await message.answer(
         "Выберите категорию:",
-        reply_markup=categories_kb
+        reply_markup=inline_categories_kb()
     )
 
 
@@ -462,6 +514,54 @@ async def add_product_category_handler(message: Message, state: FSMContext):
     )
 
 
+@router.callback_query(lambda c: c.data and c.data.startswith("add_category:"))
+async def add_category_callback(callback: CallbackQuery, state: FSMContext):
+    category = callback.data.split(":", 1)[1]
+
+    await state.update_data(category=category)
+    await state.set_state(AddProductState.waiting_for_brand)
+
+    await callback.message.answer(
+        f"Категория: {category}\n\nВыберите бренд:",
+        reply_markup=inline_brands_kb()
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "add_category_search")
+async def add_category_search_callback(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AddProductState.searching_category)
+    await callback.message.answer("Введите часть названия категории:")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("add_brand:"))
+async def add_brand_callback(callback: CallbackQuery, state: FSMContext):
+    brand = callback.data.split(":", 1)[1]
+
+    await state.update_data(brand=brand)
+    await state.set_state(AddProductState.waiting_for_model)
+
+    await callback.message.answer(
+        f"Бренд: {brand}\n\nВведите модель:"
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "add_brand_manual")
+async def add_brand_manual_callback(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AddProductState.waiting_for_brand_manual)
+    await callback.message.answer("Введите бренд вручную:")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "add_brand_search")
+async def add_brand_search_callback(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AddProductState.searching_brand)
+    await callback.message.answer("Введите часть названия бренда:")
+    await callback.answer()
+
+
 @router.message(AddProductState.searching_category)
 async def search_category_handler(message: Message, state: FSMContext):
     query = (message.text or "").strip().lower()
@@ -477,9 +577,11 @@ async def search_category_handler(message: Message, state: FSMContext):
         await message.answer("Ничего не найдено. Попробуйте ещё:")
         return
 
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=c)] for c in found] + [[KeyboardButton(text="⬅️ Назад")]],
-        resize_keyboard=True
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=c, callback_data=f"add_category:{c}")]
+            for c in found
+        ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
     )
 
     await state.set_state(AddProductState.waiting_for_category)
@@ -497,7 +599,7 @@ async def add_product_brand_handler(message: Message, state: FSMContext):
 
     if brand == "⬅️ Назад":
         await state.set_state(AddProductState.waiting_for_category)
-        await message.answer("Выберите категорию:", reply_markup=categories_kb)
+        await message.answer("Выберите категорию:", reply_markup=inline_categories_kb())
         return
 
     if brand == "Другое":
@@ -541,9 +643,11 @@ async def search_brand_handler(message: Message, state: FSMContext):
         await message.answer("Ничего не найдено. Попробуй ещё:")
         return
 
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=b)] for b in found] + [[KeyboardButton(text="⬅️ Назад")]],
-        resize_keyboard=True
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=b, callback_data=f"add_brand:{b}")]
+            for b in found
+        ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
     )
 
     await state.set_state(AddProductState.waiting_for_brand)
