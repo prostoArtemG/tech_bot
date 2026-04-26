@@ -261,6 +261,28 @@ def inline_edit_fields_kb():
             ],
         ]
     )
+@router.callback_query(lambda c: c.data and c.data.startswith("edit_field:"))
+async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
+    field = callback.data.split(":")[1]
+
+    field_titles = {
+        "price": "Цена продажи",
+        "purchase_price": "Закупка",
+        "purchase_currency": "Валюта закупки",
+        "sku": "Артикул",
+        "warranty_months": "Гарантия",
+        "model": "Модель",
+    }
+
+    await state.update_data(field=field, field_title=field_titles[field])
+    await state.set_state(EditProductState.waiting_for_value)
+
+    if field == "purchase_currency":
+        await callback.message.answer("Выберите валюту: UAH / USD / EUR")
+    else:
+        await callback.message.answer(f"Введите новое значение для поля: {field_titles[field]}")
+
+    await callback.answer()
 def inline_categories_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1763,7 +1785,7 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
         f"Артикул: {product['sku'] or '-'}\n"
         f"Гарантия: {product['warranty_months'] or 0} мес\n\n"
         "Что изменить?",
-        reply_markup=edit_product_fields_kb
+        reply_markup=inline_edit_fields_kb()
     )
 
 
@@ -1902,11 +1924,9 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
     await message.answer(
         f"Товар:\n{product['brand'] or '-'} {product['model'] or '-'}\n\n"
         "Что изменить?",
-        reply_markup=edit_product_fields_kb
+        reply_markup=inline_edit_fields_kb()
     )
 
-
-@router.message(EditProductState.waiting_for_field)
 async def edit_product_field_handler(message: Message, state: FSMContext):
     text = (message.text or "").strip()
 
