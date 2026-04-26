@@ -239,6 +239,28 @@ edit_product_fields_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+
+def inline_edit_fields_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Цена продажи", callback_data="edit_field:price"),
+                InlineKeyboardButton(text="Закупка", callback_data="edit_field:purchase_price"),
+            ],
+            [
+                InlineKeyboardButton(text="Валюта закупки", callback_data="edit_field:purchase_currency"),
+                InlineKeyboardButton(text="Артикул", callback_data="edit_field:sku"),
+            ],
+            [
+                InlineKeyboardButton(text="Гарантия", callback_data="edit_field:warranty_months"),
+                InlineKeyboardButton(text="Модель", callback_data="edit_field:model"),
+            ],
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
+            ],
+        ]
+    )
 def inline_categories_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
