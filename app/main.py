@@ -3,7 +3,7 @@ import os
 import re
 
 from aiogram import Bot, Dispatcher, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -329,6 +329,47 @@ async def start_handler(message: Message, state: FSMContext):
     )
 
 
+
+@router.message(StateFilter("*"), lambda m: m.text in {
+    "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс"
+})
+async def global_menu_buttons_handler(message: Message, state: FSMContext):
+    text = message.text
+
+    if text in {"⬅️ Назад", "❌ Сброс"}:
+        await state.clear()
+        menu = await get_main_menu_for_user(message)
+        await message.answer("Главное меню:", reply_markup=menu)
+        return
+
+    if text == "📦 Товары":
+        if not await require_admin(message):
+            return
+        await state.clear()
+        await message.answer("Раздел товаров:", reply_markup=products_kb)
+        return
+
+    if text == "🛒 Продажа":
+        await state.clear()
+        await state.set_state(SaleState.waiting_for_query)
+        await message.answer("Введите бренд, модель или категорию товара:")
+        return
+
+    if text == "➕ Приход":
+        if not await require_admin(message):
+            return
+        await state.clear()
+        await state.set_state(ReceiptState.waiting_for_query)
+        await message.answer("Введите бренд, модель или категорию товара для прихода:")
+        return
+
+    if text == "➕ Добавить товар":
+        if not await require_admin(message):
+            return
+        await state.clear()
+        await state.set_state(AddProductState.waiting_for_category)
+        await message.answer("Выберите категорию:", reply_markup=categories_kb)
+        return
 
 @router.message(lambda m: m.text == "📦 Товары")
 async def products_menu_handler(message: Message, state: FSMContext):
