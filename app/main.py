@@ -152,7 +152,6 @@ def inline_order_status_kb(order_id: int):
             ],
         ]
     )
-    await callback.answer()
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
@@ -2367,7 +2366,6 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
 @router.callback_query(lambda c: c.data and c.data.startswith("order_status:"))
 async def order_status_callback_handler(callback: CallbackQuery):
     _, order_id_raw, status = callback.data.split(":")
-
     order_id = int(order_id_raw)
 
     if status not in {"new", "processing", "done", "cancelled"}:
@@ -2375,7 +2373,6 @@ async def order_status_callback_handler(callback: CallbackQuery):
         return
 
     await db.update_order_status(order_id, status)
-
     await callback.message.answer(f"✅ Статус заказа #{order_id} обновлён: {status}")
     await callback.answer()
 
