@@ -9,7 +9,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
@@ -43,6 +46,9 @@ class SiteOrderRequest(BaseModel):
     phone: str
     city: str | None = None
     comment: str | None = None
+
+templates = Jinja2Templates(directory="templates")
+web_app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 class AddProductState(StatesGroup):
@@ -2405,7 +2411,6 @@ async def order_status_callback_handler(callback: CallbackQuery):
     await db.update_order_status(order_id, status)
     await callback.message.answer(f"✅ Статус заказа #{order_id} обновлён: {status}")
     await callback.answer()
-
 @web_app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -2460,6 +2465,43 @@ async def create_site_order(data: SiteOrderRequest):
         "order_id": order["id"],
         "total": total
     }
+
+
+@web_app.get("/", response_class=HTMLResponse)
+async def site_home(request: Request):
+    products = await db.list_products()
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "products": products,
+        }
+    )
+
+
+@web_app.post("/order")
+async def site_order_form(
+    product_id: int = Form(...),
+    name: str = Form(...),
+    phone: str = Form(...),
+    city: str = Form(""),
+    comment: str = Form("")
+):
+    data = SiteOrderRequest(
+        product_id=product_id,
+        qty=1,
+        name=name,
+        phone=phone,
+        city=city,
+        comment=comment
+    )
+
+    result = await create_site_order(data)
+
+    return RedirectResponse(
+        url=f"/?order=success&id={result['order_id']}",
+        status_code=303
+    )
 
 
 async def start_web_server():

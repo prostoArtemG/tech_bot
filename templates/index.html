@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Tech Store</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Tech Store</h1>
+        <p>Бытовая техника под заказ и в наличии</p>
+    </header>
+
+    <main class="products">
+        {% for product in products %}
+        <div class="card">
+            <h2>{{ product.brand }} {{ product.model }}</h2>
+            <p>{{ product.category }}</p>
+            <p class="price">{{ product.price }} грн</p>
+            <p>Остаток: {{ product.stock_qty }} шт</p>
+            <p>Гарантия: {{ product.warranty_months }} мес</p>
+
+            <form method="post" action="/order">
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                <input type="text" name="name" placeholder="Ваше имя" required>
+                <input type="tel" name="phone" placeholder="Телефон" required>
+                <input type="text" name="city" placeholder="Город">
+                <input type="text" name="comment" placeholder="Комментарий">
+                <button type="submit">Заказать</button>
+            </form>
+        </div>
+        {% endfor %}
+    </main>
+</body>
+</html>
