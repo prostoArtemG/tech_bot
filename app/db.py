@@ -100,6 +100,16 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS photo_url TEXT;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS description TEXT;
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
@@ -258,7 +268,8 @@ class Database:
             """
             SELECT
                 id, category, brand, model, price, stock_qty,
-                purchase_price, purchase_currency, sku, warranty_months
+                purchase_price, purchase_currency, sku, warranty_months,
+                photo_url, description
             FROM products
             ORDER BY id DESC
             """
@@ -283,7 +294,8 @@ class Database:
             """
             SELECT
                 id, category, brand, model, price, stock_qty,
-                purchase_price, purchase_currency, sku, warranty_months
+                purchase_price, purchase_currency, sku, warranty_months,
+                photo_url, description
             FROM products
             WHERE id = $1
             """,
