@@ -2315,6 +2315,28 @@ async def low_stock_handler(message: Message):
 
     await message.answer("\n".join(lines), reply_markup=products_kb)
 
+
+@router.callback_query(lambda c: c.data and c.data.startswith("order_product:"))
+async def order_product_callback_handler(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split(":")[1])
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await callback.message.answer("Товар не найден.")
+        await callback.answer()
+        return
+
+    await state.update_data(product_id=product_id, price=float(product["price"] or 0))
+    await state.set_state(OrderState.waiting_for_qty)
+
+    await callback.message.answer(
+        f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
+        f"Цена: {float(product['price'] or 0):.2f} грн\n\n"
+        "Введите количество:"
+    )
+
+    await callback.answer()
+
 async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
