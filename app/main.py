@@ -137,6 +137,21 @@ async def cancel_flow_callback(callback: CallbackQuery, state: FSMContext):
         "Действие отменено. Главное меню:",
         reply_markup=menu
     )
+
+
+def inline_order_status_kb(order_id: int):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🆕 Новый", callback_data=f"order_status:{order_id}:new"),
+                InlineKeyboardButton(text="🔄 В обработке", callback_data=f"order_status:{order_id}:processing"),
+            ],
+            [
+                InlineKeyboardButton(text="✅ Выполнен", callback_data=f"order_status:{order_id}:done"),
+                InlineKeyboardButton(text="❌ Отменён", callback_data=f"order_status:{order_id}:cancelled"),
+            ],
+        ]
+    )
     await callback.answer()
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -555,6 +570,12 @@ async def list_orders_handler(message: Message):
         )
 
     await message.answer("\n".join(lines), reply_markup=orders_kb)
+
+    for row in rows[:5]:
+        await message.answer(
+            f"Изменить статус заказа #{row['id']}:",
+            reply_markup=inline_order_status_kb(row["id"]) 
+        )
 
 
 # Создание заказа — старт
@@ -2335,6 +2356,20 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
         "Введите количество:"
     )
 
+    await callback.answer()
+@router.callback_query(lambda c: c.data and c.data.startswith("order_status:"))
+async def order_status_callback_handler(callback: CallbackQuery):
+    _, order_id_raw, status = callback.data.split(":")
+
+    order_id = int(order_id_raw)
+
+    if status not in {"new", "processing", "done", "cancelled"}:
+        await callback.answer("Неверный статус")
+        return
+
+    await db.update_order_status(order_id, status)
+
+    await callback.message.answer(f"✅ Статус заказа #{order_id} обновлён: {status}")
     await callback.answer()
 
 async def main():
