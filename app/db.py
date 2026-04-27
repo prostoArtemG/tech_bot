@@ -321,6 +321,8 @@ class Database:
             "sku",
             "warranty_months",
             "model",
+            "photo_url",
+            "description",
         }
 
         if field not in allowed_fields:

@@ -2279,7 +2279,6 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
 
 @router.message(EditProductState.waiting_for_value)
 async def edit_product_value_handler(message: Message, state: FSMContext):
-    # обработка фото
     if message.photo:
         data = await state.get_data()
         field = data.get("field")
@@ -2289,13 +2288,17 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
             return
 
         file_id = message.photo[-1].file_id
-        photo_url = await save_telegram_photo(telegram_bot, file_id)
+        photo_url = await save_telegram_photo(message.bot, file_id)
 
         product_id = data.get("product_id")
+
         await db.update_product_field(product_id, "photo_url", photo_url)
 
         await state.clear()
-        await message.answer("✅ Фото сохранено")
+        await message.answer(
+            "✅ Фото сохранено",
+            reply_markup=products_kb
+        )
         return
 
     value = (message.text or "").strip()
