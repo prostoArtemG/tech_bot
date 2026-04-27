@@ -2471,9 +2471,9 @@ async def create_site_order(data: SiteOrderRequest):
 async def site_home(request: Request):
     products = await db.list_products()
     return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
+        request=request,
+        name="index.html",
+        context={
             "products": products,
         }
     )
