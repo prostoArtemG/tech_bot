@@ -195,6 +195,19 @@ class Database:
         ON CONFLICT (key) DO NOTHING;
         """)
 
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS warranties (
+            id SERIAL PRIMARY KEY,
+            sale_id INTEGER,
+            product_id INTEGER,
+            customer_id INTEGER,
+            warranty_months INTEGER NOT NULL DEFAULT 0,
+            start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+            end_date DATE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -429,7 +442,7 @@ class Database:
         cost_total_uah = qty * purchase_price * currency_rate
         profit_uah = total - cost_total_uah
 
-        await self.execute(
+        row = await self.fetchrow(
             """
             INSERT INTO sales (
                 product_id, qty, sale_price, total_amount, customer_id, status,
@@ -437,6 +450,7 @@ class Database:
                 currency_rate_snapshot, cost_total_uah, profit_uah
             )
             VALUES ($1,$2,$3,$4,$5,'completed',$6,$7,$8,$9,$10)
+            RETURNING id
             """,
             product_id,
             qty,
@@ -450,7 +464,10 @@ class Database:
             profit_uah,
         )
 
-        return total
+        return {
+            "sale_id": row["id"],
+            "total": total,
+        }
 
     async def list_recent_sales(self, limit: int = 20):
         return await self.fetch(
@@ -651,6 +668,41 @@ class Database:
             "EUR": float(eur),
             "UAH": 1.0,
         }
+
+    async def create_warranty(self, sale_id: int, product_id: int, customer_id: int, warranty_months: int):
+        await self.execute(
+            """
+            INSERT INTO warranties (sale_id, product_id, customer_id, warranty_months, end_date)
+            VALUES ($1, $2, $3, $4, CURRENT_DATE + ($4 || ' months')::interval)
+            """,
+            sale_id,
+            product_id,
+            customer_id,
+            warranty_months
+        )
+
+    async def search_warranties_by_phone(self, phone: str):
+        return await self.fetch(
+            """
+            SELECT
+                w.id,
+                w.start_date,
+                w.end_date,
+                w.warranty_months,
+                c.name AS customer_name,
+                c.phone AS customer_phone,
+                p.category,
+                p.brand,
+                p.model
+            FROM warranties w
+            LEFT JOIN customers c ON c.id = w.customer_id
+            LEFT JOIN products p ON p.id = w.product_id
+            WHERE c.phone LIKE $1
+            ORDER BY w.created_at DESC
+            LIMIT 20
+            """,
+            f"%{phone}%"
+        )
 
 
 db = Database(DATABASE_URL)

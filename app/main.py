@@ -88,6 +88,10 @@ class FindProductState(StatesGroup):
     waiting_for_product_id = State()
 
 
+class WarrantyState(StatesGroup):
+    waiting_for_phone = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
@@ -95,6 +99,7 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="👥 Пользователи")],
         [KeyboardButton(text="📈 Отчёты"), KeyboardButton(text="💰 Прибыль")],
         [KeyboardButton(text="💱 Курсы валют"), KeyboardButton(text="🌐 Язык")],
+        [KeyboardButton(text="🧾 Гарантии")],
         [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
@@ -121,6 +126,7 @@ seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
         [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="🌐 Язык")],
+        [KeyboardButton(text="🧾 Гарантии")],
         [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
@@ -168,6 +174,15 @@ customers_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Список клиентов")],
         [KeyboardButton(text="🔍 Найти клиента")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+warranty_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🔍 Найти гарантию")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -436,8 +451,48 @@ async def start_handler(message: Message, state: FSMContext):
 
 
 
+
+@router.message(lambda m: m.text == "🧾 Гарантии")
+async def warranties_menu_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Раздел гарантий:", reply_markup=warranty_kb)
+
+
+@router.message(lambda m: m.text == "🔍 Найти гарантию")
+async def warranty_search_start_handler(message: Message, state: FSMContext):
+    await state.set_state(WarrantyState.waiting_for_phone)
+    await message.answer("Введите телефон клиента:")
+
+
+@router.message(WarrantyState.waiting_for_phone)
+async def warranty_search_handler(message: Message, state: FSMContext):
+    phone = normalize_phone(message.text or "")
+
+    rows = await db.search_warranties_by_phone(phone)
+
+    await state.clear()
+
+    if not rows:
+        await message.answer("Гарантий по этому телефону не найдено.", reply_markup=warranty_kb)
+        return
+
+    lines = ["🧾 Найденные гарантии:\n"]
+
+    for row in rows:
+        lines.append(
+            f"#{row['id']}\n"
+            f"Клиент: {row['customer_name'] or '-'} | {row['customer_phone'] or '-'}\n"
+            f"Товар: {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'}\n"
+            f"Гарантия: {row['warranty_months']} мес\n"
+            f"С: {row['start_date']} До: {row['end_date']}\n"
+        )
+
+    await message.answer("\n".join(lines), reply_markup=warranty_kb)
+
+
 @router.message(StateFilter("*"), lambda m: m.text in {
-    "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс"
+    "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
+    "🧾 Гарантии", "🔍 Найти гарантию",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
     text = message.text
@@ -1271,7 +1326,18 @@ async def sale_customer_phone_handler(message: Message, state: FSMContext):
             return
 
         price = float(product["price"])
-        total = await db.create_sale(product_id, qty, price, customer["id"])
+        sale_result = await db.create_sale(product_id, qty, price, customer["id"])
+        total = sale_result["total"]
+        sale_id = sale_result["sale_id"]
+
+        warranty_months = int(product["warranty_months"] or 0)
+        if warranty_months > 0:
+            await db.create_warranty(
+                sale_id=sale_id,
+                product_id=product_id,
+                customer_id=customer["id"],
+                warranty_months=warranty_months
+            )
 
         new_stock = product["stock_qty"] - qty
         await db.update_stock_qty(product_id, new_stock)
@@ -1332,7 +1398,18 @@ async def sale_customer_city_handler(message: Message, state: FSMContext):
         return
 
     price = float(product["price"])
-    total = await db.create_sale(product_id, qty, price, customer["id"])
+    sale_result = await db.create_sale(product_id, qty, price, customer["id"])
+    total = sale_result["total"]
+    sale_id = sale_result["sale_id"]
+
+    warranty_months = int(product["warranty_months"] or 0)
+    if warranty_months > 0:
+        await db.create_warranty(
+            sale_id=sale_id,
+            product_id=product_id,
+            customer_id=customer["id"],
+            warranty_months=warranty_months
+        )
 
     new_stock = product["stock_qty"] - qty
     await db.update_stock_qty(product_id, new_stock)
