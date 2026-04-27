@@ -127,3 +127,24 @@ button:hover {
     color: #6b7280;
     margin-top: 8px;
 }
+
+.product-page {
+    max-width: 1100px;
+    margin: 40px auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    padding: 0 20px;
+}
+
+.product-big-img {
+    width: 100%;
+    border-radius: 16px;
+    background: #f9fafb;
+    padding: 20px;
+    object-fit: contain;
+}
+
+.product-right h2 {
+    margin-top: 0;
+}

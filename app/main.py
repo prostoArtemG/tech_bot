@@ -2532,6 +2532,22 @@ async def site_order_form(
     )
 
 
+@web_app.get("/product/{product_id}", response_class=HTMLResponse)
+async def product_page(request: Request, product_id: int):
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        return HTMLResponse("Товар не найден", status_code=404)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="product.html",
+        context={
+            "product": product
+        }
+    )
+
+
 async def start_web_server():
     config = uvicorn.Config(
         web_app,
