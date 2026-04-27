@@ -14,11 +14,22 @@
     <main class="products">
         {% for product in products %}
         <div class="card">
+            <div class="category">{{ product.category }}</div>
+
             <h2>{{ product.brand }} {{ product.model }}</h2>
-            <p>{{ product.category }}</p>
+
+            <div class="status">
+                {% if product.stock_qty > 0 %}
+                    В наличии
+                {% else %}
+                    Под заказ
+                {% endif %}
+            </div>
+
             <p class="price">{{ product.price }} грн</p>
-            <p>Остаток: {{ product.stock_qty }} шт</p>
-            <p>Гарантия: {{ product.warranty_months }} мес</p>
+
+            <p class="info">Остаток: {{ product.stock_qty }} шт</p>
+            <p class="info">Гарантия: {{ product.warranty_months }} мес</p>
 
             <form method="post" action="/order">
                 <input type="hidden" name="product_id" value="{{ product.id }}">

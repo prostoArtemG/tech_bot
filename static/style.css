@@ -1,58 +1,113 @@
+* {
+    box-sizing: border-box;
+}
+
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background: #f4f6f8;
-    color: #222;
+    background: #f3f4f6;
+    color: #111827;
 }
 
 header {
-    background: #111827;
+    background: linear-gradient(135deg, #111827, #1f2937);
     color: white;
-    padding: 30px;
+    padding: 40px 20px;
     text-align: center;
 }
 
+header h1 {
+    margin: 0;
+    font-size: 36px;
+}
+
+header p {
+    margin-top: 10px;
+    color: #d1d5db;
+}
+
 .products {
+    max-width: 1200px;
+    margin: 0 auto;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 20px;
-    padding: 30px;
+    gap: 22px;
+    padding: 30px 20px;
 }
 
 .card {
     background: white;
-    border-radius: 14px;
-    padding: 20px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+    transition: 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.12);
+}
+
+.category {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 8px;
 }
 
 .card h2 {
-    margin-top: 0;
+    margin: 0 0 12px;
+    font-size: 20px;
 }
 
 .price {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: bold;
-    color: #0f766e;
+    color: #16a34a;
+    margin: 12px 0;
+}
+
+.info {
+    font-size: 14px;
+    color: #374151;
+    margin: 6px 0;
+}
+
+.status {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+form {
+    margin-top: 16px;
 }
 
 input {
     width: 100%;
-    box-sizing: border-box;
-    padding: 10px;
+    padding: 11px;
     margin-top: 8px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 14px;
 }
 
 button {
     width: 100%;
     margin-top: 12px;
-    padding: 12px;
+    padding: 13px;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     background: #16a34a;
     color: white;
     font-size: 16px;
+    font-weight: bold;
     cursor: pointer;
+}
+
+button:hover {
+    background: #15803d;
 }
