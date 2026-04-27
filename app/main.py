@@ -772,6 +772,11 @@ async def order_status_start_handler(message: Message, state: FSMContext):
 async def order_status_id_handler(message: Message, state: FSMContext):
     raw_id = (message.text or "").strip()
 
+    if raw_id == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Раздел заказов:", reply_markup=orders_kb)
+        return
+
     if not raw_id.isdigit():
         await message.answer("ID заказа должен быть числом.")
         return
