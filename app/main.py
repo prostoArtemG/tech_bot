@@ -816,6 +816,13 @@ async def order_status_finish_handler(message: Message, state: FSMContext):
         f"✅ Статус заказа #{order_id} обновлён: {status}",
         reply_markup=orders_kb
     )
+@router.message(
+    StateFilter(OrderStatusState),
+    lambda m: m.text == "⬅️ Назад"
+)
+async def order_status_back(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Раздел заказов:", reply_markup=orders_kb)
 @router.message(StateFilter("*"), lambda m: m.text in {
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
