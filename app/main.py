@@ -2279,6 +2279,25 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
 
 @router.message(EditProductState.waiting_for_value)
 async def edit_product_value_handler(message: Message, state: FSMContext):
+    # обработка фото
+    if message.photo:
+        data = await state.get_data()
+        field = data.get("field")
+
+        if field != "photo_url":
+            await message.answer("Это поле не для фото.")
+            return
+
+        file_id = message.photo[-1].file_id
+        photo_url = await save_telegram_photo(telegram_bot, file_id)
+
+        product_id = data.get("product_id")
+        await db.update_product_field(product_id, "photo_url", photo_url)
+
+        await state.clear()
+        await message.answer("✅ Фото сохранено")
+        return
+
     value = (message.text or "").strip()
     data = await state.get_data()
 
@@ -2519,6 +2538,24 @@ async def start_web_server():
     )
     server = uvicorn.Server(config)
     await server.serve()
+
+import os
+from uuid import uuid4
+
+UPLOAD_DIR = "static/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+async def save_telegram_photo(bot: Bot, file_id: str) -> str:
+    file = await bot.get_file(file_id)
+    file_path = file.file_path
+
+    filename = f"{uuid4()}.jpg"
+    full_path = os.path.join(UPLOAD_DIR, filename)
+
+    await bot.download_file(file_path, full_path)
+
+    return f"/static/uploads/{filename}"
 
 async def main():
     global telegram_bot
