@@ -9,6 +9,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from dotenv import load_dotenv
 
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import uvicorn
+
 from app.db import db
 
 load_dotenv()
@@ -25,6 +29,20 @@ ADMIN_IDS = {
 }
 
 router = Router()
+
+web_app = FastAPI()
+telegram_bot = None
+
+WEB_NOTIFY_CHAT_ID = os.getenv("WEB_NOTIFY_CHAT_ID")
+
+
+class SiteOrderRequest(BaseModel):
+    product_id: int
+    qty: int = 1
+    name: str
+    phone: str
+    city: str | None = None
+    comment: str | None = None
 
 
 class AddProductState(StatesGroup):
@@ -2388,17 +2406,91 @@ async def order_status_callback_handler(callback: CallbackQuery):
     await callback.message.answer(f"✅ Статус заказа #{order_id} обновлён: {status}")
     await callback.answer()
 
+@web_app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@web_app.post("/api/site-order")
+async def create_site_order(data: SiteOrderRequest):
+    product = await db.get_product_by_id(data.product_id)
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    phone = normalize_phone(data.phone)
+
+    customer = await db.get_customer_by_phone(phone)
+
+    if not customer:
+        customer = await db.create_customer(
+            name=data.name,
+            phone=phone,
+            city=data.city or "-"
+        )
+
+    qty = data.qty if data.qty > 0 else 1
+    price = float(product["price"] or 0)
+    total = qty * price
+
+    order = await db.create_order(
+        customer_id=customer["id"],
+        product_id=data.product_id,
+        qty=qty,
+        total_amount=total,
+        comment=data.comment
+    )
+
+    if telegram_bot and WEB_NOTIFY_CHAT_ID:
+        await telegram_bot.send_message(
+            int(WEB_NOTIFY_CHAT_ID),
+            "🛒 Новый заказ с сайта\n\n"
+            f"ID заказа: {order['id']}\n"
+            f"Клиент: {data.name}\n"
+            f"Телефон: {phone}\n"
+            f"Город: {data.city or '-'}\n\n"
+            f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
+            f"Количество: {qty}\n"
+            f"Сумма: {total:.2f} грн\n\n"
+            f"Комментарий: {data.comment or '-'}"
+        )
+
+    return {
+        "ok": True,
+        "order_id": order["id"],
+        "total": total
+    }
+
+
+async def start_web_server():
+    config = uvicorn.Config(
+        web_app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "8000")),
+        log_level="info"
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
 async def main():
+    global telegram_bot
+
     bot = Bot(token=BOT_TOKEN)
+    telegram_bot = bot
+
     dp = Dispatcher()
     dp.include_router(router)
 
     await db.connect()
     await db.init_schema()
 
-    print("Бот запущен 🚀")
+    print("Бот и сайт API запущены 🚀")
+
     try:
-        await dp.start_polling(bot)
+        await asyncio.gather(
+            dp.start_polling(bot),
+            start_web_server()
+        )
     finally:
         await bot.session.close()
         await db.close()
