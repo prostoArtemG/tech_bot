@@ -104,8 +104,18 @@ admin_menu_kb = ReplyKeyboardMarkup(
 @router.callback_query(lambda c: c.data == "cancel_flow")
 async def cancel_flow_callback(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    menu = await get_main_menu_for_user(callback.message)
-    await callback.message.answer("Действие отменено. Главное меню:", reply_markup=menu)
+
+    role = "admin" if is_system_admin(callback.from_user.id) else "seller"
+    user = await db.get_user_by_telegram_id(callback.from_user.id)
+    if user:
+        role = user["role"] or role
+
+    menu = admin_menu_kb if role == "admin" else seller_menu_kb
+
+    await callback.message.answer(
+        "Действие отменено. Главное меню:",
+        reply_markup=menu
+    )
     await callback.answer()
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -1686,17 +1696,49 @@ async def edit_product_search_handler(message: Message, state: FSMContext):
     if not rows:
         await message.answer("Ничего не найдено. Попробуй ещё:")
         return
-
-    lines = ["Найдено:\n"]
-
-    for row in rows:
-        lines.append(
-            f"{row['id']}. {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'} | "
-            f"{float(row['price'] or 0):.2f} грн | Остаток: {row['stock_qty'] or 0} шт"
-        )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{row['brand'] or '-'} {row['model'] or '-'} | {float(row['price'] or 0):.0f} грн | {row['stock_qty'] or 0} шт",
+                    callback_data=f"edit_product:{row['id']}"
+                )
+            ]
+            for row in rows
+        ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
+    )
 
     await state.set_state(EditProductState.waiting_for_product_id)
-    await message.answer("\n".join(lines) + "\n\nВведите ID товара из списка:")
+    await message.answer("Выберите товар:", reply_markup=keyboard)
+
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("edit_product:"))
+async def edit_product_callback_handler(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split(":")[1])
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await callback.message.answer("Товар не найден.")
+        await callback.answer()
+        return
+
+    await state.update_data(product_id=product_id)
+    await state.set_state(EditProductState.waiting_for_field)
+
+    await callback.message.answer(
+        f"Товар:\n"
+        f"ID: {product['id']}\n"
+        f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
+        f"Цена: {float(product['price'] or 0):.2f} грн\n"
+        f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
+        f"Артикул: {product['sku'] or '-'}\n"
+        f"Гарантия: {product['warranty_months'] or 0} мес\n\n"
+        "Что изменить?",
+        reply_markup=inline_edit_fields_kb()
+    )
+
+    await callback.answer()
 
 
 @router.message(lambda m: m.text == "🔍 Найти товар")
