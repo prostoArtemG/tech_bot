@@ -2363,6 +2363,13 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
     )
 
     await callback.answer()
+
+@router.message(OrderStatusState.waiting_for_order_id)
+@router.message(StateFilter(OrderStatusState), lambda m: m.text == "⬅️ Назад")
+async def order_status_back_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+
 @router.callback_query(lambda c: c.data and c.data.startswith("order_status:"))
 async def order_status_callback_handler(callback: CallbackQuery):
     _, order_id_raw, status = callback.data.split(":")
