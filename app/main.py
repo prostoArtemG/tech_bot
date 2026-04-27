@@ -565,6 +565,15 @@ async def create_order_start_handler(message: Message, state: FSMContext):
 
 
 # Поиск товара для заказа
+@router.message(
+    StateFilter(OrderState.waiting_for_query),
+    lambda m: m.text == "⬅️ Назад"
+)
+async def order_back_to_menu(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+
+
 @router.message(OrderState.waiting_for_query)
 async def order_search_product_handler(message: Message, state: FSMContext):
     query = (message.text or "").strip()
@@ -610,6 +619,15 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
         "Введите количество:"
     )
     await callback.answer()
+
+
+@router.message(
+    StateFilter(OrderState),
+    lambda m: m.text == "⬅️ Назад"
+)
+async def order_back_global(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Раздел заказов:", reply_markup=orders_kb)
 
 
 # Количество
