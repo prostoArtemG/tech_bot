@@ -92,10 +92,26 @@ class WarrantyState(StatesGroup):
     waiting_for_phone = State()
 
 
+class OrderState(StatesGroup):
+    waiting_for_query = State()
+    waiting_for_product_id = State()
+    waiting_for_qty = State()
+    waiting_for_customer_phone = State()
+    waiting_for_customer_name = State()
+    waiting_for_customer_city = State()
+    waiting_for_comment = State()
+
+
+class OrderStatusState(StatesGroup):
+    waiting_for_order_id = State()
+    waiting_for_status = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
         [KeyboardButton(text="❌ Отмена продажи"), KeyboardButton(text="🧾 История продаж")],
+        [KeyboardButton(text="📋 Заказы")],
         [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="👥 Пользователи")],
         [KeyboardButton(text="📈 Отчёты"), KeyboardButton(text="💰 Прибыль")],
         [KeyboardButton(text="💱 Курсы валют"), KeyboardButton(text="🌐 Язык")],
@@ -125,6 +141,7 @@ async def cancel_flow_callback(callback: CallbackQuery, state: FSMContext):
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
+        [KeyboardButton(text="📋 Заказы")],
         [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="🌐 Язык")],
         [KeyboardButton(text="🧾 Гарантии")],
         [KeyboardButton(text="❌ Сброс")],
@@ -183,6 +200,26 @@ customers_kb = ReplyKeyboardMarkup(
 warranty_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔍 Найти гарантию")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+orders_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="➕ Создать заказ")],
+        [KeyboardButton(text="📋 Список заказов")],
+        [KeyboardButton(text="🔁 Изменить статус заказа")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+order_status_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="new"), KeyboardButton(text="processing")],
+        [KeyboardButton(text="done"), KeyboardButton(text="cancelled")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -490,9 +527,261 @@ async def warranty_search_handler(message: Message, state: FSMContext):
     await message.answer("\n".join(lines), reply_markup=warranty_kb)
 
 
+@router.message(lambda m: m.text == "📋 Заказы")
+async def orders_menu_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+    
+# Список заказов
+@router.message(lambda m: m.text == "📋 Список заказов")
+async def list_orders_handler(message: Message):
+    rows = await db.list_orders()
+
+    if not rows:
+        await message.answer("Заказов пока нет.", reply_markup=orders_kb)
+        return
+
+    lines = ["📋 Последние заказы:\n"]
+
+    for row in rows:
+        created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
+
+        lines.append(
+            f"#{row['id']} | {created_at} | {row['status']}\n"
+            f"Клиент: {row['customer_name'] or '-'} | {row['customer_phone'] or '-'}\n"
+            f"Товар: {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'}\n"
+            f"Кол-во: {row['qty']} | Сумма: {float(row['total_amount'] or 0):.2f} грн\n"
+            f"Комментарий: {row['comment'] or '-'}\n"
+        )
+
+    await message.answer("\n".join(lines), reply_markup=orders_kb)
+
+
+# Создание заказа — старт
+@router.message(lambda m: m.text == "➕ Создать заказ")
+async def create_order_start_handler(message: Message, state: FSMContext):
+    await state.set_state(OrderState.waiting_for_query)
+    await message.answer("Введите бренд, модель или категорию товара:")
+
+
+# Поиск товара для заказа
+@router.message(OrderState.waiting_for_query)
+async def order_search_product_handler(message: Message, state: FSMContext):
+    query = (message.text or "").strip()
+    rows = await db.search_products(query)
+
+    if not rows:
+        await message.answer("Ничего не найдено. Попробуй ещё:")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{row['brand'] or '-'} {row['model'] or '-'} | {float(row['price'] or 0):.0f} грн",
+                    callback_data=f"order_product:{row['id']}"
+                )
+            ]
+            for row in rows
+        ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
+    )
+
+    await state.set_state(OrderState.waiting_for_product_id)
+    await message.answer("Выберите товар:", reply_markup=keyboard)
+
+
+# Callback выбора товара
+@router.callback_query(lambda c: c.data and c.data.startswith("order_product:"))
+async def order_product_callback_handler(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split(":")[1])
+    product = await db.get_product_by_id(product_id)
+
+    if not product:
+        await callback.message.answer("Товар не найден.")
+        await callback.answer()
+        return
+
+    await state.update_data(product_id=product_id, price=float(product["price"] or 0))
+    await state.set_state(OrderState.waiting_for_qty)
+
+    await callback.message.answer(
+        f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
+        f"Цена: {float(product['price'] or 0):.2f} грн\n\n"
+        "Введите количество:"
+    )
+    await callback.answer()
+
+
+# Количество
+@router.message(OrderState.waiting_for_qty)
+async def order_qty_handler(message: Message, state: FSMContext):
+    raw_qty = (message.text or "").strip()
+
+    if not raw_qty.isdigit():
+        await message.answer("Введите количество числом.")
+        return
+
+    qty = int(raw_qty)
+    if qty <= 0:
+        await message.answer("Количество должно быть больше 0.")
+        return
+
+    await state.update_data(qty=qty)
+    await state.set_state(OrderState.waiting_for_customer_phone)
+    await message.answer("Введите телефон клиента:")
+
+
+# Клиент по телефону
+@router.message(OrderState.waiting_for_customer_phone)
+async def order_customer_phone_handler(message: Message, state: FSMContext):
+    phone = normalize_phone(message.text or "")
+
+    if len(phone) < 8:
+        await message.answer("Введите корректный телефон:")
+        return
+
+    customer = await db.get_customer_by_phone(phone)
+
+    if customer:
+        await state.update_data(customer_id=customer["id"])
+        await state.set_state(OrderState.waiting_for_comment)
+        await message.answer("Клиент найден. Введите комментарий к заказу или '-'")
+        return
+
+    await state.update_data(customer_phone=phone)
+    await state.set_state(OrderState.waiting_for_customer_name)
+    await message.answer("Клиент не найден. Введите имя клиента:")
+
+
+# Новый клиент
+@router.message(OrderState.waiting_for_customer_name)
+async def order_customer_name_handler(message: Message, state: FSMContext):
+    name = (message.text or "").strip()
+
+    if not name:
+        await message.answer("Имя не может быть пустым.")
+        return
+
+    await state.update_data(customer_name=name)
+    await state.set_state(OrderState.waiting_for_customer_city)
+    await message.answer("Введите город клиента:")
+
+
+@router.message(OrderState.waiting_for_customer_city)
+async def order_customer_city_handler(message: Message, state: FSMContext):
+    city = (message.text or "").strip()
+
+    if not city:
+        await message.answer("Город не может быть пустым.")
+        return
+
+    data = await state.get_data()
+
+    customer = await db.create_customer(
+        name=data["customer_name"],
+        phone=data["customer_phone"],
+        city=city
+    )
+
+    await state.update_data(customer_id=customer["id"])
+    await state.set_state(OrderState.waiting_for_comment)
+    await message.answer("Введите комментарий к заказу или '-'")
+
+
+# Комментарий и сохранение заказа
+@router.message(OrderState.waiting_for_comment)
+async def order_comment_handler(message: Message, state: FSMContext):
+    comment = (message.text or "").strip()
+    if comment == "-":
+        comment = None
+
+    data = await state.get_data()
+
+    product_id = data["product_id"]
+    customer_id = data["customer_id"]
+    qty = data["qty"]
+    price = data["price"]
+    total = qty * price
+
+    row = await db.create_order(
+        customer_id=customer_id,
+        product_id=product_id,
+        qty=qty,
+        total_amount=total,
+        comment=comment
+    )
+
+    await state.clear()
+
+    await message.answer(
+        "✅ Заказ создан\n\n"
+        f"ID заказа: {row['id']}\n"
+        f"Количество: {qty}\n"
+        f"Сумма: {total:.2f} грн\n"
+        f"Статус: new",
+        reply_markup=orders_kb
+    )
+
+
+# Изменение статуса
+@router.message(lambda m: m.text == "🔁 Изменить статус заказа")
+async def order_status_start_handler(message: Message, state: FSMContext):
+    await state.set_state(OrderStatusState.waiting_for_order_id)
+    await message.answer("Введите ID заказа:")
+
+
+@router.message(OrderStatusState.waiting_for_order_id)
+async def order_status_id_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if not raw_id.isdigit():
+        await message.answer("ID заказа должен быть числом.")
+        return
+
+    order_id = int(raw_id)
+    order = await db.get_order_by_id(order_id)
+
+    if not order:
+        await message.answer("Заказ не найден.")
+        return
+
+    await state.update_data(order_id=order_id)
+    await state.set_state(OrderStatusState.waiting_for_status)
+
+    await message.answer(
+        f"Текущий статус: {order['status']}\nВыберите новый статус:",
+        reply_markup=order_status_kb
+    )
+
+
+@router.message(OrderStatusState.waiting_for_status)
+async def order_status_finish_handler(message: Message, state: FSMContext):
+    status = (message.text or "").strip()
+
+    if status == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Раздел заказов:", reply_markup=orders_kb)
+        return
+
+    if status not in {"new", "processing", "done", "cancelled"}:
+        await message.answer("Выберите статус кнопкой.")
+        return
+
+    data = await state.get_data()
+    order_id = data["order_id"]
+
+    await db.update_order_status(order_id, status)
+    await state.clear()
+
+    await message.answer(
+        f"✅ Статус заказа #{order_id} обновлён: {status}",
+        reply_markup=orders_kb
+    )
 @router.message(StateFilter("*"), lambda m: m.text in {
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
+    "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
+    "new", "processing", "done", "cancelled",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
     text = message.text

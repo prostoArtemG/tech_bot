@@ -207,6 +207,19 @@ class Database:
             created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
         """)
+        
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER,
+            product_id INTEGER,
+            qty INTEGER NOT NULL DEFAULT 1,
+            total_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'new',
+            comment TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
 
     async def add_product(
         self,
@@ -702,6 +715,68 @@ class Database:
             LIMIT 20
             """,
             f"%{phone}%"
+        )
+
+    async def create_order(self, customer_id: int, product_id: int, qty: int, total_amount: float, comment: str | None = None):
+        return await self.fetchrow(
+            """
+            INSERT INTO orders (customer_id, product_id, qty, total_amount, comment)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            customer_id,
+            product_id,
+            qty,
+            total_amount,
+            comment
+        )
+
+
+    async def list_orders(self, limit: int = 20):
+        return await self.fetch(
+            """
+            SELECT
+                o.id,
+                o.qty,
+                o.total_amount,
+                o.status,
+                o.comment,
+                o.created_at,
+                c.name AS customer_name,
+                c.phone AS customer_phone,
+                p.category,
+                p.brand,
+                p.model
+            FROM orders o
+            LEFT JOIN customers c ON c.id = o.customer_id
+            LEFT JOIN products p ON p.id = o.product_id
+            ORDER BY o.created_at DESC
+            LIMIT $1
+            """,
+            limit
+        )
+
+
+    async def update_order_status(self, order_id: int, status: str):
+        await self.execute(
+            """
+            UPDATE orders
+            SET status = $2
+            WHERE id = $1
+            """,
+            order_id,
+            status
+        )
+
+
+    async def get_order_by_id(self, order_id: int):
+        return await self.fetchrow(
+            """
+            SELECT id, status
+            FROM orders
+            WHERE id = $1
+            """,
+            order_id
         )
 
 
