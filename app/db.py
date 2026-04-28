@@ -312,6 +312,15 @@ class Database:
             f"%{query}%"
         )
 
+    async def get_categories(self):
+        rows = await self.fetch("""
+            SELECT DISTINCT category
+            FROM products
+            WHERE category IS NOT NULL
+            ORDER BY category
+        """)
+        return [r["category"] for r in rows]
+
     async def get_product_by_id(self, product_id: int):
         return await self.fetchrow(
             """

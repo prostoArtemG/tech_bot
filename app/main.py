@@ -2506,20 +2506,28 @@ async def create_site_order(data: SiteOrderRequest):
 
 
 @web_app.get("/", response_class=HTMLResponse)
-async def site_home(request: Request, q: str = ""):
+async def site_home(request: Request, q: str = "", category: str = ""):
     q = (q or "").strip()
+    category = (category or "").strip()
 
     if q:
         products = await db.search_site_products(q)
     else:
         products = await db.list_products()
 
+    if category:
+        products = [p for p in products if (p["category"] or "") == category]
+
+    categories = await db.get_categories()
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "products": products,
+            "categories": categories,
             "q": q,
+            "current_category": category,
         }
     )
 

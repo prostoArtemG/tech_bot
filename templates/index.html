@@ -18,6 +18,16 @@
         </form>
     </section>
 
+    <div class="categories">
+        <a href="/" class="{% if not current_category %}active{% endif %}">Все</a>
+
+        {% for cat in categories %}
+        <a href="/?category={{ cat }}" class="{% if current_category == cat %}active{% endif %}">
+            {{ cat }}
+        </a>
+        {% endfor %}
+    </div>
+
     <main class="products">
         {% for product in products %}
         <div class="card">
