@@ -8,6 +8,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from dotenv import load_dotenv
+import cloudinary
+import cloudinary.uploader
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -19,6 +22,13 @@ import uvicorn
 from app.db import db
 
 load_dotenv()
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -2565,23 +2575,20 @@ async def start_web_server():
     server = uvicorn.Server(config)
     await server.serve()
 
-import os
-from uuid import uuid4
-
-UPLOAD_DIR = "static/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-
 async def save_telegram_photo(bot: Bot, file_id: str) -> str:
     file = await bot.get_file(file_id)
     file_path = file.file_path
 
-    filename = f"{uuid4()}.jpg"
-    full_path = os.path.join(UPLOAD_DIR, filename)
+    local_filename = f"/tmp/{uuid4()}.jpg"
 
-    await bot.download_file(file_path, full_path)
+    await bot.download_file(file_path, local_filename)
 
-    return f"/static/uploads/{filename}"
+    result = cloudinary.uploader.upload(
+        local_filename,
+        folder="tech_bot_products"
+    )
+
+    return result["secure_url"]
 
 async def main():
     global telegram_bot
