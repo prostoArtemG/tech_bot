@@ -168,3 +168,30 @@ button:hover {
     width: 160px;
     margin-top: 0;
 }
+
+.no-photo {
+    height: 220px;
+    border-radius: 14px;
+    background: #e5e7eb;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+
+.details-btn {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    margin-top: 14px;
+    padding: 13px;
+    border-radius: 12px;
+    background: #111827;
+    color: white;
+    font-weight: bold;
+}
+
+.details-btn:hover {
+    background: #374151;
+}

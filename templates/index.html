@@ -23,6 +23,8 @@
         <div class="card">
             {% if product.photo_url %}
             <img src="{{ product.photo_url }}" class="product-img">
+            {% else %}
+            <div class="no-photo">Нет фото</div>
             {% endif %}
 
             <div class="category">{{ product.category }}</div>
@@ -39,15 +41,10 @@
 
             <p class="price">{{ product.price }} грн</p>
 
-            <p class="info">Остаток: {{ product.stock_qty }} шт</p>
             <p class="info">Гарантия: {{ product.warranty_months }} мес</p>
 
-            {% if product.description %}
-            <p class="desc">{{ product.description[:100] }}...</p>
-            {% endif %}
-
-            <a href="/product/{{ product.id }}">
-                <button>Подробнее</button>
+            <a href="/product/{{ product.id }}" class="details-btn">
+                Подробнее
             </a>
         </div>
         {% endfor %}
