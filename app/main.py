@@ -2496,13 +2496,20 @@ async def create_site_order(data: SiteOrderRequest):
 
 
 @web_app.get("/", response_class=HTMLResponse)
-async def site_home(request: Request):
-    products = await db.list_products()
+async def site_home(request: Request, q: str = ""):
+    q = (q or "").strip()
+
+    if q:
+        products = await db.search_site_products(q)
+    else:
+        products = await db.list_products()
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "products": products,
+            "q": q,
         }
     )
 

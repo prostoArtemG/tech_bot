@@ -148,3 +148,23 @@ button:hover {
 .product-right h2 {
     margin-top: 0;
 }
+
+.search-box {
+    max-width: 700px;
+    margin: 25px auto 0;
+    padding: 0 20px;
+}
+
+.search-box form {
+    display: flex;
+    gap: 10px;
+}
+
+.search-box input {
+    margin-top: 0;
+}
+
+.search-box button {
+    width: 160px;
+    margin-top: 0;
+}

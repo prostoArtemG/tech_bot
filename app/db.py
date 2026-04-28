@@ -289,6 +289,24 @@ class Database:
             f"%{query}%"
         )
 
+    async def search_site_products(self, query: str):
+        return await self.fetch(
+            """
+            SELECT
+                id, category, brand, model, price, stock_qty,
+                warranty_months, photo_url, description, availability_status
+            FROM products
+            WHERE COALESCE(availability_status, 'in_stock') != 'hidden'
+              AND (
+                LOWER(COALESCE(category, '')) LIKE LOWER($1)
+                OR LOWER(COALESCE(brand, '')) LIKE LOWER($1)
+                OR LOWER(COALESCE(model, '')) LIKE LOWER($1)
+              )
+            ORDER BY id DESC
+            """,
+            f"%{query}%"
+        )
+
     async def get_product_by_id(self, product_id: int):
         return await self.fetchrow(
             """
