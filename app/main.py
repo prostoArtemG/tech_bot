@@ -166,12 +166,9 @@ async def cancel_flow_callback(callback: CallbackQuery, state: FSMContext):
     if user:
         role = user["role"] or role
 
-    menu = admin_menu_kb if role == "admin" else seller_menu_kb
+    menu = await get_main_menu(callback.message)
 
-    await callback.message.answer(
-        "Действие отменено. Главное меню:",
-        reply_markup=menu
-    )
+    await callback.message.answer(await t(callback.message, "reset_done"), reply_markup=menu)
 
 
 def inline_order_status_kb(order_id: int):
@@ -493,7 +490,7 @@ async def t(message: Message, key: str) -> str:
 @router.message(lambda m: m.text == "🌐 Язык")
 async def choose_language_handler(message: Message, state: FSMContext):
     await state.set_state("choosing_language")
-    await message.answer("Выберите язык / Оберіть мову:", reply_markup=lang_kb)
+    await message.answer(await t(message, "choose_language"), reply_markup=lang_kb)
 
 
 @router.message(lambda m: m.text in ["Русский", "Українська"])
@@ -506,10 +503,7 @@ async def set_language_handler(message: Message, state: FSMContext):
 
     menu = await get_main_menu_for_user(message)
 
-    await message.answer(
-        "Язык обновлён / Мову змінено",
-        reply_markup=menu
-    )
+    await message.answer(await t(message, "language_saved"), reply_markup=menu)
 
 
 def normalize_phone(phone: str) -> str:
@@ -541,10 +535,37 @@ async def get_main_menu_for_user(message: Message):
     return admin_menu_kb if role == "admin" else seller_menu_kb
 
 
+async def get_main_menu(message: Message):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text=await t(message, "products")),
+                KeyboardButton(text=await t(message, "orders")),
+            ],
+            [
+                KeyboardButton(text=await t(message, "sale")),
+                KeyboardButton(text=await t(message, "receipt")),
+            ],
+            [
+                KeyboardButton(text=await t(message, "clients")),
+                KeyboardButton(text=await t(message, "reports")),
+            ],
+            [
+                KeyboardButton(text=await t(message, "currency")),
+                KeyboardButton(text=await t(message, "warranty")),
+            ],
+            [
+                KeyboardButton(text=await t(message, "language")),
+            ],
+        ],
+        resize_keyboard=True
+    )
+
+
 async def require_admin(message: Message) -> bool:
     role = await get_current_user_role(message)
     if role != "admin":
-        await message.answer("⛔ У вас нет доступа к этому разделу.")
+        await message.answer(await t(message, "no_access"))
         return False
     return True
 
@@ -562,16 +583,12 @@ async def start_handler(message: Message, state: FSMContext):
         await db.update_user_role(message.from_user.id, "admin")
 
     menu = await get_main_menu_for_user(message)
-
-    await message.answer(
-        "Привет! Это tech_bot 🤖",
-        reply_markup=menu
-    )
+    await message.answer(await t(message, "start"), reply_markup=menu)
 
 
 
 
-@router.message(lambda m: m.text == "🧾 Гарантии")
+@router.message(lambda m: m.text in {"🧾 Гарантии", "🧾 Гарантії"})
 async def warranties_menu_handler(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("Раздел гарантий:", reply_markup=warranty_kb)
@@ -609,10 +626,10 @@ async def warranty_search_handler(message: Message, state: FSMContext):
     await message.answer("\n".join(lines), reply_markup=warranty_kb)
 
 
-@router.message(lambda m: m.text == "📋 Заказы")
+@router.message(lambda m: m.text in {"📋 Заказы", "📋 Замовлення"})
 async def orders_menu_handler(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+    await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
     
 # Список заказов
 @router.message(lambda m: m.text == "📋 Список заказов")
@@ -653,7 +670,7 @@ async def list_orders_handler(message: Message):
 @router.message(lambda m: m.text == "➕ Создать заказ")
 async def create_order_start_handler(message: Message, state: FSMContext):
     await state.set_state(OrderState.waiting_for_query)
-    await message.answer("Введите бренд, модель или категорию товара:")
+    await message.answer(await t(message, "enter_search"))
 
 
 # Поиск товара для заказа
@@ -663,7 +680,7 @@ async def create_order_start_handler(message: Message, state: FSMContext):
 )
 async def order_back_to_menu(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+    await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
 
 
 @router.message(OrderState.waiting_for_query)
@@ -719,7 +736,7 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
 )
 async def order_back_global(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+    await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
 
 
 # Количество
@@ -846,7 +863,7 @@ async def order_status_id_handler(message: Message, state: FSMContext):
 
     if raw_id == "⬅️ Назад":
         await state.clear()
-        await message.answer("Раздел заказов:", reply_markup=orders_kb)
+        await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
         return
 
     if not raw_id.isdigit():
@@ -875,7 +892,7 @@ async def order_status_finish_handler(message: Message, state: FSMContext):
 
     if status == "⬅️ Назад":
         await state.clear()
-        await message.answer("Раздел заказов:", reply_markup=orders_kb)
+        await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
         return
 
     if status not in {"new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled"}:
@@ -898,7 +915,7 @@ async def order_status_finish_handler(message: Message, state: FSMContext):
 )
 async def order_status_back(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+    await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
 @router.message(StateFilter("*"), lambda m: m.text in {
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
@@ -911,20 +928,20 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
     if text in {"⬅️ Назад", "❌ Сброс"}:
         await state.clear()
         menu = await get_main_menu_for_user(message)
-        await message.answer(await t(message, "menu"), reply_markup=menu)
+        await message.answer(await t(message, "main_menu"), reply_markup=menu)
         return
 
     if text == "📦 Товары":
         if not await require_admin(message):
             return
         await state.clear()
-        await message.answer("Раздел товаров:", reply_markup=products_kb)
+        await message.answer(await t(message, "products_section"), reply_markup=products_kb)
         return
 
     if text == "🛒 Продажа":
         await state.clear()
         await state.set_state(SaleState.waiting_for_query)
-        await message.answer("Введите бренд, модель или категорию товара:")
+        await message.answer(await t(message, "enter_search"))
         return
 
     if text == "➕ Приход":
@@ -940,22 +957,19 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
             return
         await state.clear()
         await state.set_state(AddProductState.waiting_for_category)
-        await message.answer("Выберите категорию:", reply_markup=inline_categories_kb())
+        await message.answer(await t(message, "enter_search"), reply_markup=inline_categories_kb())
         return
 
-@router.message(lambda m: m.text == "📦 Товары")
+@router.message(lambda m: m.text in {"📦 Товары", "📦 Товари"})
 async def products_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
 
     await state.clear()
-    await message.answer(
-        "Раздел товаров:",
-        reply_markup=products_kb
-    )
+    await message.answer(await t(message, "products_section"), reply_markup=products_kb)
 
 
-@router.message(lambda m: m.text == "👤 Клиенты")
+@router.message(lambda m: m.text in {"👤 Клиенты", "👤 Клієнти"})
 async def customers_menu_handler(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
@@ -963,7 +977,7 @@ async def customers_menu_handler(message: Message, state: FSMContext):
         reply_markup=customers_kb
     )
 
-@router.message(lambda m: m.text == "📈 Отчёты")
+@router.message(lambda m: m.text in {"📈 Отчёты", "📊 Отчёты", "📊 Звіти"})
 async def reports_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
@@ -991,7 +1005,7 @@ async def profit_menu_handler(message: Message, state: FSMContext):
 async def back_handler(message: Message, state: FSMContext):
     await state.clear()
     menu = await get_main_menu_for_user(message)
-    await message.answer(await t(message, "menu"), reply_markup=menu)
+    await message.answer(await t(message, "main_menu"), reply_markup=menu)
 
 
 @router.message(lambda m: m.text == "➕ Добавить товар")
@@ -1018,7 +1032,7 @@ async def add_product_category_handler(message: Message, state: FSMContext):
     if category == "⬅️ Назад":
         await state.clear()
         menu = await get_main_menu_for_user(message)
-        await message.answer(await t(message, "menu"), reply_markup=menu)
+        await message.answer(await t(message, "main_menu"), reply_markup=menu)
         return
 
     await state.update_data(category=category)
@@ -1457,7 +1471,7 @@ async def edit_stock_new_stock_handler(message: Message, state: FSMContext):
     )
 
 
-@router.message(lambda m: m.text == "➕ Приход")
+@router.message(lambda m: m.text in {"➕ Приход", "➕ Прихід"})
 async def receipt_start_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
@@ -1598,10 +1612,10 @@ async def receipt_purchase_price_handler(message: Message, state: FSMContext):
     )
 
 
-@router.message(lambda m: m.text == "🛒 Продажа")
+@router.message(lambda m: m.text in {"🛒 Продажа", "🛒 Продаж"})
 async def sale_start_handler(message: Message, state: FSMContext):
     await state.set_state(SaleState.waiting_for_query)
-    await message.answer("Введите бренд, модель или категорию товара:")
+    await message.answer(await t(message, "enter_search"))
 
 
 @router.message(SaleState.waiting_for_query)
@@ -2001,7 +2015,7 @@ async def users_menu_handler(message: Message, state: FSMContext):
     )
 
 
-@router.message(lambda m: m.text == "💱 Курсы валют")
+@router.message(lambda m: m.text in {"💱 Курсы валют", "💱 Курс валют"})
 async def currency_rates_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
@@ -2026,7 +2040,7 @@ async def currency_rate_choose_handler(message: Message, state: FSMContext):
     if currency == "⬅️ НАЗАД":
         await state.clear()
         menu = await get_main_menu_for_user(message)
-        await message.answer("Главное меню:", reply_markup=menu)
+        await message.answer(await t(message, "main_menu"), reply_markup=menu)
         return
 
     if currency not in {"USD", "EUR"}:
@@ -2169,7 +2183,7 @@ async def edit_product_start_handler(message: Message, state: FSMContext):
         return
 
     await state.set_state(EditProductState.waiting_for_query)
-    await message.answer("Введите бренд, модель или категорию товара:")
+    await message.answer(await t(message, "enter_search"))
 
 
 @router.message(EditProductState.waiting_for_query)
@@ -2229,7 +2243,7 @@ async def edit_product_callback_handler(callback: CallbackQuery, state: FSMConte
 @router.message(lambda m: m.text == "🔍 Найти товар")
 async def find_product_start(message: Message, state: FSMContext):
     await state.set_state(FindProductState.waiting_for_query)
-    await message.answer("Введите бренд, модель или категорию товара:")
+    await message.answer(await t(message, "enter_search"))
 
 
 @router.message(FindProductState.waiting_for_query)
@@ -2464,7 +2478,7 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
 @router.message(StateFilter(OrderStatusState), lambda m: m.text == "⬅️ Назад")
 async def order_status_back_handler(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Раздел заказов:", reply_markup=orders_kb)
+    await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
 
 @router.callback_query(lambda c: c.data and c.data.startswith("order_status:"))
 async def order_status_callback_handler(callback: CallbackQuery):
@@ -2726,7 +2740,7 @@ async def edit_product_field_handler(message: Message, state: FSMContext):
 
     if text == "⬅️ Назад":
         await state.clear()
-        await message.answer("Раздел товаров:", reply_markup=products_kb)
+        await message.answer(await t(message, "products_section"), reply_markup=products_kb)
         return
 
     field_map = {
