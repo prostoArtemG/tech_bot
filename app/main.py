@@ -1665,7 +1665,7 @@ async def sale_product_handler(message: Message, state: FSMContext):
         f"Товар:\n{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
         f"{await t(message, 'price')}: {float(product['price']):.2f} грн\n"
         f"{await t(message, 'stock')}: {product['stock_qty']}\n\n"
-        "Введите количество:"
+        f"{await t(message, 'enter_quantity')}"
     )
 
 
@@ -1687,7 +1687,7 @@ async def sale_product_callback_handler(callback: CallbackQuery, state: FSMConte
         f"Товар:\n{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
         f"{await t(callback.message, 'price')}: {float(product['price']):.2f} грн\n"
         f"{await t(callback.message, 'stock')}: {product['stock_qty']}\n\n"
-        "Введите количество:"
+        f"{await t(callback.message, 'enter_quantity')}"
     )
 
     await callback.answer()
@@ -1717,12 +1717,12 @@ async def sale_qty_handler(message: Message, state: FSMContext):
         return
 
     if qty > product["stock_qty"]:
-        await message.answer("❌ Недостаточно товара на складе")
+        await message.answer(await t(message, "not_enough_stock"))
         return
 
     await state.update_data(qty=qty)
     await state.set_state(SaleState.waiting_for_customer_phone)
-    await message.answer("Введите телефон клиента:")
+    await message.answer(await t(message, "enter_client_phone"))
 
 
 @router.message(SaleState.waiting_for_customer_phone)
@@ -1766,12 +1766,12 @@ async def sale_customer_phone_handler(message: Message, state: FSMContext):
 
         await state.clear()
         await message.answer(
-            "✅ Продажа завершена\n\n"
+            await t(message, "sale_done") + "\n\n"
             f"Клиент: {customer['name']} | {customer['phone']} | {customer['city'] or '-'}\n"
             f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
             f"Количество: {qty}\n"
             f"Сумма: {total:.2f} грн\n"
-            f"Остаток: {new_stock} шт",
+            f"{await t(message, 'stock_available')}: {new_stock} шт",
             reply_markup=menu_kb
         )
         return
@@ -1838,12 +1838,12 @@ async def sale_customer_city_handler(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        "✅ Продажа завершена\n\n"
+        await t(message, "sale_done") + "\n\n"
         f"Клиент: {customer['name']} | {customer['phone']} | {customer['city'] or '-'}\n"
         f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
         f"Количество: {qty}\n"
         f"Сумма: {total:.2f} грн\n"
-        f"Остаток: {new_stock} шт",
+        f"{await t(message, 'stock_available')}: {new_stock} шт",
         reply_markup=menu_kb
     )
 
@@ -2513,9 +2513,9 @@ async def order_to_sale_handler(callback: CallbackQuery):
 
     if stock < qty:
         await callback.message.answer(
-            f"❌ Недостаточно товара\n"
-            f"Остаток: {stock}\n"
-            f"Нужно: {qty}\n\n"
+            await t(callback.message, "not_enough_stock") + "\n"
+            f"{await t(callback.message, 'stock_available')}: {stock}\n"
+            f"{await t(callback.message, 'need_qty')}: {qty}\n\n"
             f"Используй статусы:\n📦 Заказан у поставщика\n🚚 В пути"
         )
         await callback.answer()
