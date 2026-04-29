@@ -20,6 +20,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from app.db import db
+from app.i18n import TRANSLATIONS
 
 load_dotenv()
 
@@ -481,8 +482,12 @@ TEXTS = {
 
 async def t(message: Message, key: str) -> str:
     user = await db.get_user_by_telegram_id(message.from_user.id)
-    lang = user["language"] if user and user["language"] else "ru"
-    return TEXTS.get(lang, TEXTS["ru"]).get(key, key)
+
+    lang = "ru"
+    if user and user.get("language"):
+        lang = user["language"]
+
+    return TRANSLATIONS.get(lang, TRANSLATIONS["ru"]).get(key, key)
 
 
 @router.message(lambda m: m.text == "🌐 Язык")
@@ -906,7 +911,7 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
     if text in {"⬅️ Назад", "❌ Сброс"}:
         await state.clear()
         menu = await get_main_menu_for_user(message)
-        await message.answer("Главное меню:", reply_markup=menu)
+        await message.answer(await t(message, "menu"), reply_markup=menu)
         return
 
     if text == "📦 Товары":
@@ -986,10 +991,7 @@ async def profit_menu_handler(message: Message, state: FSMContext):
 async def back_handler(message: Message, state: FSMContext):
     await state.clear()
     menu = await get_main_menu_for_user(message)
-    await message.answer(
-        "Главное меню:",
-        reply_markup=menu
-    )
+    await message.answer(await t(message, "menu"), reply_markup=menu)
 
 
 @router.message(lambda m: m.text == "➕ Добавить товар")
@@ -1016,7 +1018,7 @@ async def add_product_category_handler(message: Message, state: FSMContext):
     if category == "⬅️ Назад":
         await state.clear()
         menu = await get_main_menu_for_user(message)
-        await message.answer("Главное меню:", reply_markup=menu)
+        await message.answer(await t(message, "menu"), reply_markup=menu)
         return
 
     await state.update_data(category=category)
