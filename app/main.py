@@ -150,7 +150,8 @@ admin_menu_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="👥 Пользователи")],
         [KeyboardButton(text="📈 Отчёты"), KeyboardButton(text="💰 Прибыль")],
         [KeyboardButton(text="💱 Курсы валют"), KeyboardButton(text="🌐 Язык")],
-        [KeyboardButton(text="🧾 Гарантии")],
+            [KeyboardButton(text="🧾 Гарантии")],
+            [KeyboardButton(text="🌐 Сайт")],
         [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
@@ -319,6 +320,20 @@ lang_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Русский")],
         [KeyboardButton(text="Українська")],
+    ],
+    resize_keyboard=True
+)
+
+
+site_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📞 Контакты сайта")],
+        [KeyboardButton(text="📂 Категории сайта")],
+        [KeyboardButton(text="📝 Описание товара")],
+        [KeyboardButton(text="⚙️ Характеристики товара")],
+        [KeyboardButton(text="🖼 Фото товара")],
+        [KeyboardButton(text="🌐 Язык сайта")],
+        [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
 )
@@ -983,6 +998,8 @@ async def order_status_back(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
     "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
+    "🌐 Сайт", "📞 Контакты сайта", "📂 Категории сайта", "📝 Описание товара",
+    "⚙️ Характеристики товара", "🖼 Фото товара", "🌐 Язык сайта",
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
@@ -1030,6 +1047,45 @@ async def products_menu_handler(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(await t(message, "products_section"), reply_markup=products_kb)
+
+
+@router.message(lambda m: m.text == "🌐 Сайт")
+async def site_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.clear()
+    await message.answer("Раздел сайта:", reply_markup=site_kb)
+
+
+@router.message(lambda m: m.text == "📞 Контакты сайта")
+async def site_contacts_handler(message: Message, state: FSMContext):
+    await message.answer("Здесь будут настройки контактов сайта.")
+
+
+@router.message(lambda m: m.text == "📂 Категории сайта")
+async def site_categories_handler(message: Message, state: FSMContext):
+    await message.answer("Здесь будут настройки категорий сайта.")
+
+
+@router.message(lambda m: m.text == "📝 Описание товара")
+async def site_description_handler(message: Message, state: FSMContext):
+    await message.answer("Здесь будет редактирование описания товара для сайта.")
+
+
+@router.message(lambda m: m.text == "⚙️ Характеристики товара")
+async def site_specs_handler(message: Message, state: FSMContext):
+    await message.answer("Здесь будут характеристики товара.")
+
+
+@router.message(lambda m: m.text == "🖼 Фото товара")
+async def site_photos_handler(message: Message, state: FSMContext):
+    await message.answer("Здесь будет управление фото товара.")
+
+
+@router.message(lambda m: m.text == "🌐 Язык сайта")
+async def site_language_handler(message: Message, state: FSMContext):
+    await message.answer("Здесь будет настройка языка сайта RU / UA.")
 
 
 @router.message(lambda m: m.text in {"👤 Клиенты", "👤 Клієнти"})
