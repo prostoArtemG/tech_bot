@@ -689,7 +689,7 @@ async def order_search_product_handler(message: Message, state: FSMContext):
     rows = await db.search_products(query)
 
     if not rows:
-        await message.answer("Ничего не найдено. Попробуй ещё:")
+        await message.answer(await t(message, "no_products_found"))
         return
 
     keyboard = InlineKeyboardMarkup(
@@ -705,7 +705,7 @@ async def order_search_product_handler(message: Message, state: FSMContext):
     )
 
     await state.set_state(OrderState.waiting_for_product_id)
-    await message.answer("Выберите товар:", reply_markup=keyboard)
+    await message.answer(await t(message, "choose_product"), reply_markup=keyboard)
 
 
 # Callback выбора товара
@@ -715,7 +715,7 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await callback.message.answer("Товар не найден.")
+        await callback.message.answer(await t(callback.message, "product_not_found"))
         await callback.answer()
         return
 
@@ -724,7 +724,7 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
 
     await callback.message.answer(
         f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
-        f"Цена: {float(product['price'] or 0):.2f} грн\n\n"
+        f"{await t(callback.message, 'price')}: {float(product['price'] or 0):.2f} грн\n\n"
         "Введите количество:"
     )
     await callback.answer()
@@ -1104,7 +1104,7 @@ async def search_category_handler(message: Message, state: FSMContext):
     found = [c for c in categories if query in c.lower()]
 
     if not found:
-        await message.answer("Ничего не найдено. Попробуйте ещё:")
+        await message.answer(await t(message, "no_products_found"))
         return
 
     keyboard = InlineKeyboardMarkup(
@@ -1170,7 +1170,7 @@ async def search_brand_handler(message: Message, state: FSMContext):
     found = [b for b in brands if query in b.lower()]
 
     if not found:
-        await message.answer("Ничего не найдено. Попробуй ещё:")
+        await message.answer(await t(message, "no_products_found"))
         return
 
     keyboard = InlineKeyboardMarkup(
@@ -1229,7 +1229,7 @@ async def add_product_purchase_handler(message: Message, state: FSMContext):
     try:
         purchase_price = float(raw)
     except:
-        await message.answer("Введите число")
+        await message.answer(await t(message, "enter_number"))
         return
 
     await state.update_data(purchase_price=purchase_price)
@@ -1292,9 +1292,9 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Товар добавлен\n\n"
         f"{data['brand']} {data['model']}\n"
-        f"Цена: {data['price']} грн\n"
+        f"{await t(message, 'price')}: {data['price']} грн\n"
         f"Закупка: {data.get('purchase_price', 0)} {data.get('currency', 'UAH')}\n"
-        f"Гарантия: {warranty} мес",
+        f"{await t(message, 'warranty')}: {warranty} мес",
         reply_markup=products_kb
     )
 
@@ -1321,11 +1321,11 @@ async def list_products_handler(message: Message):
 
         lines.append(
             f"{row['id']}. {category} | {brand} | {model}\n"
-            f"Цена: {price:.2f} грн\n"
+            f"{await t(message, 'price')}: {price:.2f} грн\n"
             f"Закупка: {purchase_price:.2f} {purchase_currency}\n"
             f"Артикул: {sku}\n"
-            f"Гарантия: {warranty_months} мес\n"
-            f"Остаток: {stock_qty} шт\n"
+            f"{await t(message, 'warranty')}: {warranty_months} мес\n"
+            f"{await t(message, 'stock')}: {stock_qty} шт\n"
         )
 
     await message.answer("\n".join(lines))
@@ -1487,7 +1487,7 @@ async def receipt_search_handler(message: Message, state: FSMContext):
     rows = await db.search_products(query)
 
     if not rows:
-        await message.answer("Ничего не найдено. Попробуй ещё:")
+        await message.answer(await t(message, "no_products_found"))
         return
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1511,7 +1511,7 @@ async def receipt_product_callback_handler(callback: CallbackQuery, state: FSMCo
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await callback.message.answer("Товар не найден.")
+        await callback.message.answer(await t(callback.message, "product_not_found"))
         await callback.answer()
         return
 
@@ -1540,7 +1540,7 @@ async def receipt_product_handler(message: Message, state: FSMContext):
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await message.answer("Товар не найден")
+        await message.answer(await t(message, "product_not_found"))
         return
 
     await state.update_data(product_id=product_id)
@@ -1592,7 +1592,7 @@ async def receipt_purchase_price_handler(message: Message, state: FSMContext):
     product = await db.get_product_by_id(product_id)
     if not product:
         await state.clear()
-        await message.answer("Товар не найден", reply_markup=menu_kb)
+        await message.answer(await t(message, "product_not_found"), reply_markup=menu_kb)
         return
 
     total_amount = await db.create_purchase(product_id, qty, purchase_price)
@@ -1625,7 +1625,7 @@ async def sale_search_handler(message: Message, state: FSMContext):
     rows = await db.search_products(query)
 
     if not rows:
-        await message.answer("Ничего не найдено. Попробуй ещё:")
+        await message.answer(await t(message, "no_products_found"))
         return
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1640,7 +1640,7 @@ async def sale_search_handler(message: Message, state: FSMContext):
     )
 
     await state.set_state(SaleState.waiting_for_product_id)
-    await message.answer("Выберите товар:", reply_markup=keyboard)
+    await message.answer(await t(message, "choose_product"), reply_markup=keyboard)
 
 
 @router.message(SaleState.waiting_for_product_id)
@@ -1655,7 +1655,7 @@ async def sale_product_handler(message: Message, state: FSMContext):
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await message.answer("Товар не найден")
+        await message.answer(await t(message, "product_not_found"))
         return
 
     await state.update_data(product_id=product_id)
@@ -1663,8 +1663,8 @@ async def sale_product_handler(message: Message, state: FSMContext):
 
     await message.answer(
         f"Товар:\n{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
-        f"Цена: {float(product['price']):.2f} грн\n"
-        f"Остаток: {product['stock_qty']}\n\n"
+        f"{await t(message, 'price')}: {float(product['price']):.2f} грн\n"
+        f"{await t(message, 'stock')}: {product['stock_qty']}\n\n"
         "Введите количество:"
     )
 
@@ -1676,7 +1676,7 @@ async def sale_product_callback_handler(callback: CallbackQuery, state: FSMConte
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await callback.message.answer("Товар не найден.")
+        await callback.message.answer(await t(callback.message, "product_not_found"))
         await callback.answer()
         return
 
@@ -1685,8 +1685,8 @@ async def sale_product_callback_handler(callback: CallbackQuery, state: FSMConte
 
     await callback.message.answer(
         f"Товар:\n{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
-        f"Цена: {float(product['price']):.2f} грн\n"
-        f"Остаток: {product['stock_qty']}\n\n"
+        f"{await t(callback.message, 'price')}: {float(product['price']):.2f} грн\n"
+        f"{await t(callback.message, 'stock')}: {product['stock_qty']}\n\n"
         "Введите количество:"
     )
 
@@ -1713,7 +1713,7 @@ async def sale_qty_handler(message: Message, state: FSMContext):
 
     if not product:
         await state.clear()
-        await message.answer("Товар не найден", reply_markup=menu_kb)
+        await message.answer(await t(message, "product_not_found"), reply_markup=menu_kb)
         return
 
     if qty > product["stock_qty"]:
@@ -1744,7 +1744,7 @@ async def sale_customer_phone_handler(message: Message, state: FSMContext):
         product = await db.get_product_by_id(product_id)
         if not product:
             await state.clear()
-            await message.answer("Товар не найден", reply_markup=menu_kb)
+            await message.answer(await t(message, "product_not_found"), reply_markup=menu_kb)
             return
 
         price = float(product["price"])
@@ -1816,7 +1816,7 @@ async def sale_customer_city_handler(message: Message, state: FSMContext):
     product = await db.get_product_by_id(product_id)
     if not product:
         await state.clear()
-        await message.answer("Товар не найден", reply_markup=menu_kb)
+        await message.answer(await t(message, "product_not_found"), reply_markup=menu_kb)
         return
 
     price = float(product["price"])
@@ -2193,7 +2193,7 @@ async def edit_product_search_handler(message: Message, state: FSMContext):
     rows = await db.search_products(query)
 
     if not rows:
-        await message.answer("Ничего не найдено. Попробуй ещё:")
+        await message.answer(await t(message, "no_products_found"))
         return
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -2208,7 +2208,7 @@ async def edit_product_search_handler(message: Message, state: FSMContext):
     )
 
     await state.set_state(EditProductState.waiting_for_product_id)
-    await message.answer("Выберите товар:", reply_markup=keyboard)
+    await message.answer(await t(message, "choose_product"), reply_markup=keyboard)
 
 
 
@@ -2218,7 +2218,7 @@ async def edit_product_callback_handler(callback: CallbackQuery, state: FSMConte
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await callback.message.answer("Товар не найден.")
+        await callback.message.answer(await t(callback.message, "product_not_found"))
         await callback.answer()
         return
 
@@ -2229,10 +2229,10 @@ async def edit_product_callback_handler(callback: CallbackQuery, state: FSMConte
         f"Товар:\n"
         f"ID: {product['id']}\n"
         f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
-        f"Цена: {float(product['price'] or 0):.2f} грн\n"
+        f"{await t(callback.message, 'price')}: {float(product['price'] or 0):.2f} грн\n"
         f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
         f"Артикул: {product['sku'] or '-'}\n"
-        f"Гарантия: {product['warranty_months'] or 0} мес\n\n"
+        f"{await t(callback.message, 'warranty')}: {product['warranty_months'] or 0} мес\n\n"
         "Что изменить?",
         reply_markup=inline_edit_fields_kb()
     )
@@ -2243,7 +2243,7 @@ async def edit_product_callback_handler(callback: CallbackQuery, state: FSMConte
 @router.message(lambda m: m.text == "🔍 Найти товар")
 async def find_product_start(message: Message, state: FSMContext):
     await state.set_state(FindProductState.waiting_for_query)
-    await message.answer(await t(message, "enter_search"))
+    await message.answer(await t(message, "enter_product_search"))
 
 
 @router.message(FindProductState.waiting_for_query)
@@ -2253,7 +2253,7 @@ async def find_product_search(message: Message, state: FSMContext):
     rows = await db.search_products(query)
 
     if not rows:
-        await message.answer("Ничего не найдено. Попробуй ещё:")
+        await message.answer(await t(message, "no_products_found"))
         return
 
     lines = ["Найдено:\n"]
@@ -2280,7 +2280,7 @@ async def find_product_show(message: Message, state: FSMContext):
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await message.answer("Товар не найден.")
+        await message.answer(await t(message, "product_not_found"))
         return
 
     await state.clear()
@@ -2289,11 +2289,11 @@ async def find_product_show(message: Message, state: FSMContext):
         f"📦 Товар\n\n"
         f"ID: {product['id']}\n"
         f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n\n"
-        f"Цена: {float(product['price'] or 0):.2f} грн\n"
+        f"{await t(message, 'price')}: {float(product['price'] or 0):.2f} грн\n"
         f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
         f"Артикул: {product['sku'] or '-'}\n"
-        f"Гарантия: {product['warranty_months'] or 0} мес\n"
-        f"Остаток: {product['stock_qty'] or 0} шт",
+        f"{await t(message, 'warranty')}: {product['warranty_months'] or 0} мес\n"
+        f"{await t(message, 'stock')}: {product['stock_qty'] or 0} шт",
         reply_markup=products_kb
     )
 
@@ -2311,7 +2311,7 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await message.answer("Товар не найден. Введите другой ID:")
+        await message.answer(f"{await t(message, 'product_not_found')} Введите другой ID:")
         return
 
     await state.update_data(product_id=product_id)
@@ -2321,10 +2321,10 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
         f"Товар:\n"
         f"ID: {product['id']}\n"
         f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
-        f"Цена: {float(product['price'] or 0):.2f} грн\n"
+        f"{await t(message, 'price')}: {float(product['price'] or 0):.2f} грн\n"
         f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
         f"Артикул: {product['sku'] or '-'}\n"
-        f"Гарантия: {product['warranty_months'] or 0} мес\n\n"
+        f"{await t(message, 'warranty')}: {product['warranty_months'] or 0} мес\n\n"
         "Что изменить?",
         reply_markup=inline_edit_fields_kb()
     )
@@ -2349,7 +2349,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
 
         await state.clear()
         await message.answer(
-            "✅ Фото сохранено",
+            await t(message, "photo_saved"),
             reply_markup=products_kb
         )
         return
@@ -2365,7 +2365,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
         try:
             value = float(value.replace(",", "."))
         except ValueError:
-            await message.answer("Введите число.")
+            await message.answer(await t(message, "enter_number"))
             return
 
     elif field == "warranty_months":
@@ -2390,7 +2390,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     await state.clear()
 
     await message.answer(
-        "✅ Товар обновлён\n\n"
+        await t(message, "product_updated") + "\n\n"
         f"ID: {product['id']}\n"
         f"{product['brand'] or '-'} {product['model'] or '-'}\n"
         f"Изменено: {field_title}",
@@ -2447,7 +2447,7 @@ async def low_stock_handler(message: Message):
     for row in rows:
         lines.append(
             f"{row['id']}. {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'}\n"
-            f"Цена: {float(row['price'] or 0):.2f} грн | Остаток: {row['stock_qty'] or 0} шт\n"
+            f"{await t(message, 'price')}: {float(row['price'] or 0):.2f} грн | {await t(message, 'stock')}: {row['stock_qty'] or 0} шт\n"
         )
 
     await message.answer("\n".join(lines), reply_markup=products_kb)
@@ -2459,7 +2459,7 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await callback.message.answer("Товар не найден.")
+        await callback.message.answer(await t(callback.message, "product_not_found"))
         await callback.answer()
         return
 
@@ -2468,7 +2468,7 @@ async def order_product_callback_handler(callback: CallbackQuery, state: FSMCont
 
     await callback.message.answer(
         f"Товар: {product['brand'] or '-'} {product['model'] or '-'}\n"
-        f"Цена: {float(product['price'] or 0):.2f} грн\n\n"
+        f"{await t(callback.message, 'price')}: {float(product['price'] or 0):.2f} грн\n\n"
         "Введите количество:"
     )
 
@@ -2723,7 +2723,7 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
     product = await db.get_product_by_id(product_id)
 
     if not product:
-        await message.answer("Товар не найден. Введите другой ID:")
+        await message.answer(f"{await t(message, 'product_not_found')} Введите другой ID:")
         return
 
     await state.update_data(product_id=product_id)
@@ -2778,7 +2778,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
         try:
             value = float(value.replace(",", "."))
         except ValueError:
-            await message.answer("Введите число.")
+            await message.answer(await t(message, "enter_number"))
             return
 
     elif field == "warranty_months":
@@ -2803,7 +2803,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     await state.clear()
 
     await message.answer(
-        "✅ Товар обновлён\n\n"
+        await t(message, "product_updated") + "\n\n"
         f"ID: {product['id']}\n"
         f"{product['brand'] or '-'} {product['model'] or '-'}\n"
         f"Изменено: {field_title}",
