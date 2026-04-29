@@ -637,7 +637,7 @@ async def list_orders_handler(message: Message):
     rows = await db.list_orders()
 
     if not rows:
-        await message.answer("Заказов пока нет.", reply_markup=orders_kb)
+        await message.answer(await t(message, "orders_empty"), reply_markup=orders_kb)
         return
 
     lines = ["📋 Последние заказы:\n"]
@@ -772,12 +772,12 @@ async def order_customer_phone_handler(message: Message, state: FSMContext):
     if customer:
         await state.update_data(customer_id=customer["id"])
         await state.set_state(OrderState.waiting_for_comment)
-        await message.answer("Клиент найден. Введите комментарий к заказу или '-'")
+        await message.answer(f"{await t(message, 'client_found')} {await t(message, 'enter_comment')}")
         return
 
     await state.update_data(customer_phone=phone)
     await state.set_state(OrderState.waiting_for_customer_name)
-    await message.answer("Клиент не найден. Введите имя клиента:")
+    await message.answer(await t(message, 'client_not_found'))
 
 
 # Новый клиент
@@ -791,7 +791,7 @@ async def order_customer_name_handler(message: Message, state: FSMContext):
 
     await state.update_data(customer_name=name)
     await state.set_state(OrderState.waiting_for_customer_city)
-    await message.answer("Введите город клиента:")
+    await message.answer(await t(message, 'enter_city'))
 
 
 @router.message(OrderState.waiting_for_customer_city)
@@ -812,7 +812,7 @@ async def order_customer_city_handler(message: Message, state: FSMContext):
 
     await state.update_data(customer_id=customer["id"])
     await state.set_state(OrderState.waiting_for_comment)
-    await message.answer("Введите комментарий к заказу или '-'")
+    await message.answer(await t(message, 'enter_comment'))
 
 
 # Комментарий и сохранение заказа
@@ -841,8 +841,8 @@ async def order_comment_handler(message: Message, state: FSMContext):
     await state.clear()
 
     await message.answer(
-        "✅ Заказ создан\n\n"
-        f"ID заказа: {row['id']}\n"
+        f"{await t(message, 'order_created')}\n\n"
+        f"ID: {row['id']}\n"
         f"Количество: {qty}\n"
         f"Сумма: {total:.2f} грн\n"
         f"Статус: new",
@@ -854,7 +854,7 @@ async def order_comment_handler(message: Message, state: FSMContext):
 @router.message(lambda m: m.text == "🔁 Изменить статус заказа")
 async def order_status_start_handler(message: Message, state: FSMContext):
     await state.set_state(OrderStatusState.waiting_for_order_id)
-    await message.answer("Введите ID заказа:")
+    await message.answer(await t(message, "enter_order_id"))
 
 
 @router.message(OrderStatusState.waiting_for_order_id)
@@ -867,21 +867,21 @@ async def order_status_id_handler(message: Message, state: FSMContext):
         return
 
     if not raw_id.isdigit():
-        await message.answer("ID заказа должен быть числом.")
+        await message.answer(await t(message, "order_id_must_be_number"))
         return
 
     order_id = int(raw_id)
     order = await db.get_order_by_id(order_id)
 
     if not order:
-        await message.answer("Заказ не найден.")
+        await message.answer(await t(message, "order_not_found"))
         return
 
     await state.update_data(order_id=order_id)
     await state.set_state(OrderStatusState.waiting_for_status)
 
     await message.answer(
-        f"Текущий статус: {order['status']}\nВыберите новый статус:",
+        f"Текущий статус: {order['status']}\n{await t(message, 'choose_status')}",
         reply_markup=order_status_kb
     )
 
@@ -906,7 +906,7 @@ async def order_status_finish_handler(message: Message, state: FSMContext):
     await state.clear()
 
     await message.answer(
-        f"✅ Статус заказа #{order_id} обновлён: {status}",
+        f"{await t(message, 'order_status_updated')} #{order_id}: {status}",
         reply_markup=orders_kb
     )
 @router.message(
@@ -2490,7 +2490,7 @@ async def order_status_callback_handler(callback: CallbackQuery):
         return
 
     await db.update_order_status(order_id, status)
-    await callback.message.answer(f"✅ Статус заказа #{order_id} обновлён: {status}")
+    await callback.message.answer(f"{await t(callback.message, 'order_status_updated')} #{order_id}: {status}")
     await callback.answer()
 
 
@@ -2501,7 +2501,7 @@ async def order_to_sale_handler(callback: CallbackQuery):
     order = await db.get_order_full_by_id(order_id)
 
     if not order:
-        await callback.answer("Заказ не найден")
+        await callback.answer(await t(callback.message, "order_not_found"))
         return
 
     if order["status"] == "done":
