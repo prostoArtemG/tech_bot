@@ -825,5 +825,26 @@ class Database:
             order_id
         )
 
+    async def get_order_full_by_id(self, order_id: int):
+        return await self.fetchrow(
+            """
+            SELECT
+                o.id,
+                o.qty,
+                o.total_amount,
+                o.status,
+                o.customer_id,
+                o.product_id,
+                p.price,
+                p.stock_qty,
+                p.brand,
+                p.model
+            FROM orders o
+            LEFT JOIN products p ON p.id = o.product_id
+            WHERE o.id = $1
+            """,
+            order_id
+        )
+
 
 db = Database(DATABASE_URL)

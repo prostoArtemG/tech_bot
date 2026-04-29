@@ -179,11 +179,34 @@ def inline_order_status_kb(order_id: int):
             [
                 InlineKeyboardButton(text="🆕 Новый", callback_data=f"order_status:{order_id}:new"),
                 InlineKeyboardButton(text="🔄 В обработке", callback_data=f"order_status:{order_id}:processing"),
+                InlineKeyboardButton(text="📦 Заказано у поставщика", callback_data=f"order_status:{order_id}:ordered_supplier"),
             ],
             [
+                InlineKeyboardButton(text="🚚 В пути", callback_data=f"order_status:{order_id}:in_transit"),
+                InlineKeyboardButton(text="📦 Готово", callback_data=f"order_status:{order_id}:ready"),
                 InlineKeyboardButton(text="✅ Выполнен", callback_data=f"order_status:{order_id}:done"),
+            ],
+            [
                 InlineKeyboardButton(text="❌ Отменён", callback_data=f"order_status:{order_id}:cancelled"),
             ],
+        ]
+    )
+
+
+def inline_order_actions_kb(order_id: int):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Сделать продажей", callback_data=f"order_to_sale:{order_id}")
+            ],
+            [
+                InlineKeyboardButton(text="📦 Заказан у поставщика", callback_data=f"order_status:{order_id}:ordered_supplier"),
+                InlineKeyboardButton(text="🚚 В пути", callback_data=f"order_status:{order_id}:in_transit"),
+            ],
+            [
+                InlineKeyboardButton(text="📍 Готов", callback_data=f"order_status:{order_id}:ready"),
+                InlineKeyboardButton(text="❌ Отменён", callback_data=f"order_status:{order_id}:cancelled"),
+            ]
         ]
     )
 seller_menu_kb = ReplyKeyboardMarkup(
@@ -266,9 +289,9 @@ orders_kb = ReplyKeyboardMarkup(
 
 order_status_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="new"), KeyboardButton(text="processing")],
-        [KeyboardButton(text="done"), KeyboardButton(text="cancelled")],
-        [KeyboardButton(text="⬅️ Назад")],
+        [KeyboardButton(text="new"), KeyboardButton(text="processing"), KeyboardButton(text="ordered_supplier")],
+        [KeyboardButton(text="in_transit"), KeyboardButton(text="ready"), KeyboardButton(text="done")],
+        [KeyboardButton(text="cancelled"), KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
 )
@@ -615,6 +638,10 @@ async def list_orders_handler(message: Message):
             f"Изменить статус заказа #{row['id']}:",
             reply_markup=inline_order_status_kb(row["id"]) 
         )
+        await message.answer(
+            f"Действия для заказа #{row['id']}:",
+            reply_markup=inline_order_actions_kb(row["id"])
+        )
 
 
 # Создание заказа — старт
@@ -846,7 +873,7 @@ async def order_status_finish_handler(message: Message, state: FSMContext):
         await message.answer("Раздел заказов:", reply_markup=orders_kb)
         return
 
-    if status not in {"new", "processing", "done", "cancelled"}:
+    if status not in {"new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled"}:
         await message.answer("Выберите статус кнопкой.")
         return
 
@@ -871,7 +898,7 @@ async def order_status_back(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
     "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
-    "new", "processing", "done", "cancelled",
+    "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
     text = message.text
@@ -2442,12 +2469,60 @@ async def order_status_callback_handler(callback: CallbackQuery):
     _, order_id_raw, status = callback.data.split(":")
     order_id = int(order_id_raw)
 
-    if status not in {"new", "processing", "done", "cancelled"}:
+    if status not in {"new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled"}:
         await callback.answer("Неверный статус")
         return
 
     await db.update_order_status(order_id, status)
     await callback.message.answer(f"✅ Статус заказа #{order_id} обновлён: {status}")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("order_to_sale:"))
+async def order_to_sale_handler(callback: CallbackQuery):
+    order_id = int(callback.data.split(":")[1])
+
+    order = await db.get_order_full_by_id(order_id)
+
+    if not order:
+        await callback.answer("Заказ не найден")
+        return
+
+    if order["status"] == "done":
+        await callback.answer("Уже выполнен")
+        return
+
+    stock = int(order.get("stock_qty") or 0)
+    qty = int(order.get("qty") or 0)
+
+    if stock < qty:
+        await callback.message.answer(
+            f"❌ Недостаточно товара\n"
+            f"Остаток: {stock}\n"
+            f"Нужно: {qty}\n\n"
+            f"Используй статусы:\n📦 Заказан у поставщика\n🚚 В пути"
+        )
+        await callback.answer()
+        return
+
+    sale = await db.create_sale(
+        product_id=order["product_id"],
+        qty=qty,
+        price=float(order["price"]),
+        customer_id=order["customer_id"]
+    )
+
+    new_stock = stock - qty
+    await db.update_stock_qty(order["product_id"], new_stock)
+
+    await db.update_order_status(order_id, "done")
+
+    await callback.message.answer(
+        f"✅ Заказ #{order_id} оформлен как продажа\n"
+        f"{order.get('brand') or ''} {order.get('model') or ''}\n"
+        f"Кол-во: {qty}"
+    )
+
     await callback.answer()
 @web_app.get("/health")
 async def health():
