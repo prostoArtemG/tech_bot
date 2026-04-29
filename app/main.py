@@ -487,23 +487,44 @@ async def t(message: Message, key: str) -> str:
     return TRANSLATIONS.get(lang, TRANSLATIONS["ru"]).get(key, key)
 
 
-@router.message(lambda m: m.text == "🌐 Язык")
-async def choose_language_handler(message: Message, state: FSMContext):
-    await state.set_state("choosing_language")
-    await message.answer(await t(message, "choose_language"), reply_markup=lang_kb)
+@router.message(lambda m: m.text in {"🌐 Язык", "🌐 Мова"})
+async def language_menu(message: Message, state: FSMContext):
+    await state.clear()
+
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Русский"), KeyboardButton(text="Українська")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ],
+        resize_keyboard=True
+    )
+
+    await message.answer(
+        "Выберите язык / Оберіть мову:",
+        reply_markup=kb
+    )
 
 
 @router.message(lambda m: m.text in {"Русский", "Українська"})
-async def set_language(message: Message):
+async def set_language(message: Message, state: FSMContext):
     lang = "ru" if message.text == "Русский" else "uk"
 
     await db.set_user_language(message.from_user.id, lang)
+
+    await state.clear()
 
     menu = await get_main_menu_for_user(message)
 
     text = "Язык сохранён" if lang == "ru" else "Мову збережено"
 
     await message.answer(text, reply_markup=menu)
+
+
+@router.message(lambda m: m.text == "⬅️ Назад")
+async def back_handler(message: Message, state: FSMContext):
+    await state.clear()
+    menu = await get_main_menu_for_user(message)
+    await message.answer(await t(message, "main_menu"), reply_markup=menu)
 
 
 def normalize_phone(phone: str) -> str:
