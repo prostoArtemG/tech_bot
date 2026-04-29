@@ -591,6 +591,9 @@ async def get_main_menu_for_user(message: Message):
                     KeyboardButton(text=await t(message, "currency")), KeyboardButton(text=await t(message, "language"))
                 ],
                 [
+                    KeyboardButton(text="🌐 Сайт"),
+                ],
+                [
                     KeyboardButton(text=await t(message, "warranty")),
                 ],
                 [
