@@ -452,6 +452,17 @@ class Database:
             language
         )
 
+    async def set_user_language(self, telegram_id: int, language: str):
+        await self.execute(
+            """
+            UPDATE users
+            SET language = $2
+            WHERE telegram_id = $1
+            """,
+            telegram_id,
+            language
+        )
+
     async def list_users(self):
         return await self.fetch(
             """

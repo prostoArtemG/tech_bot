@@ -493,17 +493,17 @@ async def choose_language_handler(message: Message, state: FSMContext):
     await message.answer(await t(message, "choose_language"), reply_markup=lang_kb)
 
 
-@router.message(lambda m: m.text in ["Русский", "Українська"])
-async def set_language_handler(message: Message, state: FSMContext):
+@router.message(lambda m: m.text in {"Русский", "Українська"})
+async def set_language(message: Message):
     lang = "ru" if message.text == "Русский" else "uk"
 
-    await db.update_user_language(message.from_user.id, lang)
-
-    await state.clear()
+    await db.set_user_language(message.from_user.id, lang)
 
     menu = await get_main_menu_for_user(message)
 
-    await message.answer(await t(message, "language_saved"), reply_markup=menu)
+    text = "Язык сохранён" if lang == "ru" else "Мову збережено"
+
+    await message.answer(text, reply_markup=menu)
 
 
 def normalize_phone(phone: str) -> str:
