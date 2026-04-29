@@ -412,7 +412,7 @@ class Database:
     async def get_user_by_telegram_id(self, telegram_id: int):
         return await self.fetchrow(
             """
-            SELECT id, telegram_id, full_name, role
+            SELECT id, telegram_id, full_name, role, language
             FROM users
             WHERE telegram_id = $1
             """,

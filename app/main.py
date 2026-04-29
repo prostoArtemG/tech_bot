@@ -532,7 +532,49 @@ async def get_current_user_role(message: Message) -> str:
 
 async def get_main_menu_for_user(message: Message):
     role = await get_current_user_role(message)
-    return admin_menu_kb if role == "admin" else seller_menu_kb
+    # build menus dynamically using translations to ensure correct language labels
+    if role == "admin":
+        return ReplyKeyboardMarkup(
+            keyboard=[
+                [
+                    KeyboardButton(text=await t(message, "products")), KeyboardButton(text=await t(message, "sale"))
+                ],
+                [
+                    KeyboardButton(text="❌ Отмена продажи"), KeyboardButton(text="🧾 История продаж")
+                ],
+                [
+                    KeyboardButton(text=await t(message, "orders")),
+                ],
+                [
+                    KeyboardButton(text=await t(message, "clients")), KeyboardButton(text="👥 Пользователи")
+                ],
+                [
+                    KeyboardButton(text=await t(message, "reports")), KeyboardButton(text="💰 Прибыль")
+                ],
+                [
+                    KeyboardButton(text=await t(message, "currency")), KeyboardButton(text=await t(message, "language"))
+                ],
+                [
+                    KeyboardButton(text=await t(message, "warranty")),
+                ],
+                [
+                    KeyboardButton(text="❌ Сброс"),
+                ],
+            ],
+            resize_keyboard=True
+        )
+
+    # seller
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=await t(message, "sale")), KeyboardButton(text="🧾 История продаж")],
+            [KeyboardButton(text=await t(message, "orders"))],
+            [KeyboardButton(text=await t(message, "clients")), KeyboardButton(text=await t(message, "language"))],
+            [KeyboardButton(text=await t(message, "warranty"))],
+            [KeyboardButton(text="❌ Сброс")],
+        ],
+        resize_keyboard=True
+    )
 
 
 async def get_main_menu(message: Message):
