@@ -142,6 +142,14 @@ class OrderStatusState(StatesGroup):
     waiting_for_status = State()
 
 
+class SiteContactsState(StatesGroup):
+    phone = State()
+    tg = State()
+    instagram = State()
+    address = State()
+    schedule = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
@@ -333,6 +341,18 @@ site_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="⚙️ Характеристики товара")],
         [KeyboardButton(text="🖼 Фото товара")],
         [KeyboardButton(text="🌐 Язык сайта")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+site_contacts_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Показать контакты")],
+        [KeyboardButton(text="📞 Телефон"), KeyboardButton(text="💬 Telegram")],
+        [KeyboardButton(text="📷 Instagram"), KeyboardButton(text="📍 Адрес")],
+        [KeyboardButton(text="⏰ График работы")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1001,8 +1021,9 @@ async def order_status_back(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
     "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
-    "🌐 Сайт", "📞 Контакты сайта", "📂 Категории сайта", "📝 Описание товара",
-    "⚙️ Характеристики товара", "🖼 Фото товара", "🌐 Язык сайта",
+    "🌐 Сайт", "📞 Контакты сайта", "📋 Показать контакты", "📞 Телефон", "💬 Telegram",
+    "📂 Категории сайта", "📝 Описание товара",
+    "⚙️ Характеристики товара", "🖼 Фото товара", "📷 Instagram", "📍 Адрес", "⏰ График работы", "🌐 Язык сайта",
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
@@ -1063,7 +1084,90 @@ async def site_menu_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "📞 Контакты сайта")
 async def site_contacts_handler(message: Message, state: FSMContext):
-    await message.answer("Здесь будут настройки контактов сайта.")
+    await state.clear()
+    await message.answer("Контакты сайта:", reply_markup=site_contacts_kb)
+
+
+@router.message(lambda m: m.text == "📋 Показать контакты")
+async def show_contacts(message: Message):
+    phone = await db.get_setting("site_phone") or "-"
+    tg = await db.get_setting("site_tg") or "-"
+    insta = await db.get_setting("site_instagram") or "-"
+    address = await db.get_setting("site_address") or "-"
+    schedule = await db.get_setting("site_schedule") or "-"
+
+    await message.answer(
+        f"📞 Телефон: {phone}\n"
+        f"💬 Telegram: {tg}\n"
+        f"📷 Instagram: {insta}\n"
+        f"📍 Адрес: {address}\n"
+        f"⏰ График: {schedule}"
+    )
+
+
+@router.message(lambda m: m.text == "📞 Телефон")
+async def set_phone(message: Message, state: FSMContext):
+    await message.answer("Введите телефон:")
+    await state.set_state(SiteContactsState.phone)
+
+
+@router.message(SiteContactsState.phone)
+async def save_phone(message: Message, state: FSMContext):
+    await db.set_setting("site_phone", message.text or "")
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
+
+
+@router.message(lambda m: m.text == "💬 Telegram")
+async def set_tg(message: Message, state: FSMContext):
+    await message.answer("Введите Telegram (username или ссылка):")
+    await state.set_state(SiteContactsState.tg)
+
+
+@router.message(SiteContactsState.tg)
+async def save_tg(message: Message, state: FSMContext):
+    await db.set_setting("site_tg", message.text or "")
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
+
+
+@router.message(lambda m: m.text == "📷 Instagram")
+async def set_insta(message: Message, state: FSMContext):
+    await message.answer("Введите Instagram (username или ссылка):")
+    await state.set_state(SiteContactsState.instagram)
+
+
+@router.message(SiteContactsState.instagram)
+async def save_insta(message: Message, state: FSMContext):
+    await db.set_setting("site_instagram", message.text or "")
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
+
+
+@router.message(lambda m: m.text == "📍 Адрес")
+async def set_address(message: Message, state: FSMContext):
+    await message.answer("Введите адрес:")
+    await state.set_state(SiteContactsState.address)
+
+
+@router.message(SiteContactsState.address)
+async def save_address(message: Message, state: FSMContext):
+    await db.set_setting("site_address", message.text or "")
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
+
+
+@router.message(lambda m: m.text == "⏰ График работы")
+async def set_schedule(message: Message, state: FSMContext):
+    await message.answer("Введите график работы (напр. Пн-Пт 9:00-18:00):")
+    await state.set_state(SiteContactsState.schedule)
+
+
+@router.message(SiteContactsState.schedule)
+async def save_schedule(message: Message, state: FSMContext):
+    await db.set_setting("site_schedule", message.text or "")
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
 
 
 @router.message(lambda m: m.text == "📂 Категории сайта")
