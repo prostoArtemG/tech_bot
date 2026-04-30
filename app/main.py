@@ -1067,6 +1067,13 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
         await message.answer(await t(message, "enter_search"), reply_markup=inline_categories_kb())
         return
 
+    if text == "🌐 Сайт":
+        if not await require_admin(message):
+            return
+        await state.clear()
+        await message.answer("Раздел сайта:", reply_markup=site_kb)
+        return
+
 @router.message(lambda m: m.text in {"📦 Товары", "📦 Товари"})
 async def products_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
