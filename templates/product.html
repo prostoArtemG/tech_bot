@@ -12,11 +12,11 @@
 </header>
 
 <main class="product-page">
+    <a href="/" class="back-link">← Назад в каталог</a>
+
     <div class="product-grid">
 
         <div class="product-image">
-            <a href="/" class="back-link">← Назад в каталог</a>
-
             {% if product.photo_url %}
             <img src="{{ product.photo_url }}" class="product-big-img" alt="{{ product.brand }} {{ product.model }}">
             {% else %}

@@ -12,8 +12,6 @@
     </header>
 
     <section class="site-categories">
-        <a href="/" class="site-category-card {% if not current_category %}active{% endif %}">Все</a>
-
         {% for cat in site_categories %}
         {# map plural category names to the product.category values used for filtering #}
         {% if cat.name_ru == 'Холодильники' %}
