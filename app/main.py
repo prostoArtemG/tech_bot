@@ -158,6 +158,10 @@ class SiteCategoryState(StatesGroup):
     waiting_for_toggle_id = State()
 
 
+class SiteCategoryQuickState(StatesGroup):
+    waiting = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
@@ -370,7 +374,12 @@ site_contacts_kb = ReplyKeyboardMarkup(
 site_categories_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Показать категории сайта")],
-        [KeyboardButton(text="➕ Добавить категорию сайта")],
+
+        [KeyboardButton(text="➕ Холодильники"), KeyboardButton(text="➕ Стиральные машины")],
+        [KeyboardButton(text="➕ Кондиционеры"), KeyboardButton(text="➕ Нагреватели")],
+
+        [KeyboardButton(text="➕ Своя категория")],
+
         [KeyboardButton(text="👁 Вкл/выкл категорию")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -1044,7 +1053,7 @@ async def order_status_back(message: Message, state: FSMContext):
     "🧾 Гарантии", "🔍 Найти гарантию",
     "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
     "🌐 Сайт", "📞 Контакты сайта", "📋 Показать контакты", "📞 Телефон", "💬 Telegram",
-    "📂 Категории сайта", "📋 Показать категории сайта", "➕ Добавить категорию сайта", "👁 Вкл/выкл категорию", "📝 Описание товара",
+    "📂 Категории сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию", "📝 Описание товара",
     "⚙️ Характеристики товара", "🖼 Фото товара", "📷 Instagram", "📍 Адрес", "⏰ График работы", "🌐 Язык сайта",
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
 })
@@ -1159,56 +1168,80 @@ async def show_site_categories(message: Message):
     await message.answer("\n".join(lines), reply_markup=site_categories_kb)
 
 
-@router.message(lambda m: m.text == "➕ Добавить категорию сайта")
-async def add_site_category_start(message: Message, state: FSMContext):
+@router.message(lambda m: m.text == "➕ Холодильники")
+async def add_cat_fridge(message: Message):
+    if await db.get_site_category_by_name("Холодильники"):
+        await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+        return
+
+    await db.add_site_category("Холодильники", "Холодильники", "🧊", 10)
+    await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+
+
+@router.message(lambda m: m.text == "➕ Стиральные машины")
+async def add_cat_wash(message: Message):
+    if await db.get_site_category_by_name("Стиральные машины"):
+        await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+        return
+
+    await db.add_site_category("Стиральные машины", "Пральні машини", "🧺", 20)
+    await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+
+
+@router.message(lambda m: m.text == "➕ Кондиционеры")
+async def add_cat_ac(message: Message):
+    if await db.get_site_category_by_name("Кондиционеры"):
+        await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+        return
+
+    await db.add_site_category("Кондиционеры", "Кондиціонери", "❄️", 30)
+    await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+
+
+@router.message(lambda m: m.text == "➕ Нагреватели")
+async def add_cat_heat(message: Message):
+    if await db.get_site_category_by_name("Нагреватели"):
+        await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+        return
+
+    await db.add_site_category("Нагреватели", "Нагрівачі", "🔥", 40)
+    await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+
+
+@router.message(lambda m: m.text == "➕ Своя категория")
+async def custom_category_start(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
 
-    await state.set_state(SiteCategoryState.waiting_for_name_ru)
-    await message.answer("Введите название категории на русском:")
-
-
-@router.message(SiteCategoryState.waiting_for_name_ru)
-async def add_site_category_name_ru(message: Message, state: FSMContext):
-    await state.update_data(name_ru=(message.text or "").strip())
-    await state.set_state(SiteCategoryState.waiting_for_name_uk)
-    await message.answer("Введите название категории на украинском:")
-
-
-@router.message(SiteCategoryState.waiting_for_name_uk)
-async def add_site_category_name_uk(message: Message, state: FSMContext):
-    await state.update_data(name_uk=(message.text or "").strip())
-    await state.set_state(SiteCategoryState.waiting_for_emoji)
-    await message.answer("Введите emoji категории, например 🧊 или 🧺:")
-
-
-@router.message(SiteCategoryState.waiting_for_emoji)
-async def add_site_category_emoji(message: Message, state: FSMContext):
-    emoji = (message.text or "").strip() or "📦"
-    await state.update_data(emoji=emoji)
-    await state.set_state(SiteCategoryState.waiting_for_sort_order)
-    await message.answer("Введите порядок сортировки числом, например 10:")
-
-
-@router.message(SiteCategoryState.waiting_for_sort_order)
-async def add_site_category_finish(message: Message, state: FSMContext):
-    raw = (message.text or "").strip()
-
-    if not raw.isdigit():
-        await message.answer("Введите число.")
-        return
-
-    data = await state.get_data()
-
-    await db.add_site_category(
-        name_ru=data["name_ru"],
-        name_uk=data["name_uk"],
-        emoji=data["emoji"],
-        sort_order=int(raw)
+    await state.set_state(SiteCategoryQuickState.waiting)
+    await message.answer(
+        "Введите:\nНазвание RU | Назва UA | emoji | порядок\n\nПример:\nБойлеры | Бойлери | 🔥 | 50"
     )
 
+
+@router.message(SiteCategoryQuickState.waiting)
+async def custom_category_save(message: Message, state: FSMContext):
+    try:
+        parts = [p.strip() for p in (message.text or "").split("|")]
+
+        name_ru = parts[0]
+        name_uk = parts[1] if len(parts) > 1 else parts[0]
+        emoji = parts[2] if len(parts) > 2 else "📦"
+        sort_order = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 100
+
+        if await db.get_site_category_by_name(name_ru):
+            await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+            await state.clear()
+            return
+
+        await db.add_site_category(name_ru, name_uk, emoji, sort_order)
+
+        await message.answer("✅ Категория добавлена", reply_markup=site_categories_kb)
+
+    except Exception:
+        await message.answer("Ошибка формата. Пример:\nБойлеры | Бойлери | 🔥 | 50")
+
     await state.clear()
-    await message.answer("✅ Категория сайта добавлена", reply_markup=site_categories_kb)
 
 
 @router.message(lambda m: m.text == "👁 Вкл/выкл категорию")

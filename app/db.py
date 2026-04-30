@@ -901,6 +901,17 @@ class Database:
         )
 
 
+    async def get_site_category_by_name(self, name_ru: str):
+        return await self.fetchrow(
+            """
+            SELECT id
+            FROM site_categories
+            WHERE name_ru = $1
+            """,
+            name_ru
+        )
+
+
     async def toggle_site_category(self, category_id: int):
         await self.execute(
             """
