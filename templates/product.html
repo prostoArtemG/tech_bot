@@ -54,9 +54,24 @@
                     <div class="info">Гарантия: {{ product.warranty_months }} мес</div>
                 </div>
 
-                {% if product.description %}
-                <div class="desc">{{ product.description }}</div>
-                {% endif %}
+                                {% if product.specs %}
+                                <div class="specs-box">
+                                    <h3>Характеристики</h3>
+                                    {% for line in (product.specs or '').split('\n') %}
+                                        {% if ':' in line %}
+                                            {% set parts = line.split(':', 1) %}
+                                            <div class="spec-row">
+                                                <span>{{ parts[0].strip() }}</span>
+                                                <b>{{ parts[1].strip() }}</b>
+                                            </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+
+                                {% if product.description %}
+                                <div class="desc">{{ product.description }}</div>
+                                {% endif %}
 
                 <form class="order-form" method="post" action="/order">
                     <input type="hidden" name="product_id" value="{{ product.id }}">

@@ -453,6 +453,7 @@ def inline_edit_fields_kb():
             [
                 InlineKeyboardButton(text="Фото (URL)", callback_data="edit_field:photo_url"),
                 InlineKeyboardButton(text="Описание", callback_data="edit_field:description"),
+                InlineKeyboardButton(text="Характеристики", callback_data="edit_field:specs"),
             ],
             [
                 InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
@@ -472,6 +473,7 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
         "model": "Модель",
         "photo_url": "Фото",
         "description": "Описание",
+        "specs": "Характеристики",
     }
 
     await state.update_data(field=field, field_title=field_titles[field])

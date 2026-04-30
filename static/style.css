@@ -514,3 +514,35 @@ button:hover {
         height: 64px;
     }
 }
+
+/* Specs box styles */
+.specs-box {
+    margin-top: 18px;
+    padding: 16px;
+    background: #f9fafb;
+    border-radius: 14px;
+}
+
+.specs-box h3 {
+    margin-top: 0;
+}
+
+.spec-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.spec-row:last-child {
+    border-bottom: none;
+}
+
+.spec-row span {
+    color: #6b7280;
+}
+
+.spec-row b {
+    text-align: right;
+}

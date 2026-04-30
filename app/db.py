@@ -111,6 +111,11 @@ class Database:
 
         await self.execute("""
         ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS specs TEXT;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
         ADD COLUMN IF NOT EXISTS availability_status TEXT NOT NULL DEFAULT 'in_stock';
         """)
 
@@ -295,7 +300,7 @@ class Database:
             SELECT
                 id, category, brand, model, price, stock_qty,
                 purchase_price, purchase_currency, sku, warranty_months,
-                photo_url, description
+                photo_url, description, specs
             FROM products
             ORDER BY id DESC
             """
@@ -348,7 +353,7 @@ class Database:
             SELECT
                 id, category, brand, model, price, stock_qty,
                 purchase_price, purchase_currency, sku, warranty_months,
-                photo_url, description
+                photo_url, description, specs
             FROM products
             WHERE id = $1
             """,
@@ -387,6 +392,7 @@ class Database:
             "model",
             "photo_url",
             "description",
+            "specs",
         }
 
         if field not in allowed_fields:
