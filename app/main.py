@@ -1017,6 +1017,9 @@ async def order_status_finish_handler(message: Message, state: FSMContext):
 async def order_status_back(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
+
+
+
 @router.message(StateFilter("*"), lambda m: m.text in {
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
