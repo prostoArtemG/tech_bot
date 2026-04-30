@@ -75,16 +75,12 @@
 
                 <form class="order-form" method="post" action="/order">
                     <input type="hidden" name="product_id" value="{{ product.id }}">
-                    <label class="sr-only">Ваше имя</label>
                     <input type="text" name="name" placeholder="Ваше имя" required>
 
-                    <label class="sr-only">Телефон</label>
                     <input type="tel" name="phone" placeholder="Телефон" required>
 
-                    <label class="sr-only">Город</label>
                     <input type="text" name="city" placeholder="Город">
 
-                    <label class="sr-only">Комментарий</label>
                     <input type="text" name="comment" placeholder="Комментарий">
 
                     <button type="submit" class="order-btn">Заказать</button>
