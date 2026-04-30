@@ -1102,6 +1102,82 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
         await message.answer("Раздел сайта:", reply_markup=site_kb)
         return
     
+    if text == "📋 Показать категории сайта":
+        if not await require_admin(message):
+            return
+
+        rows = await db.list_site_categories()
+
+        if not rows:
+            await message.answer("Категорий сайта пока нет.", reply_markup=site_categories_kb)
+            return
+
+        lines = ["📂 Категории сайта:\n"]
+
+        for row in rows:
+            status = "✅" if row["is_active"] else "🚫"
+            lines.append(
+                f"{status} ID: {row['id']}\n"
+                f"{row['emoji']} RU: {row['name_ru']}\n"
+                f"{row['emoji']} UA: {row['name_uk']}\n"
+                f"Порядок: {row['sort_order']}\n"
+            )
+
+        await message.answer("\n".join(lines), reply_markup=site_categories_kb)
+        return
+
+    if text == "➕ Холодильники":
+        if await db.get_site_category_by_name("Холодильники"):
+            await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+            return
+
+        await db.add_site_category("Холодильники", "Холодильники", "🧊", 10)
+        await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+        return
+
+    if text == "➕ Стиральные машины":
+        if await db.get_site_category_by_name("Стиральные машины"):
+            await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+            return
+
+        await db.add_site_category("Стиральные машины", "Пральні машини", "🧺", 20)
+        await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+        return
+
+    if text == "➕ Кондиционеры":
+        if await db.get_site_category_by_name("Кондиционеры"):
+            await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+            return
+
+        await db.add_site_category("Кондиционеры", "Кондиціонери", "❄️", 30)
+        await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+        return
+
+    if text == "➕ Нагреватели":
+        if await db.get_site_category_by_name("Нагреватели"):
+            await message.answer("Категория уже существует", reply_markup=site_categories_kb)
+            return
+
+        await db.add_site_category("Нагреватели", "Нагрівачі", "🔥", 40)
+        await message.answer("✅ Добавлено", reply_markup=site_categories_kb)
+        return
+
+    if text == "➕ Своя категория":
+        if not await require_admin(message):
+            return
+        await state.set_state(SiteCategoryQuickState.waiting)
+        await message.answer(
+            "Введите:\nНазвание RU | Назва UA | emoji | порядок\n\nПример:\nБойлеры | Бойлери | 🔥 | 50"
+        )
+        return
+
+    if text == "👁 Вкл/выкл категорию":
+        if not await require_admin(message):
+            return
+        await state.set_state(SiteCategoryState.waiting_for_toggle_id)
+        await message.answer("Введите ID категории:")
+        return
+
     if text == "📂 Категории сайта":
         if not await require_admin(message):
             return
