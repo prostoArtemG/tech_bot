@@ -58,12 +58,18 @@
                                 <div class="specs-box">
                                     <h3>Характеристики</h3>
                                     {% for line in (product.specs or '').split('\n') %}
-                                        {% if ':' in line %}
-                                            {% set parts = line.split(':', 1) %}
-                                            <div class="spec-row">
-                                                <span>{{ parts[0].strip() }}</span>
-                                                <b>{{ parts[1].strip() }}</b>
-                                            </div>
+                                        {% if line.strip() %}
+                                            {% if ':' in line %}
+                                                {% set parts = line.split(':', 1) %}
+                                                <div class="spec-row">
+                                                    <span>{{ parts[0].strip() }}</span>
+                                                    <b>{{ parts[1].strip() }}</b>
+                                                </div>
+                                            {% else %}
+                                                <div class="spec-row">
+                                                    <span>{{ line.strip() }}</span>
+                                                </div>
+                                            {% endif %}
                                         {% endif %}
                                     {% endfor %}
                                 </div>

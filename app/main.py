@@ -481,6 +481,10 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
 
     if field == "purchase_currency":
         await callback.message.answer("Выберите валюту: UAH / USD / EUR")
+    elif field == "specs":
+        await callback.message.answer(
+            "Введите характеристики в формате:\nОбъём: 80 л\nТип: сушильная машина\nЗагрузка: 8 кг"
+        )
     else:
         await callback.message.answer(f"Введите новое значение для поля: {field_titles[field]}")
 
