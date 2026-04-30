@@ -12,63 +12,65 @@
 </header>
 
 <main class="product-page">
+    <div class="product-grid">
 
-    <a href="/" class="back-link">← Назад в каталог</a>
+        <div class="product-image">
+            <a href="/" class="back-link">← Назад в каталог</a>
 
-    <div class="product-left">
-        {% if product.photo_url %}
-        <img src="{{ product.photo_url }}" class="product-big-img">
-        {% else %}
-        <div class="no-photo">Нет фото</div>
-        {% endif %}
-    </div>
-
-    <aside class="product-right">
-        <div class="product-card">
-            <div class="product-meta">
-                <div class="category">{{ product.category }}</div>
-                <div class="status">
-                    {% if product.stock_qty > 0 %}
-                        В наличии
-                    {% else %}
-                        Под заказ
-                    {% endif %}
-                </div>
-            </div>
-
-            <h1 class="product-title">{{ product.brand }} {{ product.model }}</h1>
-
-            <div class="price">{{ product.price }} грн</div>
-
-            <div class="product-info">
-                <div class="info">Остаток: {{ product.stock_qty }}</div>
-                <div class="info">Гарантия: {{ product.warranty_months }} мес</div>
-            </div>
-
-            {% if product.description %}
-            <div class="desc">{{ product.description }}</div>
+            {% if product.photo_url %}
+            <img src="{{ product.photo_url }}" class="product-big-img" alt="{{ product.brand }} {{ product.model }}">
+            {% else %}
+            <div class="no-photo">Нет фото</div>
             {% endif %}
-
-            <form class="order-form" method="post" action="/order">
-                <input type="hidden" name="product_id" value="{{ product.id }}">
-                <label class="sr-only">Ваше имя</label>
-                <input type="text" name="name" placeholder="Ваше имя" required>
-
-                <label class="sr-only">Телефон</label>
-                <input type="tel" name="phone" placeholder="Телефон" required>
-
-                <label class="sr-only">Город</label>
-                <input type="text" name="city" placeholder="Город">
-
-                <label class="sr-only">Комментарий</label>
-                <input type="text" name="comment" placeholder="Комментарий">
-
-                <button type="submit" class="order-btn">Заказать</button>
-            </form>
-
         </div>
-    </aside>
 
+        <div class="product-info">
+            <div class="product-card">
+                <div class="product-meta">
+                    <div class="category">{{ product.category }}</div>
+                    <div class="status">
+                        {% if product.stock_qty > 0 %}
+                            В наличии
+                        {% else %}
+                            Под заказ
+                        {% endif %}
+                    </div>
+                </div>
+
+                <h1 class="product-title">{{ product.brand }} {{ product.model }}</h1>
+
+                <div class="price">{{ product.price }} грн</div>
+
+                <div class="product-info-meta">
+                    <div class="info">Остаток: {{ product.stock_qty }}</div>
+                    <div class="info">Гарантия: {{ product.warranty_months }} мес</div>
+                </div>
+
+                {% if product.description %}
+                <div class="desc">{{ product.description }}</div>
+                {% endif %}
+
+                <form class="order-form" method="post" action="/order">
+                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                    <label class="sr-only">Ваше имя</label>
+                    <input type="text" name="name" placeholder="Ваше имя" required>
+
+                    <label class="sr-only">Телефон</label>
+                    <input type="tel" name="phone" placeholder="Телефон" required>
+
+                    <label class="sr-only">Город</label>
+                    <input type="text" name="city" placeholder="Город">
+
+                    <label class="sr-only">Комментарий</label>
+                    <input type="text" name="comment" placeholder="Комментарий">
+
+                    <button type="submit" class="order-btn">Заказать</button>
+                </form>
+
+            </div>
+        </div>
+
+    </div>
 </main>
 
 </body>
