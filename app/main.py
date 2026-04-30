@@ -162,6 +162,10 @@ class SiteCategoryQuickState(StatesGroup):
     waiting = State()
 
 
+class SiteProductPreviewState(StatesGroup):
+    waiting_for_query = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
@@ -348,10 +352,9 @@ lang_kb = ReplyKeyboardMarkup(
 site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакты сайта")],
+        [KeyboardButton(text="👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
-        [KeyboardButton(text="📝 Описание товара")],
-        [KeyboardButton(text="⚙️ Характеристики товара")],
-        [KeyboardButton(text="🖼 Фото товара")],
+        [KeyboardButton(text="✏️ Редактировать товар")],
         [KeyboardButton(text="🌐 Язык сайта")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -1438,6 +1441,40 @@ async def site_description_handler(message: Message, state: FSMContext):
 @router.message(lambda m: m.text == "⚙️ Характеристики товара")
 async def site_specs_handler(message: Message, state: FSMContext):
     await message.answer("Здесь будут характеристики товара.")
+
+
+@router.message(lambda m: m.text == "👀 Просмотр товара на сайте")
+async def site_product_preview_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.clear()
+    await state.set_state(SiteProductPreviewState.waiting_for_query)
+    await message.answer("Введите бренд, модель или категорию товара:")
+
+
+@router.message(SiteProductPreviewState.waiting_for_query)
+async def site_product_preview_search(message: Message, state: FSMContext):
+    query = (message.text or "").strip()
+    rows = await db.search_products(query)
+
+    if not rows:
+        await message.answer("Ничего не найдено. Попробуйте ещё:")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{row['brand'] or '-'} {row['model'] or '-'} | {float(row['price'] or 0):.0f} грн",
+                    callback_data=f"site_preview_product:{row['id']}"
+                )
+            ]
+            for row in rows[:10]
+        ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
+    )
+
+    await message.answer("Выберите товар:", reply_markup=keyboard)
 
 
 @router.message(lambda m: m.text == "🖼 Фото товара")
@@ -2889,7 +2926,8 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "💱 Курсы валют", "USD", "EUR",
     "Цена продажи", "Закупка", "Валюта закупки", "Артикул", "Гарантия", "Модель",
     "admin", "seller", "❌ Сброс",
-    "📂 Категории сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию",
+    "📂 Категории сайта", "📞 Контакты сайта", "🌐 Язык сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию",
+    "👀 Просмотр товара на сайте",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -3019,6 +3057,39 @@ async def order_to_sale_handler(callback: CallbackQuery):
         f"✅ Заказ #{order_id} оформлен как продажа\n"
         f"{order.get('brand') or ''} {order.get('model') or ''}\n"
         f"Кол-во: {qty}"
+    )
+
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("site_preview_product:"))
+async def site_product_preview_callback(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split(":")[1])
+
+    product = await db.get_product_by_id(product_id)
+    if not product:
+        await callback.message.answer("Товар не найден.")
+        await callback.answer()
+        return
+
+    await state.clear()
+
+    base_url = os.getenv("PUBLIC_SITE_URL", "").rstrip("/")
+    if not base_url:
+        base_url = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").rstrip("/")
+        if base_url and not base_url.startswith("http"):
+            base_url = "https://" + base_url
+
+    if not base_url:
+        base_url = "https://techbot-production-11c5.up.railway.app"
+
+    url = f"{base_url}/product/{product_id}"
+
+    await callback.message.answer(
+        f"👀 Карточка товара на сайте:\n\n"
+        f"{product['brand'] or '-'} {product['model'] or '-'}\n"
+        f"{url}",
+        reply_markup=site_kb
     )
 
     await callback.answer()
