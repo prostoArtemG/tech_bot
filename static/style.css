@@ -218,3 +218,38 @@ button:hover {
 .details-btn:hover {
     background: #374151;
 }
+
+
+.site-categories {
+    max-width: 1100px;
+    margin: 25px auto;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+}
+
+.site-category-card {
+    background: white;
+    border-radius: 18px;
+    padding: 20px;
+    text-align: center;
+    text-decoration: none;
+    color: #111827;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+    transition: 0.2s;
+}
+
+.site-category-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.12);
+}
+
+.site-category-emoji {
+    font-size: 34px;
+    margin-bottom: 8px;
+}
+
+.site-category-title {
+    font-weight: bold;
+}

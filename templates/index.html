@@ -18,6 +18,15 @@
         </form>
     </section>
 
+    <section class="site-categories">
+        {% for cat in site_categories %}
+        <a href="/?category={{ cat.name_ru }}" class="site-category-card">
+            <div class="site-category-emoji">{{ cat.emoji }}</div>
+            <div class="site-category-title">{{ cat.name_ru }}</div>
+        </a>
+        {% endfor %}
+    </section>
+
     <div class="categories">
         <a href="/" class="{% if not current_category %}active{% endif %}">Все</a>
 

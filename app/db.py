@@ -890,6 +890,17 @@ class Database:
         )
 
 
+    async def list_active_site_categories(self):
+        return await self.fetch(
+            """
+            SELECT id, name_ru, name_uk, emoji, sort_order
+            FROM site_categories
+            WHERE is_active = TRUE
+            ORDER BY sort_order ASC, id ASC
+            """
+        )
+
+
     async def toggle_site_category(self, category_id: int):
         await self.execute(
             """

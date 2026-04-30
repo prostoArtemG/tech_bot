@@ -2969,6 +2969,7 @@ async def site_home(request: Request, q: str = "", category: str = ""):
         products = [p for p in products if (p["category"] or "") == category]
 
     categories = await db.get_categories()
+    site_categories = await db.list_active_site_categories()
 
     return templates.TemplateResponse(
         request=request,
@@ -2976,6 +2977,7 @@ async def site_home(request: Request, q: str = "", category: str = ""):
         context={
             "products": products,
             "categories": categories,
+            "site_categories": site_categories,
             "q": q,
             "current_category": category,
         }
