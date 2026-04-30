@@ -155,6 +155,37 @@ button:hover {
     max-height: 720px;
 }
 
+/* Product gallery styles */
+.product-gallery {
+    display: flex;
+    flex-direction: column;
+}
+
+.main-image {
+    width: 100%;
+    border-radius: 16px;
+    margin-bottom: 10px;
+}
+
+.thumbs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.thumb {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.thumb:hover {
+    opacity: 1;
+}
+
 .product-info {
     display: block;
 }

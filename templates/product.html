@@ -17,11 +17,19 @@
     <div class="product-grid">
 
         <div class="product-image">
-            {% if product.photo_url %}
-            <img src="{{ product.photo_url }}" class="product-big-img" alt="{{ product.brand }} {{ product.model }}">
-            {% else %}
-            <div class="no-photo">Нет фото</div>
-            {% endif %}
+            <div class="product-gallery">
+                <img id="mainImage" src="{% if images and images|length > 0 %}{{ images[0].image_url }}{% else %}{{ product.photo_url }}{% endif %}" class="main-image" alt="{{ product.brand }} {{ product.model }}">
+
+                <div class="thumbs">
+                    {% if images and images|length > 0 %}
+                        {% for img in images %}
+                            <img src="{{ img.image_url }}" onclick="changeImage('{{ img.image_url }}')" class="thumb">
+                        {% endfor %}
+                    {% elif product.photo_url %}
+                        <img src="{{ product.photo_url }}" class="thumb" onclick="changeImage('{{ product.photo_url }}')">
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
         <div class="product-info">
@@ -72,6 +80,14 @@
 
     </div>
 </main>
+</main>
+
+<script>
+function changeImage(url) {
+    var el = document.getElementById('mainImage');
+    if (el) el.src = url;
+}
+</script>
 
 </body>
 </html>

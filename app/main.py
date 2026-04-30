@@ -3133,11 +3133,14 @@ async def product_page(request: Request, product_id: int):
     if not product:
         return HTMLResponse("Товар не найден", status_code=404)
 
+    images = await db.get_product_images(product_id)
+
     return templates.TemplateResponse(
         request=request,
         name="product.html",
         context={
-            "product": product
+            "product": product,
+            "images": images,
         }
     )
 

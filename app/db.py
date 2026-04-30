@@ -248,6 +248,15 @@ class Database:
         );
         """)
 
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS product_images (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 100
+        );
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -342,6 +351,17 @@ class Database:
                 photo_url, description
             FROM products
             WHERE id = $1
+            """,
+            product_id
+        )
+
+    async def get_product_images(self, product_id: int):
+        return await self.fetch(
+            """
+            SELECT image_url
+            FROM product_images
+            WHERE product_id = $1
+            ORDER BY sort_order ASC, id ASC
             """,
             product_id
         )
