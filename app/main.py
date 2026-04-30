@@ -1101,6 +1101,13 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("Раздел сайта:", reply_markup=site_kb)
         return
+    
+    if text == "📂 Категории сайта":
+        if not await require_admin(message):
+            return
+        await state.clear()
+        await message.answer("Категории сайта:", reply_markup=site_categories_kb)
+        return
 
 @router.message(lambda m: m.text in {"📦 Товары", "📦 Товари"})
 async def products_menu_handler(message: Message, state: FSMContext):
@@ -2800,6 +2807,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "💱 Курсы валют", "USD", "EUR",
     "Цена продажи", "Закупка", "Валюта закупки", "Артикул", "Гарантия", "Модель",
     "admin", "seller", "❌ Сброс",
+    "📂 Категории сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
