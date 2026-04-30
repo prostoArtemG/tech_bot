@@ -150,6 +150,14 @@ class SiteContactsState(StatesGroup):
     schedule = State()
 
 
+class SiteCategoryState(StatesGroup):
+    waiting_for_name_ru = State()
+    waiting_for_name_uk = State()
+    waiting_for_emoji = State()
+    waiting_for_sort_order = State()
+    waiting_for_toggle_id = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
@@ -353,6 +361,17 @@ site_contacts_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📞 Телефон"), KeyboardButton(text="💬 Telegram")],
         [KeyboardButton(text="📷 Instagram"), KeyboardButton(text="📍 Адрес")],
         [KeyboardButton(text="⏰ График работы")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+site_categories_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Показать категории сайта")],
+        [KeyboardButton(text="➕ Добавить категорию сайта")],
+        [KeyboardButton(text="👁 Вкл/выкл категорию")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1025,7 +1044,7 @@ async def order_status_back(message: Message, state: FSMContext):
     "🧾 Гарантии", "🔍 Найти гарантию",
     "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
     "🌐 Сайт", "📞 Контакты сайта", "📋 Показать контакты", "📞 Телефон", "💬 Telegram",
-    "📂 Категории сайта", "📝 Описание товара",
+    "📂 Категории сайта", "📋 Показать категории сайта", "➕ Добавить категорию сайта", "👁 Вкл/выкл категорию", "📝 Описание товара",
     "⚙️ Характеристики товара", "🖼 Фото товара", "📷 Instagram", "📍 Адрес", "⏰ График работы", "🌐 Язык сайта",
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
 })
@@ -1115,6 +1134,106 @@ async def show_contacts(message: Message):
     )
 
 
+@router.message(lambda m: m.text == "📋 Показать категории сайта")
+async def show_site_categories(message: Message):
+    if not await require_admin(message):
+        return
+
+    rows = await db.list_site_categories()
+
+    if not rows:
+        await message.answer("Категорий сайта пока нет.", reply_markup=site_categories_kb)
+        return
+
+    lines = ["📂 Категории сайта:\n"]
+
+    for row in rows:
+        status = "✅" if row["is_active"] else "🚫"
+        lines.append(
+            f"{status} ID: {row['id']}\n"
+            f"{row['emoji']} RU: {row['name_ru']}\n"
+            f"{row['emoji']} UA: {row['name_uk']}\n"
+            f"Порядок: {row['sort_order']}\n"
+        )
+
+    await message.answer("\n".join(lines), reply_markup=site_categories_kb)
+
+
+@router.message(lambda m: m.text == "➕ Добавить категорию сайта")
+async def add_site_category_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.set_state(SiteCategoryState.waiting_for_name_ru)
+    await message.answer("Введите название категории на русском:")
+
+
+@router.message(SiteCategoryState.waiting_for_name_ru)
+async def add_site_category_name_ru(message: Message, state: FSMContext):
+    await state.update_data(name_ru=(message.text or "").strip())
+    await state.set_state(SiteCategoryState.waiting_for_name_uk)
+    await message.answer("Введите название категории на украинском:")
+
+
+@router.message(SiteCategoryState.waiting_for_name_uk)
+async def add_site_category_name_uk(message: Message, state: FSMContext):
+    await state.update_data(name_uk=(message.text or "").strip())
+    await state.set_state(SiteCategoryState.waiting_for_emoji)
+    await message.answer("Введите emoji категории, например 🧊 или 🧺:")
+
+
+@router.message(SiteCategoryState.waiting_for_emoji)
+async def add_site_category_emoji(message: Message, state: FSMContext):
+    emoji = (message.text or "").strip() or "📦"
+    await state.update_data(emoji=emoji)
+    await state.set_state(SiteCategoryState.waiting_for_sort_order)
+    await message.answer("Введите порядок сортировки числом, например 10:")
+
+
+@router.message(SiteCategoryState.waiting_for_sort_order)
+async def add_site_category_finish(message: Message, state: FSMContext):
+    raw = (message.text or "").strip()
+
+    if not raw.isdigit():
+        await message.answer("Введите число.")
+        return
+
+    data = await state.get_data()
+
+    await db.add_site_category(
+        name_ru=data["name_ru"],
+        name_uk=data["name_uk"],
+        emoji=data["emoji"],
+        sort_order=int(raw)
+    )
+
+    await state.clear()
+    await message.answer("✅ Категория сайта добавлена", reply_markup=site_categories_kb)
+
+
+@router.message(lambda m: m.text == "👁 Вкл/выкл категорию")
+async def toggle_site_category_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.set_state(SiteCategoryState.waiting_for_toggle_id)
+    await message.answer("Введите ID категории:")
+
+
+@router.message(SiteCategoryState.waiting_for_toggle_id)
+async def toggle_site_category_finish(message: Message, state: FSMContext):
+    raw = (message.text or "").strip()
+
+    if not raw.isdigit():
+        await message.answer("ID должен быть числом.")
+        return
+
+    await db.toggle_site_category(int(raw))
+
+    await state.clear()
+    await message.answer("✅ Статус категории изменён", reply_markup=site_categories_kb)
+
+
 @router.message(lambda m: m.text == "📞 Телефон")
 async def set_phone(message: Message, state: FSMContext):
     await message.answer("Введите телефон:")
@@ -1182,7 +1301,11 @@ async def save_schedule(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "📂 Категории сайта")
 async def site_categories_handler(message: Message, state: FSMContext):
-    await message.answer("Здесь будут настройки категорий сайта.")
+    if not await require_admin(message):
+        return
+
+    await state.clear()
+    await message.answer("Категории сайта:", reply_markup=site_categories_kb)
 
 
 @router.message(lambda m: m.text == "📝 Описание товара")

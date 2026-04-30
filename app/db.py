@@ -236,6 +236,18 @@ class Database:
         );
         """)
 
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS site_categories (
+            id SERIAL PRIMARY KEY,
+            name_ru TEXT NOT NULL,
+            name_uk TEXT NOT NULL,
+            emoji TEXT DEFAULT '📦',
+            sort_order INTEGER DEFAULT 100,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -855,6 +867,37 @@ class Database:
             WHERE o.id = $1
             """,
             order_id
+        )
+
+
+    async def add_site_category(self, name_ru: str, name_uk: str, emoji: str = "📦", sort_order: int = 100):
+        await self.execute(
+            """
+            INSERT INTO site_categories (name_ru, name_uk, emoji, sort_order)
+            VALUES ($1, $2, $3, $4)
+            """,
+            name_ru, name_uk, emoji, sort_order
+        )
+
+
+    async def list_site_categories(self):
+        return await self.fetch(
+            """
+            SELECT id, name_ru, name_uk, emoji, sort_order, is_active
+            FROM site_categories
+            ORDER BY sort_order ASC, id ASC
+            """
+        )
+
+
+    async def toggle_site_category(self, category_id: int):
+        await self.execute(
+            """
+            UPDATE site_categories
+            SET is_active = NOT is_active
+            WHERE id = $1
+            """,
+            category_id
         )
 
 
