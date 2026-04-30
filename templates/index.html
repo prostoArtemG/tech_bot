@@ -11,13 +11,6 @@
         <p>Бытовая техника под заказ и в наличии</p>
     </header>
 
-    <section class="search-box">
-        <form method="get" action="/">
-            <input type="text" name="q" placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
-            <button type="submit">Найти</button>
-        </form>
-    </section>
-
     <section class="site-categories">
         {% for cat in site_categories %}
         <a href="/?category={{ cat.name_ru }}" class="site-category-card">
@@ -25,6 +18,13 @@
             <div class="site-category-title">{{ cat.name_ru }}</div>
         </a>
         {% endfor %}
+    </section>
+
+    <section class="search-box">
+        <form method="get" action="/">
+            <input type="text" name="q" placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
+            <button type="submit">Найти</button>
+        </form>
     </section>
 
     <div class="categories">
