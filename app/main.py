@@ -3419,6 +3419,9 @@ async def cart_page(request: Request):
     }
     site_title = await db.get_setting("site_title") or "Tech Store"
     site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
 
     return templates.TemplateResponse(
         request=request,
