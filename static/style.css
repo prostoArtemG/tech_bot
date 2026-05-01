@@ -1062,3 +1062,51 @@ header {
         min-width: 90px !important;
     }
 }
+
+/* Strong site-header override: constrain header actions and pill sizes */
+.site-header .header-actions {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 8px !important;
+    width: auto !important;
+    max-width: 220px !important;
+}
+
+.site-header .header-pill,
+.site-header .cart-pill {
+    width: auto !important;
+    min-width: 90px !important;
+    max-width: 220px !important;
+    height: 40px !important;
+    padding: 0 14px !important;
+    border-radius: 999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+}
+
+.site-header .cart-pill {
+    flex: 0 0 auto !important;
+    background: rgba(255,255,255,0.14) !important;
+}
+
+.site-header .cart-pill span {
+    margin-left: 6px !important;
+}
+
+@media (max-width: 768px) {
+    .site-header .header-actions {
+        position: static !important;
+        max-width: 100% !important;
+        flex-direction: row !important;
+        justify-content: center !important;
+        align-items: center !important;
+        margin-top: 14px !important;
+    }
+}
