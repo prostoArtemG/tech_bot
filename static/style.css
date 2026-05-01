@@ -580,3 +580,35 @@ button:hover {
         height: 72px;
     }
 }
+
+/* Horizontal thumbs-row and thumb-img (placed at file end to override previous rules) */
+.thumbs-row {
+        width: 100%;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 12px !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding: 12px 4px !important;
+        align-items: center !important;
+}
+
+.thumb-img {
+        flex: 0 0 86px !important;
+        width: 86px !important;
+        height: 86px !important;
+        object-fit: cover !important;
+        border-radius: 12px !important;
+        cursor: pointer !important;
+        background: #f9fafb !important;
+        padding: 4px !important;
+}
+
+@media (max-width: 768px) {
+        .thumb-img {
+                flex-basis: 72px !important;
+                width: 72px !important;
+                height: 72px !important;
+        }
+}
