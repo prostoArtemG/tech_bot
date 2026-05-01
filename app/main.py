@@ -143,11 +143,7 @@ class OrderStatusState(StatesGroup):
 
 
 class SiteContactsState(StatesGroup):
-    phone = State()
-    tg = State()
-    instagram = State()
-    address = State()
-    schedule = State()
+    waiting_for_field = State()
 
 
 class SiteCategoryState(StatesGroup):
@@ -1022,6 +1018,44 @@ async def order_status_id_handler(message: Message, state: FSMContext):
         await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
         return
 
+
+    @router.message(lambda m: m.text in {"📞 Телефон", "💬 Telegram", "📷 Instagram", "📍 Адрес", "⏰ График работы"})
+    async def site_contact_field_start(message: Message, state: FSMContext):
+        field_map = {
+            "📞 Телефон": ("site_phone", "Введите телефон сайта:"),
+            "💬 Telegram": ("site_tg", "Введите Telegram сайта:"),
+            "📷 Instagram": ("site_instagram", "Введите Instagram сайта:"),
+            "📍 Адрес": ("site_address", "Введите адрес сайта:"),
+            "⏰ График работы": ("site_schedule", "Введите график работы:"),
+        }
+
+        key, prompt = field_map.get(message.text, (None, None))
+        if not key:
+            await message.answer("Неизвестное поле", reply_markup=site_contacts_kb)
+            return
+
+        await state.update_data(setting_key=key)
+        await state.set_state(SiteContactsState.waiting_for_field)
+        await message.answer(prompt)
+
+
+    @router.message(SiteContactsState.waiting_for_field)
+    async def site_contact_field_save(message: Message, state: FSMContext):
+        data = await state.get_data()
+        key = data.get("setting_key")
+
+        if not key:
+            await state.clear()
+            await message.answer("Ошибка состояния.", reply_markup=site_contacts_kb)
+            return
+
+        value = (message.text or "").strip()
+        await db.set_setting(key, value)
+
+        await state.clear()
+        await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
+
+
     if not raw_id.isdigit():
         await message.answer(await t(message, "order_id_must_be_number"))
         return
@@ -1398,56 +1432,7 @@ async def save_phone(message: Message, state: FSMContext):
     await message.answer("✅ Телефон сайта сохранён", reply_markup=site_contacts_kb)
 
 
-@router.message(lambda m: m.text == "💬 Telegram")
-async def set_tg(message: Message, state: FSMContext):
-    await message.answer("Введите Telegram (username или ссылка):")
-    await state.set_state(SiteContactsState.tg)
 
-
-@router.message(SiteContactsState.tg)
-async def save_tg(message: Message, state: FSMContext):
-    await db.set_setting("site_tg", message.text or "")
-    await state.clear()
-    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
-
-
-@router.message(lambda m: m.text == "📷 Instagram")
-async def set_insta(message: Message, state: FSMContext):
-    await message.answer("Введите Instagram (username или ссылка):")
-    await state.set_state(SiteContactsState.instagram)
-
-
-@router.message(SiteContactsState.instagram)
-async def save_insta(message: Message, state: FSMContext):
-    await db.set_setting("site_instagram", message.text or "")
-    await state.clear()
-    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
-
-
-@router.message(lambda m: m.text == "📍 Адрес")
-async def set_address(message: Message, state: FSMContext):
-    await message.answer("Введите адрес:")
-    await state.set_state(SiteContactsState.address)
-
-
-@router.message(SiteContactsState.address)
-async def save_address(message: Message, state: FSMContext):
-    await db.set_setting("site_address", message.text or "")
-    await state.clear()
-    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
-
-
-@router.message(lambda m: m.text == "⏰ График работы")
-async def set_schedule(message: Message, state: FSMContext):
-    await message.answer("Введите график работы (напр. Пн-Пт 9:00-18:00):")
-    await state.set_state(SiteContactsState.schedule)
-
-
-@router.message(SiteContactsState.schedule)
-async def save_schedule(message: Message, state: FSMContext):
-    await db.set_setting("site_schedule", message.text or "")
-    await state.clear()
-    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
 
 
 @router.message(lambda m: m.text == "📂 Категории сайта")
