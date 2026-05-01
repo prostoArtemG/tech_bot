@@ -46,6 +46,36 @@ header h1 {
     font-size: 36px;
 }
 
+
+/* Strong override to prevent header items overlap (desktop: actions right; mobile: centered) */
+.header-actions {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    max-width: 260px !important;
+    justify-content: flex-end !important;
+}
+
+.cart-pill {
+    flex-basis: 100% !important;
+    text-align: center !important;
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        position: static !important;
+        max-width: 100% !important;
+        justify-content: center !important;
+        margin-top: 14px !important;
+    }
+
+    .cart-pill {
+        flex-basis: auto !important;
+    }
+}
 header p {
     margin-top: 10px;
     color: #d1d5db;
@@ -894,4 +924,34 @@ header {
 .site-footer p {
     margin: 6px 0;
     color: #d1d5db;
+}
+
+/* Final override (placed at EOF) to ensure header actions and cart-pill behave as requested */
+.header-actions {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    max-width: 260px !important;
+    justify-content: flex-end !important;
+}
+
+.cart-pill {
+    flex-basis: 100% !important;
+    text-align: center !important;
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        position: static !important;
+        max-width: 100% !important;
+        justify-content: center !important;
+        margin-top: 14px !important;
+    }
+
+    .cart-pill {
+        flex-basis: auto !important;
+    }
 }
