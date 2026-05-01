@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 import re
 
@@ -3294,7 +3295,7 @@ async def create_site_order(data: SiteOrderRequest):
 
 
 @web_app.get("/", response_class=HTMLResponse)
-async def site_home(request: Request, q: str = "", category: str = ""):
+async def site_home(request: Request, q: str = "", category: str = "", page: int = 1):
     q = (q or "").strip()
     category = (category or "").strip()
 
@@ -3305,6 +3306,13 @@ async def site_home(request: Request, q: str = "", category: str = ""):
 
     if category:
         products = [p for p in products if (p["category"] or "") == category]
+
+    per_page = 12
+    total = len(products)
+    pages = math.ceil(total / per_page) if total else 1
+    page = max(1, min(page, pages))
+    start = (page - 1) * per_page
+    products_page = products[start:start + per_page]
 
     categories = await db.get_categories()
     site_categories = await db.list_active_site_categories()
@@ -3333,11 +3341,13 @@ async def site_home(request: Request, q: str = "", category: str = ""):
         request=request,
         name="index.html",
         context={
-            "products": products,
+            "products": products_page,
             "categories": categories,
             "site_categories": site_categories,
             "q": q,
             "current_category": category,
+            "page": page,
+            "pages": pages,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,

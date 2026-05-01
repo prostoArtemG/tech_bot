@@ -766,3 +766,68 @@ button:hover {
     margin: 6px 0;
     color: #d1d5db;
 }
+
+/* ============================================================
+   PAGINATION
+   ============================================================ */
+.pagination {
+    max-width: 1100px;
+    margin: 30px auto;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 0 20px;
+}
+
+.pagination a {
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    color: #111827;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.pagination a.active {
+    background: #111827;
+    color: white;
+}
+
+.pagination a:hover:not(.active) {
+    background: #d1d5db;
+}
+
+/* ============================================================
+   MOBILE CATALOG GRID — 2 columns
+   ============================================================ */
+@media (max-width: 768px) {
+    .products {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 12px !important;
+        padding: 16px !important;
+    }
+
+    .card {
+        padding: 12px !important;
+    }
+
+    .product-img,
+    .no-photo {
+        height: 140px !important;
+    }
+
+    .card h2 {
+        font-size: 16px !important;
+    }
+
+    .price {
+        font-size: 18px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .products {
+        grid-template-columns: 1fr !important;
+    }
+}

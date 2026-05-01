@@ -104,9 +104,25 @@
         </div>
         {% endfor %}
     </main>
+
+    {% if pages > 1 %}
+    <div class="pagination">
+      {% if page > 1 %}
+      <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">← Назад</a>
+      {% endif %}
+
+      {% for p in range(1, pages + 1) %}
+      <a class="{% if p == page %}active{% endif %}" href="/?page={{ p }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">{{ p }}</a>
+      {% endfor %}
+
+      {% if page < pages %}
+      <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">Вперёд →</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
 </body>
 <script src="/static/cart.js"></script>
-</html>
 </html>
 
 <footer class="site-footer">
