@@ -955,3 +955,41 @@ header {
         flex-basis: auto !important;
     }
 }
+
+/* User-requested: make header-actions a vertical column on desktop, row on mobile */
+.header-actions {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 8px !important;
+    max-width: 260px !important;
+}
+
+.header-pill,
+.cart-pill {
+    display: inline-flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: auto !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+}
+
+.cart-pill {
+    flex-basis: auto !important;
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        position: static !important;
+        flex-direction: row !important;
+        justify-content: center !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        max-width: 100% !important;
+        margin-top: 14px !important;
+    }
+}
