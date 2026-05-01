@@ -371,6 +371,16 @@ class Database:
             product_id
         )
 
+    async def add_product_image(self, product_id: int, image_url: str):
+        await self.execute(
+            """
+            INSERT INTO product_images (product_id, image_url, sort_order)
+            VALUES ($1, $2, 100)
+            """,
+            product_id,
+            image_url
+        )
+
     async def update_stock_qty(self, product_id: int, stock_qty: int):
         await self.execute(
             """

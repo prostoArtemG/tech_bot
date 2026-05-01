@@ -2850,6 +2850,18 @@ async def edit_product_id_handler(message: Message, state: FSMContext):
 
 @router.message(EditProductState.waiting_for_value)
 async def edit_product_value_handler(message: Message, state: FSMContext):
+    # allow cancelling photo upload flow
+    if (message.text or "").strip() == "⬅️ Назад":
+        await state.clear()
+        await message.answer(await t(message, "products_section"), reply_markup=products_kb)
+        return
+
+    # finish photo upload flow explicitly
+    if (message.text or "").strip() == "✅ Готово с фото":
+        await state.clear()
+        await message.answer("Готово. Возвращаюсь в меню товаров.", reply_markup=products_kb)
+        return
+
     if message.photo:
         data = await state.get_data()
         field = data.get("field")
@@ -2863,13 +2875,14 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
 
         product_id = data.get("product_id")
 
+        # Update main photo_url (keep backward compatibility)
         await db.update_product_field(product_id, "photo_url", photo_url)
 
-        await state.clear()
-        await message.answer(
-            await t(message, "photo_saved"),
-            reply_markup=products_kb
-        )
+        # Add to product_images for gallery
+        await db.add_product_image(product_id, photo_url)
+
+        # Do not clear state — allow sending multiple photos
+        await message.answer("✅ Фото сохранено. Можно отправить ещё или нажмите ⬅️ Назад.", reply_markup=products_kb)
         return
 
     value = (message.text or "").strip()
