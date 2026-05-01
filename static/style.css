@@ -343,6 +343,44 @@ button:hover {
     }
 }
 
+/* Hard override for site header layout */
+.site-header .header-inner {
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    align-items: start !important;
+    gap: 16px !important;
+}
+
+.site-header .header-title {
+    text-align: center !important;
+}
+
+.site-header .header-actions {
+    position: static !important;
+    justify-self: end !important;
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: wrap !important;
+}
+
+@media (max-width: 768px) {
+    .site-header .header-inner {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+
+    .site-header .header-actions {
+        width: 100% !important;
+        justify-content: center !important;
+        margin-top: 14px !important;
+    }
+}
+
 .search-box {
     max-width: 700px;
     margin: 25px auto 0;
