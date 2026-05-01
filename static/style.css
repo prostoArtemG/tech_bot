@@ -993,3 +993,16 @@ header {
         margin-top: 14px !important;
     }
 }
+
+/* Compact cart-pill styling requested by user */
+.cart-pill {
+    min-width: 46px !important;
+    width: 46px !important;
+    height: 38px !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+}
