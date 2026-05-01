@@ -863,3 +863,19 @@ button:hover {
         grid-template-columns: 1fr !important;
     }
 }
+
+/* Definitive mobile grid: 2 columns */
+@media (max-width: 768px) {
+    .products-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 12px !important;
+        padding: 16px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .products-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
