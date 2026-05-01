@@ -742,3 +742,16 @@ header {
     .cart-layout { grid-template-columns: 1fr; }
     .cart-link { right: 14px; top: 14px; }
 }
+
+/* Site footer */
+.site-footer {
+    margin-top: 40px;
+    padding: 30px 20px;
+    background: #111827;
+    color: white;
+    text-align: center;
+}
+.site-footer p {
+    margin: 6px 0;
+    color: #d1d5db;
+}

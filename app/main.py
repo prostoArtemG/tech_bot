@@ -3229,6 +3229,14 @@ async def site_home(request: Request, q: str = "", category: str = ""):
     categories = await db.get_categories()
     site_categories = await db.list_active_site_categories()
 
+    site_contacts = {
+        "phone": await db.get_setting("site_phone") or "",
+        "tg": await db.get_setting("site_tg") or "",
+        "instagram": await db.get_setting("site_instagram") or "",
+        "address": await db.get_setting("site_address") or "",
+        "schedule": await db.get_setting("site_schedule") or "",
+    }
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -3238,6 +3246,7 @@ async def site_home(request: Request, q: str = "", category: str = ""):
             "site_categories": site_categories,
             "q": q,
             "current_category": category,
+            "site_contacts": site_contacts,
         }
     )
 
@@ -3276,12 +3285,21 @@ async def product_page(request: Request, product_id: int):
 
     images = await db.get_product_images(product_id)
 
+    site_contacts = {
+        "phone": await db.get_setting("site_phone") or "",
+        "tg": await db.get_setting("site_tg") or "",
+        "instagram": await db.get_setting("site_instagram") or "",
+        "address": await db.get_setting("site_address") or "",
+        "schedule": await db.get_setting("site_schedule") or "",
+    }
+
     return templates.TemplateResponse(
         request=request,
         name="product.html",
         context={
             "product": product,
             "images": images,
+            "site_contacts": site_contacts,
         }
     )
 

@@ -122,4 +122,13 @@ function changeImage(url) {
 </script>
 
 </body>
+<footer class="site-footer">
+    <h3>Контакты</h3>
+    {% if site_contacts.phone %}<p>📞 {{ site_contacts.phone }}</p>{% endif %}
+    {% if site_contacts.tg %}<p>💬 {{ site_contacts.tg }}</p>{% endif %}
+    {% if site_contacts.instagram %}<p>📷 {{ site_contacts.instagram }}</p>{% endif %}
+    {% if site_contacts.address %}<p>📍 {{ site_contacts.address }}</p>{% endif %}
+    {% if site_contacts.schedule %}<p>⏰ {{ site_contacts.schedule }}</p>{% endif %}
+</footer>
+
 </html>
