@@ -154,6 +154,10 @@ class SiteCategoryState(StatesGroup):
     waiting_for_toggle_id = State()
 
 
+class SiteHeaderState(StatesGroup):
+    waiting_for_field = State()
+
+
 class SiteCategoryQuickState(StatesGroup):
     waiting = State()
 
@@ -348,6 +352,7 @@ lang_kb = ReplyKeyboardMarkup(
 site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакты сайта")],
+        [KeyboardButton(text="🧢 Шапка сайта")],
         [KeyboardButton(text="👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
         [KeyboardButton(text="✏️ Редактировать товар")],
@@ -364,6 +369,16 @@ site_contacts_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📞 Телефон"), KeyboardButton(text="💬 Telegram")],
         [KeyboardButton(text="📷 Instagram"), KeyboardButton(text="📍 Адрес")],
         [KeyboardButton(text="⏰ График работы")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+site_header_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📝 Название сайта")],
+        [KeyboardButton(text="🏷 Подзаголовок")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1091,6 +1106,23 @@ async def site_contact_field_start(message: Message, state: FSMContext):
     await message.answer(prompt)
 
 
+@router.message(lambda m: m.text in {"📝 Название сайта", "🏷 Подзаголовок"})
+async def site_header_field_start(message: Message, state: FSMContext):
+    field_map = {
+        "📝 Название сайта": ("site_title", "Введите название сайта:"),
+        "🏷 Подзаголовок": ("site_subtitle", "Введите подзаголовок сайта:"),
+    }
+
+    key, prompt = field_map.get(message.text, (None, None))
+    if not key:
+        await message.answer("Неизвестное поле", reply_markup=site_header_kb)
+        return
+
+    await state.update_data(setting_key=key)
+    await state.set_state(SiteHeaderState.waiting_for_field)
+    await message.answer(prompt)
+
+
 @router.message(SiteContactsState.waiting_for_field)
 async def site_contact_field_save(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -1106,6 +1138,23 @@ async def site_contact_field_save(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
+
+
+@router.message(SiteHeaderState.waiting_for_field)
+async def site_header_field_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    key = data.get("setting_key")
+
+    if not key:
+        await state.clear()
+        await message.answer("Ошибка состояния.", reply_markup=site_header_kb)
+        return
+
+    value = (message.text or "").strip()
+    await db.set_setting(key, value)
+
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_header_kb)
 
 
 @router.message(StateFilter("*"), lambda m: m.text in {
@@ -1295,6 +1344,14 @@ async def show_contacts(message: Message):
         f"📍 Адрес: {address}\n"
         f"⏰ График: {schedule}"
     )
+
+
+@router.message(lambda m: m.text == "🧢 Шапка сайта")
+async def site_header_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer("Шапка сайта:", reply_markup=site_header_kb)
 
 
 @router.message(lambda m: m.text == "📋 Показать категории сайта")
@@ -3222,6 +3279,9 @@ async def site_home(request: Request, q: str = "", category: str = ""):
         "schedule": await db.get_setting("site_schedule") or "",
     }
 
+    site_title = await db.get_setting("site_title") or "Tech Store"
+    site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -3232,6 +3292,8 @@ async def site_home(request: Request, q: str = "", category: str = ""):
             "q": q,
             "current_category": category,
             "site_contacts": site_contacts,
+            "site_title": site_title,
+            "site_subtitle": site_subtitle,
         }
     )
 
@@ -3269,7 +3331,6 @@ async def product_page(request: Request, product_id: int):
         return HTMLResponse("Товар не найден", status_code=404)
 
     images = await db.get_product_images(product_id)
-
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
         "tg": await db.get_setting("site_tg") or "",
@@ -3278,6 +3339,9 @@ async def product_page(request: Request, product_id: int):
         "schedule": await db.get_setting("site_schedule") or "",
     }
 
+    site_title = await db.get_setting("site_title") or "Tech Store"
+    site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+
     return templates.TemplateResponse(
         request=request,
         name="product.html",
@@ -3285,16 +3349,32 @@ async def product_page(request: Request, product_id: int):
             "product": product,
             "images": images,
             "site_contacts": site_contacts,
+            "site_title": site_title,
+            "site_subtitle": site_subtitle,
         }
     )
 
 
 @web_app.get("/cart", response_class=HTMLResponse)
 async def cart_page(request: Request):
+    site_contacts = {
+        "phone": await db.get_setting("site_phone") or "",
+        "tg": await db.get_setting("site_tg") or "",
+        "instagram": await db.get_setting("site_instagram") or "",
+        "address": await db.get_setting("site_address") or "",
+        "schedule": await db.get_setting("site_schedule") or "",
+    }
+    site_title = await db.get_setting("site_title") or "Tech Store"
+    site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+
     return templates.TemplateResponse(
         request=request,
         name="cart.html",
-        context={}
+        context={
+            "site_contacts": site_contacts,
+            "site_title": site_title,
+            "site_subtitle": site_subtitle,
+        }
     )
 
 
