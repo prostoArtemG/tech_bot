@@ -1006,3 +1006,59 @@ header {
     justify-content: center !important;
     gap: 4px !important;
 }
+
+/* Make header actions uniform: vertical column on desktop, responsive row on mobile */
+.header-actions {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    align-items: stretch !important;
+    width: 180px !important;
+}
+
+.header-pill,
+.cart-pill {
+    width: 100% !important;
+    height: 40px !important;
+    padding: 0 14px !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,0.14) !important;
+    color: white !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+    box-sizing: border-box !important;
+}
+
+.cart-pill {
+    background: rgba(255,255,255,0.14) !important;
+    font-size: 18px !important;
+}
+
+.cart-pill span {
+    font-size: 18px !important;
+    margin-left: 6px !important;
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        position: static !important;
+        width: auto !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        align-items: center !important;
+        margin-top: 14px !important;
+    }
+
+    .header-pill,
+    .cart-pill {
+        width: auto !important;
+        min-width: 90px !important;
+    }
+}

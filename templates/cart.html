@@ -21,12 +21,12 @@
         <a href="tel:{{ site_contacts.phone }}" class="header-pill">📞 Контакты</a>
         {% endif %}
 
-        {% if header_show_cart %}
-        <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
-        {% endif %}
-
         {% if header_show_language %}
         <span class="header-pill">RU | UA</span>
+        {% endif %}
+
+        {% if header_show_cart %}
+        <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
         {% endif %}
       </div>
     </div>
