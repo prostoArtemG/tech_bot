@@ -1,57 +1,60 @@
 function getCart() {
   try {
-    return JSON.parse(localStorage.getItem('cart') || '[]');
+    return JSON.parse(localStorage.getItem("cart") || "[]");
   } catch (e) {
     return [];
   }
 }
 
 function saveCart(cart) {
-  localStorage.setItem('cart', JSON.stringify(cart));
+  localStorage.setItem("cart", JSON.stringify(cart));
   updateCartCount();
 }
 
-function updateCartCount() {
-  const cart = getCart();
-  const count = cart.reduce((s, item) => s + (item.qty || 0), 0);
-  const el = document.getElementById('cartCount');
-  if (el) el.textContent = count;
+function addToCart(id, name, price) {
+  let cart = getCart();
+  let item = cart.find(x => x.id == id);
+
+  if (item) {
+    item.qty += 1;
+  } else {
+    cart.push({ id: String(id), name: name, price: Number(price), qty: 1 });
+  }
+
+  saveCart(cart);
+  alert("Товар добавлен в корзину");
 }
 
-function addToCart(id, name, price) {
+function updateCartCount() {
+  const el = document.getElementById("cartCount");
+  if (!el) return;
+
   const cart = getCart();
-  const idx = cart.findIndex(i => String(i.product_id) === String(id));
-  if (idx >= 0) {
-    cart[idx].qty = (cart[idx].qty || 1) + 1;
-  } else {
-    cart.push({ product_id: parseInt(id), name: name, price: parseFloat(price) || 0, qty: 1 });
-  }
-  saveCart(cart);
-  alert('Добавлено в корзину');
+  const count = cart.reduce((sum, item) => sum + item.qty, 0);
+  el.textContent = count;
 }
 
 function removeFromCart(id) {
   let cart = getCart();
-  cart = cart.filter(i => String(i.product_id) !== String(id));
+  cart = cart.filter(x => String(x.id) !== String(id));
   saveCart(cart);
   renderCart();
 }
 
 function changeQty(id, qty) {
-  const cart = getCart();
-  const idx = cart.findIndex(i => String(i.product_id) === String(id));
-  if (idx >= 0) {
-    cart[idx].qty = Math.max(1, parseInt(qty) || 1);
-    saveCart(cart);
-    renderCart();
-  }
+  let cart = getCart();
+  const item = cart.find(x => x.id == id);
+  if (!item) return;
+  item.qty = Math.max(1, parseInt(qty) || 1);
+  saveCart(cart);
+  renderCart();
 }
 
 function renderCart() {
-  const cart = getCart();
   const list = document.getElementById('cartItems');
   const totalEl = document.getElementById('cartTotal');
   if (!list) return;
+  const cart = getCart();
   list.innerHTML = '';
   let total = 0;
   cart.forEach(item => {
@@ -59,9 +62,9 @@ function renderCart() {
     row.className = 'cart-row';
     row.innerHTML = `
       <div class="cart-name">${item.name}</div>
-      <div class="cart-qty"><input type="number" value="${item.qty}" min="1" onchange="changeQty('${item.product_id}', this.value)"></div>
+      <div class="cart-qty"><input type="number" value="${item.qty}" min="1" onchange="changeQty('${item.id}', this.value)"></div>
       <div class="cart-price">${(item.price||0).toFixed(0)} грн</div>
-      <div class="cart-remove"><button onclick="removeFromCart('${item.product_id}')">Удалить</button></div>
+      <div class="cart-remove"><button type="button" onclick="removeFromCart('${item.id}')">Удалить</button></div>
     `;
     list.appendChild(row);
     total += (item.price || 0) * (item.qty || 0);
@@ -78,7 +81,7 @@ async function submitCartOrder(form) {
   const cart = getCart();
   if (!cart.length) { alert('Корзина пуста'); return; }
 
-  const items = cart.map(i => ({ product_id: i.product_id, qty: i.qty }));
+  const items = cart.map(i => ({ product_id: i.id, qty: i.qty }));
 
   const payload = { name, phone, city, comment, items };
 

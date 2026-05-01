@@ -107,7 +107,7 @@
         </div>
 
         <div style="max-width:1100px;margin:0 auto;padding:0 20px 20px;">
-            <button class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">В корзину</button>
+            <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">В корзину</button>
         </div>
 
     </div>
