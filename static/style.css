@@ -831,3 +831,35 @@ button:hover {
         grid-template-columns: 1fr !important;
     }
 }
+
+/* ============================================================
+   FORCE 2 COLUMNS ON MOBILE — final override
+   ============================================================ */
+@media (max-width: 768px) {
+    .products {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+        padding: 12px !important;
+    }
+
+    .card {
+        padding: 10px !important;
+        min-width: 0 !important;
+    }
+
+    .product-img,
+    .no-photo {
+        height: 140px !important;
+    }
+
+    .price {
+        font-size: 16px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .products {
+        grid-template-columns: 1fr !important;
+    }
+}
