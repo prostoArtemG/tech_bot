@@ -1418,18 +1418,6 @@ async def toggle_site_category_finish(message: Message, state: FSMContext):
     await message.answer("✅ Статус категории изменён", reply_markup=site_categories_kb)
 
 
-@router.message(lambda m: m.text == "📞 Телефон")
-async def set_phone(message: Message, state: FSMContext):
-    await state.set_state(SiteContactsState.phone)
-    await message.answer("Введите телефон сайта:")
-
-
-@router.message(SiteContactsState.phone)
-async def save_phone(message: Message, state: FSMContext):
-    phone = (message.text or "").strip()
-    await db.set_setting("site_phone", phone)
-    await state.clear()
-    await message.answer("✅ Телефон сайта сохранён", reply_markup=site_contacts_kb)
 
 
 
