@@ -1018,44 +1018,6 @@ async def order_status_id_handler(message: Message, state: FSMContext):
         await message.answer(await t(message, "orders_section"), reply_markup=orders_kb)
         return
 
-
-    @router.message(lambda m: m.text in {"📞 Телефон", "💬 Telegram", "📷 Instagram", "📍 Адрес", "⏰ График работы"})
-    async def site_contact_field_start(message: Message, state: FSMContext):
-        field_map = {
-            "📞 Телефон": ("site_phone", "Введите телефон сайта:"),
-            "💬 Telegram": ("site_tg", "Введите Telegram сайта:"),
-            "📷 Instagram": ("site_instagram", "Введите Instagram сайта:"),
-            "📍 Адрес": ("site_address", "Введите адрес сайта:"),
-            "⏰ График работы": ("site_schedule", "Введите график работы:"),
-        }
-
-        key, prompt = field_map.get(message.text, (None, None))
-        if not key:
-            await message.answer("Неизвестное поле", reply_markup=site_contacts_kb)
-            return
-
-        await state.update_data(setting_key=key)
-        await state.set_state(SiteContactsState.waiting_for_field)
-        await message.answer(prompt)
-
-
-    @router.message(SiteContactsState.waiting_for_field)
-    async def site_contact_field_save(message: Message, state: FSMContext):
-        data = await state.get_data()
-        key = data.get("setting_key")
-
-        if not key:
-            await state.clear()
-            await message.answer("Ошибка состояния.", reply_markup=site_contacts_kb)
-            return
-
-        value = (message.text or "").strip()
-        await db.set_setting(key, value)
-
-        await state.clear()
-        await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
-
-
     if not raw_id.isdigit():
         await message.answer(await t(message, "order_id_must_be_number"))
         return
@@ -1109,6 +1071,43 @@ async def order_status_back(message: Message, state: FSMContext):
 
 
 
+@router.message(lambda m: m.text in {"📞 Телефон", "💬 Telegram", "📷 Instagram", "📍 Адрес", "⏰ График работы"})
+async def site_contact_field_start(message: Message, state: FSMContext):
+    field_map = {
+        "📞 Телефон": ("site_phone", "Введите телефон сайта:"),
+        "💬 Telegram": ("site_tg", "Введите Telegram сайта:"),
+        "📷 Instagram": ("site_instagram", "Введите Instagram сайта:"),
+        "📍 Адрес": ("site_address", "Введите адрес сайта:"),
+        "⏰ График работы": ("site_schedule", "Введите график работы:"),
+    }
+
+    key, prompt = field_map.get(message.text, (None, None))
+    if not key:
+        await message.answer("Неизвестное поле", reply_markup=site_contacts_kb)
+        return
+
+    await state.update_data(setting_key=key)
+    await state.set_state(SiteContactsState.waiting_for_field)
+    await message.answer(prompt)
+
+
+@router.message(SiteContactsState.waiting_for_field)
+async def site_contact_field_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    key = data.get("setting_key")
+
+    if not key:
+        await state.clear()
+        await message.answer("Ошибка состояния.", reply_markup=site_contacts_kb)
+        return
+
+    value = (message.text or "").strip()
+    await db.set_setting(key, value)
+
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_contacts_kb)
+
+
 @router.message(StateFilter("*"), lambda m: m.text in {
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
@@ -1119,6 +1118,10 @@ async def order_status_back(message: Message, state: FSMContext):
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state:
+        return
+
     text = message.text
 
     if text in {"⬅️ Назад", "❌ Сброс"}:
