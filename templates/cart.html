@@ -18,11 +18,11 @@
 
       <div class="header-actions">
         {% if header_show_contacts and site_contacts.phone %}
-        <a href="tel:{{ site_contacts.phone }}" class="header-pill">📞 Контакты</a>
+        <a href="tel:{{ site_contacts.phone }}" class="header-phone header-pill">📞 {{ site_contacts.phone }}</a>
         {% endif %}
 
         {% if header_show_language %}
-        <span class="header-pill">RU | UA</span>
+        <span class="lang-switch header-pill">RU | UA</span>
         {% endif %}
 
         {% if header_show_cart %}
