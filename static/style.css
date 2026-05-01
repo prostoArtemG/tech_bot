@@ -546,3 +546,37 @@ button:hover {
 .spec-row b {
     text-align: right;
 }
+
+/* Force horizontal thumbnail strip at file end (overrides previous rules) */
+.thumbs {
+    margin-top: 14px;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 4px;
+    align-items: center;
+    justify-content: flex-start;
+    white-space: nowrap;
+}
+
+.thumb {
+    flex: 0 0 auto;
+    width: 86px;
+    height: 86px;
+    object-fit: cover;
+    border-radius: 12px;
+    cursor: pointer;
+    opacity: 0.75;
+    border: 2px solid transparent;
+    background: #f9fafb;
+    padding: 4px;
+}
+
+@media (max-width: 768px) {
+    .thumb {
+        width: 72px;
+        height: 72px;
+    }
+}
