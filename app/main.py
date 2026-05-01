@@ -3286,6 +3286,65 @@ async def product_page(request: Request, product_id: int):
     )
 
 
+@web_app.get("/cart", response_class=HTMLResponse)
+async def cart_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="cart.html",
+        context={}
+    )
+
+
+@web_app.post("/api/cart-order")
+async def api_cart_order(request: Request):
+    data = await request.json()
+    name = data.get('name') or '-'
+    phone = normalize_phone(data.get('phone') or '')
+    city = data.get('city') or '-'
+    comment = data.get('comment') or ''
+    items = data.get('items') or []
+
+    if not items:
+        return {"ok": False, "error": "no_items"}
+
+    customer = await db.get_customer_by_phone(phone)
+    if not customer:
+        customer = await db.create_customer(name=name, phone=phone, city=city)
+
+    total_sum = 0
+    lines = []
+
+    for idx, it in enumerate(items, start=1):
+        pid = int(it.get('product_id'))
+        qty = int(it.get('qty') or 1)
+        prod = await db.get_product_by_id(pid)
+        if not prod:
+            continue
+        price = float(prod.get('price') or 0)
+        total = price * qty
+        total_sum += total
+
+        await db.create_order(customer_id=customer['id'], product_id=pid, qty=qty, total_amount=total, comment=comment)
+
+        lines.append(f"{idx}) {prod.get('brand') or ''} {prod.get('model') or ''} — {qty} шт — {int(total)} грн")
+
+    # send telegram notification
+    if telegram_bot and WEB_NOTIFY_CHAT_ID:
+        text = (
+            "🛒 Новый заказ с сайта\n\n"
+            f"Клиент: {name}\n"
+            f"Телефон: {phone}\n"
+            f"Город: {city}\n\n"
+            "Товары:\n"
+            + "\n".join(lines)
+            + f"\n\nИтого: {int(total_sum)} грн\n"
+            + f"Комментарий: {comment or '-'}"
+        )
+        await telegram_bot.send_message(int(WEB_NOTIFY_CHAT_ID), text)
+
+    return {"ok": True, "total": total_sum}
+
+
 async def start_web_server():
     config = uvicorn.Config(
         web_app,

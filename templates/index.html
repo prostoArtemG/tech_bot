@@ -9,6 +9,7 @@
     <header>
         <h1>Tech Store</h1>
         <p>Бытовая техника под заказ и в наличии</p>
+        <a href="/cart" class="cart-link">🛒 Корзина <span id="cartCount">0</span></a>
     </header>
 
     <section class="site-categories">
@@ -82,6 +83,7 @@
             <a href="/product/{{ product.id }}" class="details-btn">
                 Подробнее
             </a>
+            <button class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">В корзину</button>
         </div>
         {% endfor %}
     </main>
