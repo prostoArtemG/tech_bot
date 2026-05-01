@@ -1110,3 +1110,20 @@ header {
         margin-top: 14px !important;
     }
 }
+
+/* User request: strictly constrain header buttons to single vertical column */
+.site-header .header-actions {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    width: 180px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+}
+
+.site-header .header-pill,
+.site-header .cart-pill {
+    width: 180px !important;
+    height: 38px !important;
+}
