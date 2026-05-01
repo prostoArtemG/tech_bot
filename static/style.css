@@ -305,6 +305,44 @@ button:hover {
     }
 }
 
+/* New header layout: centered title, actions right on desktop, centered on mobile */
+.header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: start;
+    gap: 16px;
+}
+
+.header-title {
+    text-align: center;
+}
+
+.header-actions {
+    position: static !important;
+    justify-self: end;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+    .header-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .header-actions {
+        justify-content: center !important;
+        width: 100%;
+        margin-top: 14px;
+    }
+}
+
 .search-box {
     max-width: 700px;
     margin: 25px auto 0;
