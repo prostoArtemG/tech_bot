@@ -80,10 +80,8 @@
 
             <p class="info">Гарантия: {{ product.warranty_months }} мес</p>
 
-            <a href="/product/{{ product.id }}" class="details-btn">
-                Подробнее
-            </a>
-            <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">В корзину</button>
+            <a href="/product/{{ product.id }}" class="details-btn">Подробнее</a>
+            <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">🛒 В корзину</button>
         </div>
         {% endfor %}
     </main>

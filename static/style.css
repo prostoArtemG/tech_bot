@@ -633,3 +633,112 @@ button:hover {
 .toast.show {
     opacity: 1;
 }
+
+/* Header cart link */
+header {
+    position: relative;
+}
+.cart-link {
+    position: absolute;
+    right: 24px;
+    top: 24px;
+    background: #16a34a;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+/* Product card cart button */
+.cart-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 13px;
+    border: none;
+    border-radius: 12px;
+    background: #16a34a;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* Cart layout */
+.cart-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 20px;
+    align-items: start;
+}
+.cart-items-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.order-col {
+    position: relative;
+}
+.order-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.06);
+}
+
+.cart-item-card {
+    background: white;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.cart-item-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.cart-item-name {
+    font-weight: 700;
+}
+.cart-item-price {
+    color: #16a34a;
+    font-weight: 700;
+}
+.cart-item-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+.qty-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.qty-btn {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: white;
+    cursor: pointer;
+    font-weight: 700;
+}
+.qty {
+    min-width: 28px;
+    text-align: center;
+    font-weight: 700;
+}
+.remove-small {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+@media (max-width: 900px) {
+    .cart-layout { grid-template-columns: 1fr; }
+    .cart-link { right: 14px; top: 14px; }
+}

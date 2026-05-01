@@ -57,11 +57,15 @@ function removeFromCart(id) {
   renderCart();
 }
 
-function changeQty(id, qty) {
+function changeQty(id, delta) {
   let cart = getCart();
   const item = cart.find(x => x.id == id);
   if (!item) return;
-  item.qty = Math.max(1, parseInt(qty) || 1);
+  const d = parseInt(delta) || 0;
+  item.qty = (item.qty || 0) + d;
+  if (item.qty <= 0) {
+    cart = cart.filter(x => String(x.id) !== String(id));
+  }
   saveCart(cart);
   renderCart();
 }
@@ -75,12 +79,20 @@ function renderCart() {
   let total = 0;
   cart.forEach(item => {
     const row = document.createElement('div');
-    row.className = 'cart-row';
+    row.className = 'cart-item-card';
     row.innerHTML = `
-      <div class="cart-name">${item.name}</div>
-      <div class="cart-qty"><input type="number" value="${item.qty}" min="1" onchange="changeQty('${item.id}', this.value)"></div>
-      <div class="cart-price">${(item.price||0).toFixed(0)} грн</div>
-      <div class="cart-remove"><button type="button" onclick="removeFromCart('${item.id}')">Удалить</button></div>
+      <div class="cart-item-main">
+        <div class="cart-item-name">${item.name}</div>
+        <div class="cart-item-price">${(item.price||0).toFixed(0)} грн</div>
+      </div>
+      <div class="cart-item-controls">
+        <div class="qty-controls">
+          <button type="button" class="qty-btn" onclick="changeQty('${item.id}', -1)">−</button>
+          <span class="qty">${item.qty}</span>
+          <button type="button" class="qty-btn" onclick="changeQty('${item.id}', 1)">+</button>
+        </div>
+        <button type="button" class="remove-small" onclick="removeFromCart('${item.id}')">Удалить</button>
+      </div>
     `;
     list.appendChild(row);
     total += (item.price || 0) * (item.qty || 0);
@@ -111,10 +123,10 @@ async function submitCartOrder(form) {
   if (data.ok) {
     localStorage.removeItem('cart');
     updateCartCount();
-    alert('Заказ отправлен. Спасибо!');
+    showToast('Заказ отправлен. Спасибо!');
     window.location.href = '/';
   } else {
-    alert('Ошибка отправки заказа');
+    showToast('Ошибка отправки заказа');
   }
 }
 
