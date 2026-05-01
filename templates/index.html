@@ -9,7 +9,13 @@
     <header>
         <h1>Tech Store</h1>
         <p>Бытовая техника под заказ и в наличии</p>
-        <a href="/cart" class="cart-link">🛒 Корзина <span id="cartCount">0</span></a>
+        <div class="header-actions">
+          {% if site_contacts.phone %}
+          <a href="tel:{{ site_contacts.phone }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
+          {% endif %}
+          <a href="/cart" class="cart-link">🛒 Корзина <span id="cartCount">0</span></a>
+          <div class="lang-switch">RU | UA</div>
+        </div>
     </header>
 
     <section class="site-categories">

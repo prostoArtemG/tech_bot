@@ -16,6 +16,30 @@ header {
     text-align: center;
 }
 
+.header-actions {
+    position: absolute;
+    right: 24px;
+    top: 24px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.header-phone,
+.cart-link,
+.lang-switch {
+    background: rgba(255,255,255,0.12);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.cart-link {
+    background: #16a34a;
+}
+
 header h1 {
     margin: 0;
     font-size: 36px;
@@ -269,6 +293,15 @@ button:hover {
     .product-page { padding: 14px; }
 
     .product-big-img { max-height: 420px; }
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        position: static;
+        margin-top: 18px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
 }
 
 .search-box {
