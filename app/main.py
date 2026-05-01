@@ -3023,7 +3023,40 @@ async def order_status_callback_handler(callback: CallbackQuery):
         return
 
     await db.update_order_status(order_id, status)
-    await callback.message.answer(f"{await t(callback.message, 'order_status_updated')} #{order_id}: {status}")
+
+    status_map = {
+        "new": "Новый",
+        "processing": "В обработке",
+        "ordered": "Заказан у поставщика",
+        "ordered_supplier": "Заказан у поставщика",
+        "in_transit": "В пути",
+        "ready": "Готов",
+        "done": "Выполнен",
+        "cancelled": "Отменён",
+    }
+
+    status_ru = status_map.get(status, status)
+
+    order = await db.get_order(order_id)
+
+    if not order:
+        await callback.message.answer(f"{await t(callback.message, 'order_status_updated')} #{order_id}: {status_ru}")
+        await callback.answer()
+        return
+
+    await callback.message.answer(f"""
+✅ Заказ обновлён
+
+🧾 Заказ #{order['id']}
+👤 {order['name'] or '-'} | {order['phone'] or '-'}
+🏙 {order['city'] or '-'}
+
+📦 Товар: {order['product_name'] or '-'}
+💰 {order['total_price'] or 0} грн
+
+📍 Новый статус: {status_ru}
+""")
+
     await callback.answer()
 
 

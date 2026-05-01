@@ -884,6 +884,24 @@ class Database:
             order_id
         )
 
+    async def get_order(self, order_id: int):
+        return await self.fetchrow(
+            """
+            SELECT
+                o.id,
+                o.total_amount AS total_price,
+                c.name,
+                c.phone,
+                c.city,
+                (COALESCE(p.brand, '') || ' ' || COALESCE(p.model, '')) AS product_name
+            FROM orders o
+            LEFT JOIN customers c ON c.id = o.customer_id
+            LEFT JOIN products p ON p.id = o.product_id
+            WHERE o.id = $1
+            """,
+            order_id
+        )
+
     async def get_order_full_by_id(self, order_id: int):
         return await self.fetchrow(
             """
