@@ -817,19 +817,9 @@ async def list_orders_handler(message: Message):
             )
         )
 
-    # Send as several messages to avoid too long messages
-    for msg in messages:
-        await message.answer(msg, reply_markup=orders_kb)
-
-    for row in rows[:5]:
-        await message.answer(
-            f"Изменить статус заказа #{row['id']}:",
-            reply_markup=inline_order_status_kb(row["id"]) 
-        )
-        await message.answer(
-            f"Действия для заказа #{row['id']}:",
-            reply_markup=inline_order_actions_kb(row["id"])
-        )
+    # Send one message per order with action buttons under it
+    for i, row in enumerate(rows):
+        await message.answer(messages[i], reply_markup=inline_order_actions_kb(row["id"]))
 
 
 # Создание заказа — старт
