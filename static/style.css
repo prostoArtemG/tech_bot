@@ -10,6 +10,7 @@ body {
 }
 
 header {
+    position: relative;
     background: linear-gradient(135deg, #111827, #1f2937);
     color: white;
     padding: 40px 20px;
