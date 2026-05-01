@@ -849,6 +849,7 @@ class Database:
                 o.created_at,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
+                c.city AS customer_city,
                 p.category,
                 p.brand,
                 p.model

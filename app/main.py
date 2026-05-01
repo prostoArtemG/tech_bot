@@ -778,20 +778,48 @@ async def list_orders_handler(message: Message):
         await message.answer(await t(message, "orders_empty"), reply_markup=orders_kb)
         return
 
-    lines = ["📋 Последние заказы:\n"]
+    status_map = {
+        "new": "Новый",
+        "processing": "В обработке",
+        "ordered_supplier": "Заказан у поставщика",
+        "in_transit": "В пути",
+        "ready": "Готов",
+        "done": "Выполнен",
+        "cancelled": "Отменён",
+    }
+
+    messages = []
 
     for row in rows:
         created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
+        status_ru = status_map.get(row["status"], row["status"])
 
-        lines.append(
-            f"#{row['id']} | {created_at} | {row['status']}\n"
-            f"Клиент: {row['customer_name'] or '-'} | {row['customer_phone'] or '-'}\n"
-            f"Товар: {row['category'] or '-'} | {row['brand'] or '-'} | {row['model'] or '-'}\n"
-            f"Кол-во: {row['qty']} | Сумма: {float(row['total_amount'] or 0):.2f} грн\n"
-            f"Комментарий: {row['comment'] or '-'}\n"
+        messages.append(
+            """
+🧾 Заказ #{id}
+📍 Статус: {status}
+👤 Клиент: {name} | {phone}
+🏙 Город: {city}
+📦 Товар: {product}
+🔢 Кол-во: {qty}
+💰 Сумма: {total} грн
+💬 Комментарий: {comment}
+""".format(
+                id=row["id"],
+                status=status_ru,
+                name=(row["customer_name"] or "-"),
+                phone=(row["customer_phone"] or "-"),
+                city=(row.get("customer_city") or "-"),
+                product="{} {}".format(row.get("brand") or "", row.get("model") or "").strip() or "-",
+                qty=row.get("qty") or 0,
+                total=f"{float(row.get('total_amount') or 0):.0f}",
+                comment=(row.get("comment") or "-")
+            )
         )
 
-    await message.answer("\n".join(lines), reply_markup=orders_kb)
+    # Send as several messages to avoid too long messages
+    for msg in messages:
+        await message.answer(msg, reply_markup=orders_kb)
 
     for row in rows[:5]:
         await message.answer(
