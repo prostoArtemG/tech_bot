@@ -647,6 +647,36 @@ button:hover {
         }
 }
 
+/* Force header-actions alignment override (desktop: right; mobile: centered) */
+header {
+    position: relative !important;
+    text-align: center;
+}
+
+.header-actions {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    left: auto !important;
+    display: flex !important;
+    gap: 10px !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        position: static !important;
+        margin: 16px auto 0 !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        max-width: 100% !important;
+    }
+}
+
 /* Toast notification */
 .toast {
     position: fixed;
