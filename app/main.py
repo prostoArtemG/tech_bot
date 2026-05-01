@@ -385,6 +385,19 @@ site_header_kb = ReplyKeyboardMarkup(
 )
 
 
+header_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📝 Название сайта")],
+        [KeyboardButton(text="🏷 Подзаголовок")],
+        [KeyboardButton(text="🛒 Корзина: вкл/выкл")],
+        [KeyboardButton(text="📞 Контакты: вкл/выкл")],
+        [KeyboardButton(text="🌐 Язык: вкл/выкл")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
 site_categories_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Показать категории сайта")],
@@ -1351,7 +1364,28 @@ async def site_header_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     await state.clear()
-    await message.answer("Шапка сайта:", reply_markup=site_header_kb)
+    await message.answer("Настройки шапки сайта:", reply_markup=header_kb)
+
+
+@router.message(lambda m: m.text == "🛒 Корзина: вкл/выкл")
+async def toggle_header_cart(message: Message):
+    value = await db.toggle_setting_bool("header_show_cart", "true")
+    text = "включена" if value == "true" else "выключена"
+    await message.answer(f"✅ Корзина в шапке: {text}", reply_markup=header_kb)
+
+
+@router.message(lambda m: m.text == "📞 Контакты: вкл/выкл")
+async def toggle_header_contacts(message: Message):
+    value = await db.toggle_setting_bool("header_show_contacts", "true")
+    text = "включены" if value == "true" else "выключены"
+    await message.answer(f"✅ Контакты в шапке: {text}", reply_markup=header_kb)
+
+
+@router.message(lambda m: m.text == "🌐 Язык: вкл/выкл")
+async def toggle_header_language(message: Message):
+    value = await db.toggle_setting_bool("header_show_language", "true")
+    text = "включён" if value == "true" else "выключен"
+    await message.answer(f"✅ Язык в шапке: {text}", reply_markup=header_kb)
 
 
 @router.message(lambda m: m.text == "📋 Показать категории сайта")
@@ -3001,6 +3035,10 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "📂 Категории сайта", "📞 Контакты сайта", "🌐 Язык сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию",
     "👀 Просмотр товара на сайте",
     "📋 Показать контакты", "📞 Телефон", "💬 Telegram", "📷 Instagram", "📍 Адрес", "⏰ График работы",
+    "🧢 Шапка сайта",
+    "🛒 Корзина: вкл/выкл",
+    "📞 Контакты: вкл/выкл",
+    "🌐 Язык: вкл/выкл",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -3281,6 +3319,15 @@ async def site_home(request: Request, q: str = "", category: str = ""):
 
     site_title = await db.get_setting("site_title") or "Tech Store"
     site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
 
     return templates.TemplateResponse(
         request=request,
@@ -3294,6 +3341,9 @@ async def site_home(request: Request, q: str = "", category: str = ""):
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
+            "header_show_cart": header_show_cart,
+            "header_show_contacts": header_show_contacts,
+            "header_show_language": header_show_language,
         }
     )
 
@@ -3351,6 +3401,9 @@ async def product_page(request: Request, product_id: int):
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
+            "header_show_cart": header_show_cart,
+            "header_show_contacts": header_show_contacts,
+            "header_show_language": header_show_language,
         }
     )
 
@@ -3374,6 +3427,9 @@ async def cart_page(request: Request):
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
+            "header_show_cart": header_show_cart,
+            "header_show_contacts": header_show_contacts,
+            "header_show_language": header_show_language,
         }
     )
 

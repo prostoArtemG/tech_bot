@@ -17,11 +17,17 @@
         </div>
 
         <div class="header-actions">
-            {% if site_contacts.phone %}
-            <a href="tel:{{ site_contacts.phone }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
+            {% if header_show_contacts and site_contacts.phone %}
+            <a href="tel:{{ site_contacts.phone }}" class="header-phone header-pill">📞 {{ site_contacts.phone }}</a>
             {% endif %}
-            <a href="/cart" class="cart-link">🛒 Корзина <span id="cartCount">0</span></a>
-            <span class="lang-switch">RU | UA</span>
+
+            {% if header_show_cart %}
+            <a href="/cart" class="cart-link header-pill">🛒 Корзина <span id="cartCount">0</span></a>
+            {% endif %}
+
+            {% if header_show_language %}
+            <span class="lang-switch header-pill">RU | UA</span>
+            {% endif %}
         </div>
     </div>
 </header>

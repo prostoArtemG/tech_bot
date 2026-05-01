@@ -7,9 +7,29 @@
     <script src="/static/cart.js" defer></script>
 </head>
 <body>
-  <header>
-    <h1>Корзина</h1>
-    <a href="/" class="back-link">← Каталог</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="header-spacer"></div>
+
+      <div class="header-title">
+        <h1>{{ site_title or 'Tech Store' }}</h1>
+        <p>{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
+      </div>
+
+      <div class="header-actions">
+        {% if header_show_contacts and site_contacts.phone %}
+        <a href="tel:{{ site_contacts.phone }}" class="header-pill">📞 Контакты</a>
+        {% endif %}
+
+        {% if header_show_cart %}
+        <a href="/cart" class="header-pill cart-pill">🛒 Корзина <span id="cartCount">0</span></a>
+        {% endif %}
+
+        {% if header_show_language %}
+        <span class="header-pill">RU | UA</span>
+        {% endif %}
+      </div>
+    </div>
   </header>
 
   <main style="max-width:1100px;margin:20px auto;padding:0 20px;">

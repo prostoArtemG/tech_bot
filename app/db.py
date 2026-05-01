@@ -777,6 +777,16 @@ class Database:
         )
 
 
+    async def toggle_setting_bool(self, key: str, default: str = "true"):
+        current = await self.get_setting(key)
+        if current is None:
+            current = default
+
+        new_value = "false" if current == "true" else "true"
+        await self.set_setting(key, new_value)
+        return new_value
+
+
     async def get_currency_rates(self):
         usd = await self.get_setting("usd_rate", "40")
         eur = await self.get_setting("eur_rate", "43")
