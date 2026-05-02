@@ -32,6 +32,10 @@
         </header>
 
     <section class="site-categories">
+        <a href="/" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">
+            <div class="site-category-emoji">📦</div>
+            <div class="site-category-title">Все товары</div>
+        </a>
         {% for cat in site_categories %}
         {# map plural category names to the product.category values used for filtering #}
         {% if cat.name_ru == 'Холодильники' %}
@@ -60,19 +64,17 @@
     <section class="search-box">
         <form method="get" action="/">
             <input type="text" name="q" placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
+            <select name="brand" class="brand-select">
+              <option value="">Все бренды</option>
+              {% for b in brands %}
+              <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
+              {% endfor %}
+            </select>
             <button type="submit">Найти</button>
         </form>
     </section>
 
-    <div class="categories">
-        <a href="/" class="{% if not current_category %}active{% endif %}">Все</a>
 
-        {% for cat in categories %}
-        <a href="/?category={{ cat }}" class="{% if current_category == cat %}active{% endif %}">
-            {{ cat }}
-        </a>
-        {% endfor %}
-    </div>
 
     <main class="products products-grid">
         {% for product in products %}
@@ -108,15 +110,15 @@
     {% if pages > 1 %}
     <div class="pagination">
       {% if page > 1 %}
-      <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">← Назад</a>
+      <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_brand %}&brand={{ current_brand }}{% endif %}">← Назад</a>
       {% endif %}
 
       {% for p in range(1, pages + 1) %}
-      <a class="{% if p == page %}active{% endif %}" href="/?page={{ p }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">{{ p }}</a>
+      <a class="{% if p == page %}active{% endif %}" href="/?page={{ p }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_brand %}&brand={{ current_brand }}{% endif %}">{{ p }}</a>
       {% endfor %}
 
       {% if page < pages %}
-      <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">Вперёд →</a>
+      <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_brand %}&brand={{ current_brand }}{% endif %}">Вперёд →</a>
       {% endif %}
     </div>
     {% endif %}

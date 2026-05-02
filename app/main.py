@@ -3295,17 +3295,23 @@ async def create_site_order(data: SiteOrderRequest):
 
 
 @web_app.get("/", response_class=HTMLResponse)
-async def site_home(request: Request, q: str = "", category: str = "", page: int = 1):
+async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = ""):
     q = (q or "").strip()
     category = (category or "").strip()
+    brand = (brand or "").strip()
 
     if q:
         products = await db.search_site_products(q)
     else:
         products = await db.list_products()
 
+    brands = sorted(set([p["brand"] for p in products if p["brand"]]))
+
     if category:
         products = [p for p in products if (p["category"] or "") == category]
+
+    if brand:
+        products = [p for p in products if (p["brand"] or "") == brand]
 
     per_page = 12
     total = len(products)
@@ -3348,6 +3354,8 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "current_category": category,
             "page": page,
             "pages": pages,
+            "brands": brands,
+            "current_brand": brand,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
