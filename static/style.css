@@ -98,9 +98,9 @@ body {
     padding: 0 !important;
     border-radius: 0 !important;
     background: transparent !important;
+    border: none !important;
     display: flex !important;
     align-items: center !important;
-    justify-content: center !important;
     gap: 6px !important;
 }
 
