@@ -808,107 +808,74 @@ button:hover {
 }
 
 /* ============================================================
-   MOBILE CATALOG GRID — 2 columns
+   MOBILE CATALOG GRID — handled by @media (max-width: 1024px) below
    ============================================================ */
-@media (max-width: 768px) {
-    .products {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        gap: 12px !important;
-        padding: 16px !important;
-    }
-
-    .card {
-        padding: 12px !important;
-    }
-
-    .product-img,
-    .no-photo {
-        height: 140px !important;
-    }
-
-    .card h2 {
-        font-size: 16px !important;
-    }
-
-    .price {
-        font-size: 18px !important;
-    }
-}
-
-@media (max-width: 380px) {
-    .products {
-        grid-template-columns: 1fr !important;
-    }
-}
-
-/* ============================================================
-   FORCE 2 COLUMNS ON MOBILE — final override
-   ============================================================ */
-@media (max-width: 768px) {
-    .products {
-        display: grid !important;
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 12px !important;
-        padding: 12px !important;
-    }
-
-    .card {
-        padding: 10px !important;
-        min-width: 0 !important;
-    }
-
-    .product-img,
-    .no-photo {
-        height: 140px !important;
-    }
-
-    .price {
-        font-size: 16px !important;
-    }
-}
-
-@media (max-width: 380px) {
-    .products {
-        grid-template-columns: 1fr !important;
-    }
-}
-
-/* Definitive mobile grid: 2 columns */
-@media (max-width: 768px) {
-    .products-grid {
-        display: grid !important;
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        gap: 12px !important;
-        padding: 16px !important;
-    }
-}
-
-@media (max-width: 380px) {
-    .products-grid {
-        grid-template-columns: 1fr !important;
-    }
-}
 
 @media (max-width: 1024px) {
   .products-grid,
   .products {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 12px !important;
-    padding: 16px !important;
+    gap: 14px !important;
+    padding: 14px !important;
   }
 
   .card {
     width: auto !important;
     max-width: none !important;
     min-width: 0 !important;
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .product-img,
+  .no-photo {
+    height: 180px !important;
+    width: 100% !important;
+    object-fit: contain !important;
+  }
+
+  .card h2 {
+    font-size: 18px !important;
+    line-height: 1.2 !important;
+    margin-top: 8px !important;
+  }
+
+  .category,
+  .card-category {
+    font-size: 13px !important;
+  }
+
+  .price {
+    font-size: 22px !important;
+    margin: 12px 0 8px !important;
+  }
+
+  .details-btn,
+  .cart-btn {
+    font-size: 15px !important;
+    padding: 12px !important;
+    border-radius: 12px !important;
   }
 }
 
 @media (max-width: 420px) {
   .products-grid,
   .products {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .product-img,
+  .no-photo {
+    height: 165px !important;
+  }
+
+  .card h2 {
+    font-size: 17px !important;
+  }
+
+  .price {
+    font-size: 21px !important;
   }
 }
 
