@@ -28,6 +28,7 @@ body {
 
 .site-header .header-inner {
     display: block;
+    position: relative;
 }
 
 .site-header .header-spacer {
@@ -48,15 +49,16 @@ body {
     color: #d1d5db;
 }
 
-/* ── button row: centred below title ── */
+/* ── right side: lang + cart only ── */
 .site-header .header-actions {
+    position: absolute;
+    top: 50%;
+    right: 24px;
+    transform: translateY(-50%);
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-end;
     gap: 10px;
-    margin-top: 16px;
 }
 
 /* base reset — no shared width */
@@ -72,14 +74,20 @@ body {
     cursor: pointer;
 }
 
-/* ── phone pill: wide, dark grey ── */
+/* ── phone: inline pill centred under title ── */
 .site-header .header-phone {
-    width: 200px;
-    height: 40px;
-    padding: 0 16px;
-    border-radius: 999px;
-    background: #2f3a4a;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: white;
+    font-weight: 700;
     font-size: 14px;
+    margin-top: 10px;
+    padding: 6px 18px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    white-space: nowrap;
     letter-spacing: 0.01em;
 }
 
@@ -123,12 +131,14 @@ body {
     }
 
     .site-header .header-actions {
+        position: static;
+        transform: none;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
         margin-top: 14px;
-    }
-
-    .site-header .header-phone {
-        width: auto;
-        min-width: 140px;
     }
 }
 

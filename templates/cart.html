@@ -9,18 +9,15 @@
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <div class="header-spacer"></div>
-
       <div class="header-title">
         <h1>{{ site_title or '⚡ Technovlada' }}</h1>
         <p>{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
+        {% if header_show_contacts and site_contacts.phone %}
+        <a href="tel:{{ site_contacts.phone }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
+        {% endif %}
       </div>
 
       <div class="header-actions">
-        {% if header_show_contacts and site_contacts.phone %}
-        <a href="tel:{{ site_contacts.phone }}" class="header-phone header-pill">📞 {{ site_contacts.phone }}</a>
-        {% endif %}
-
         {% if header_show_language %}
         <span class="lang-switch header-pill">RU | UA</span>
         {% endif %}
