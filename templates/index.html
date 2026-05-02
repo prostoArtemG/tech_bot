@@ -19,7 +19,11 @@
 
                 <div class="header-actions">
                     {% if header_show_language %}
-                    <span class="lang-switch header-pill">RU | UA</span>
+                    <div class="lang-switch header-pill">
+                        <button class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                        <span class="lang-sep">|</span>
+                        <button class="lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                    </div>
                     {% endif %}
 
                     {% if header_show_cart %}
@@ -32,8 +36,18 @@
     <section class="site-categories">
         <a href="/" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">
             <div class="site-category-emoji">📦</div>
-            <div class="site-category-title">Все товары</div>
+            <div class="site-category-title" data-ru="Все товары" data-uk="Всі товари">Все товары</div>
         </a>
+        {% set uk_names = {
+            'Холодильники': 'Холодильники',
+            'Стиральные машины': 'Пральні машини',
+            'Кондиционеры': 'Кондиціонери',
+            'Нагреватели': 'Нагрівачі',
+            'Вытяжки': 'Витяжки',
+            'Бойлеры': 'Бойлери',
+            'Посудомоечные машины': 'Посудомийні машини',
+            'Морозильники': 'Морозильники'
+        } %}
         {% for cat in site_categories %}
         {# map plural category names to the product.category values used for filtering #}
         {% if cat.name_ru == 'Холодильники' %}
@@ -54,21 +68,24 @@
 
         <a href="/?category={{ filter_name }}" class="site-category-card {% if current_category == filter_name %}active{% endif %}">
             <div class="site-category-emoji">{{ cat.emoji }}</div>
-            <div class="site-category-title">{{ cat.name_ru }}</div>
+            <div class="site-category-title" data-ru="{{ cat.name_ru }}" data-uk="{{ uk_names[cat.name_ru] if cat.name_ru in uk_names else cat.name_ru }}">{{ cat.name_ru }}</div>
         </a>
         {% endfor %}
     </section>
 
     <section class="search-box">
         <form method="get" action="/">
-            <input type="text" name="q" placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
+            <input type="text" name="q"
+                data-placeholder-ru="Поиск: Samsung, холодильник..."
+                data-placeholder-uk="Пошук: Samsung, холодильник..."
+                placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
             <select name="brand" class="brand-select">
-              <option value="">Все бренды</option>
+              <option value="" data-ru="Все бренды" data-uk="Усі бренди">Все бренды</option>
               {% for b in brands %}
               <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
               {% endfor %}
             </select>
-            <button type="submit">Найти</button>
+            <button type="submit" data-ru="Найти" data-uk="Знайти">Найти</button>
         </form>
     </section>
 
@@ -89,18 +106,18 @@
 
             <div class="status">
                 {% if product.stock_qty > 0 %}
-                    В наличии
+                    <span data-ru="В наличии" data-uk="В наявності">В наличии</span>
                 {% else %}
-                    Под заказ
+                    <span data-ru="Под заказ" data-uk="Під замовлення">Под заказ</span>
                 {% endif %}
             </div>
 
             <p class="price">{{ product.price }} грн</p>
 
-            <p class="info">Гарантия: {{ product.warranty_months }} мес</p>
+            <p class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</p>
 
-            <a href="/product/{{ product.id }}" class="details-btn">Подробнее</a>
-            <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">🛒 В корзину</button>
+            <a href="/product/{{ product.id }}" class="details-btn" data-ru="Подробнее" data-uk="Детальніше">Подробнее</a>
+            <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">🛒 <span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
         </div>
         {% endfor %}
     </main>
@@ -123,6 +140,7 @@
 
 </body>
 <script src="/static/cart.js"></script>
+<script src="/static/lang.js"></script>
 </html>
 
 <footer class="site-footer">

@@ -20,7 +20,11 @@
 
         <div class="header-actions">
             {% if header_show_language %}
-            <span class="lang-switch header-pill">RU | UA</span>
+            <div class="lang-switch header-pill">
+                <button class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                <span class="lang-sep">|</span>
+                <button class="lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+            </div>
             {% endif %}
 
             {% if header_show_cart %}
@@ -31,7 +35,7 @@
 </header>
 
 <main class="product-page">
-    <a href="/" class="back-link">← Назад в каталог</a>
+    <a href="/" class="back-link"><span data-ru="← Назад в каталог" data-uk="← Назад до каталогу">← Назад в каталог</span></a>
 
     <div class="product-grid">
 
@@ -67,9 +71,9 @@
                     <div class="category">{{ product.category }}</div>
                     <div class="status">
                         {% if product.stock_qty > 0 %}
-                            В наличии
+                            <span data-ru="В наличии" data-uk="В наявності">В наличии</span>
                         {% else %}
-                            Под заказ
+                            <span data-ru="Под заказ" data-uk="Під замовлення">Под заказ</span>
                         {% endif %}
                     </div>
                 </div>
@@ -79,8 +83,8 @@
                 <div class="price">{{ product.price }} грн</div>
 
                 <div class="product-info-meta">
-                    <div class="info">Остаток: {{ product.stock_qty }}</div>
-                    <div class="info">Гарантия: {{ product.warranty_months }} мес</div>
+                    <div class="info"><span data-ru="Остаток:" data-uk="Залишок:">Остаток:</span> {{ product.stock_qty }}</div>
+                    <div class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</div>
                 </div>
 
                                 {% if product.specs %}
@@ -110,22 +114,34 @@
 
                 <form class="order-form" method="post" action="/order">
                     <input type="hidden" name="product_id" value="{{ product.id }}">
-                    <input type="text" name="name" placeholder="Ваше имя" required>
+                    <input type="text" name="name"
+                        data-placeholder-ru="Ваше имя"
+                        data-placeholder-uk="Ваше ім'я"
+                        placeholder="Ваше имя" required>
 
-                    <input type="tel" name="phone" placeholder="Телефон" required>
+                    <input type="tel" name="phone"
+                        data-placeholder-ru="Телефон"
+                        data-placeholder-uk="Телефон"
+                        placeholder="Телефон" required>
 
-                    <input type="text" name="city" placeholder="Город">
+                    <input type="text" name="city"
+                        data-placeholder-ru="Город"
+                        data-placeholder-uk="Місто"
+                        placeholder="Город">
 
-                    <input type="text" name="comment" placeholder="Комментарий">
+                    <input type="text" name="comment"
+                        data-placeholder-ru="Комментарий"
+                        data-placeholder-uk="Коментар"
+                        placeholder="Комментарий">
 
-                    <button type="submit" class="order-btn">Заказать</button>
+                    <button type="submit" class="order-btn" data-ru="Заказать" data-uk="Замовити">Заказать</button>
                 </form>
 
             </div>
         </div>
 
         <div style="max-width:1100px;margin:0 auto;padding:0 20px 20px;">
-            <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">В корзину</button>
+            <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')"><span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
         </div>
 
     </div>
@@ -135,6 +151,7 @@
 <script>
 
 <script src="/static/cart.js"></script>
+<script src="/static/lang.js"></script>
 
 </body>
 </html>

@@ -20,7 +20,11 @@
 
       <div class="header-actions">
         {% if header_show_language %}
-        <span class="lang-switch header-pill">RU | UA</span>
+        <div class="lang-switch header-pill">
+            <button class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+            <span class="lang-sep">|</span>
+            <button class="lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+        </div>
         {% endif %}
 
         {% if header_show_cart %}
@@ -38,20 +42,33 @@
 
       <aside class="order-col">
         <div class="order-card">
-          <h3>Итог</h3>
-          <div class="order-total">Итого: <span id="cartTotal">0 грн</span></div>
+          <h3 data-ru="Итог" data-uk="Разом">Итог</h3>
+          <div class="order-total"><span data-ru="Итого:" data-uk="Разом:">Итого:</span> <span id="cartTotal">0 грн</span></div>
 
-          <h4 style="margin-top:14px;">Оформление заказа</h4>
+          <h4 style="margin-top:14px;" data-ru="Оформление заказа" data-uk="Оформлення замовлення">Оформление заказа</h4>
           <form onsubmit="event.preventDefault(); submitCartOrder(this);">
-            <input type="text" name="name" placeholder="Ваше имя" required>
-            <input type="tel" name="phone" placeholder="Телефон" required>
-            <input type="text" name="city" placeholder="Город">
-            <input type="text" name="comment" placeholder="Комментарий">
-            <button type="submit" class="order-btn">Оформить заказ</button>
+            <input type="text" name="name"
+                data-placeholder-ru="Ваше имя"
+                data-placeholder-uk="Ваше ім'я"
+                placeholder="Ваше имя" required>
+            <input type="tel" name="phone"
+                data-placeholder-ru="Телефон"
+                data-placeholder-uk="Телефон"
+                placeholder="Телефон" required>
+            <input type="text" name="city"
+                data-placeholder-ru="Город"
+                data-placeholder-uk="Місто"
+                placeholder="Город">
+            <input type="text" name="comment"
+                data-placeholder-ru="Комментарий"
+                data-placeholder-uk="Коментар"
+                placeholder="Комментарий">
+            <button type="submit" class="order-btn" data-ru="Оформить заказ" data-uk="Оформити замовлення">Оформить заказ</button>
           </form>
         </div>
       </aside>
     </div>
   </main>
 </body>
+<script src="/static/lang.js"></script>
 </html>
