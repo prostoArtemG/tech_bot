@@ -48,16 +48,15 @@ body {
     color: #d1d5db;
 }
 
-/* ── button column: absolute right, mixed sizes ── */
+/* ── button row: centred below title ── */
 .site-header .header-actions {
-    position: absolute;
-    top: 50%;
-    right: 24px;
-    transform: translateY(-50%);
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
     gap: 10px;
+    margin-top: 16px;
 }
 
 /* base reset — no shared width */
@@ -113,7 +112,7 @@ body {
     margin-left: 2px;
 }
 
-/* ── mobile: stack below title, row layout ── */
+/* ── mobile: already row layout ── */
 @media (max-width: 768px) {
     .site-header {
         padding: 28px 16px 24px;
@@ -124,14 +123,7 @@ body {
     }
 
     .site-header .header-actions {
-        position: static;
-        transform: none;
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: center;
-        align-items: center;
-        gap: 10px;
-        margin-top: 18px;
+        margin-top: 14px;
     }
 
     .site-header .header-phone {
@@ -239,7 +231,7 @@ input {
     padding: 11px;
     margin-top: 8px;
     border: 1px solid #d1d5db;
-    border-radius: 10px;
+    border-radius: 14px;
     font-size: 14px;
 }
 
@@ -248,7 +240,7 @@ button {
     margin-top: 12px;
     padding: 13px;
     border: none;
-    border-radius: 12px;
+    border-radius: 14px;
     background: #16a34a;
     color: white;
     font-size: 16px;
@@ -346,7 +338,7 @@ button:hover {
     text-decoration: none;
     margin-top: 14px;
     padding: 13px;
-    border-radius: 12px;
+    border-radius: 14px;
     background: #111827;
     color: white;
     font-weight: bold;
@@ -361,7 +353,7 @@ button:hover {
     margin-top: 10px;
     padding: 13px;
     border: none;
-    border-radius: 12px;
+    border-radius: 14px;
     background: #16a34a;
     color: white;
     font-weight: bold;
@@ -573,7 +565,7 @@ button:hover {
     width: 100%;
     margin-top: 14px;
     padding: 12px;
-    border-radius: 10px;
+    border-radius: 14px;
     background: #111827;
     color: white;
     border: none;
@@ -656,14 +648,14 @@ button:hover {
 
 .order-card {
     background: white;
-    border-radius: 12px;
+    border-radius: 18px;
     padding: 18px;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.06);
 }
 
 .cart-item-card {
     background: white;
-    border-radius: 12px;
+    border-radius: 18px;
     padding: 12px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
     display: flex;
@@ -904,9 +896,12 @@ button:hover {
 }
 
 .brand-select {
-  padding: 14px;
-  border-radius: 12px;
+  padding: 11px 14px;
+  border-radius: 14px;
   border: 1px solid #d1d5db;
   background: white;
+  font-size: 14px;
   font-weight: 600;
+  color: #111827;
+  cursor: pointer;
 }
