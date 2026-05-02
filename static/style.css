@@ -92,7 +92,8 @@ body {
 }
 
 /* ── language: flex container for RU/UA buttons ── */
-.site-header .lang-switch {
+.site-header .lang-switch,
+.lang-switch {
     width: auto !important;
     height: auto !important;
     padding: 0 !important;
@@ -101,7 +102,7 @@ body {
     border: none !important;
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important;
+    gap: 8px !important;
 }
 
 /* ── cart: round icon button ── */
@@ -946,36 +947,6 @@ button:hover {
 /* ============================================================
    LANGUAGE SWITCHER BUTTONS
    ============================================================ */
-.lang-btn {
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.25) !important;
-    color: white !important;
-    border-radius: 999px !important;
-    padding: 9px 14px !important;
-    font-size: 13px !important;
-    font-weight: 700 !important;
-    cursor: pointer !important;
-    width: auto !important;
-    margin: 0 !important;
-    line-height: 1 !important;
-    opacity: 1 !important;
-    text-decoration: none !important;
-}
-
-.lang-btn:hover,
-.lang-btn.active {
-    background: white !important;
-    color: #111827 !important;
-    border-color: white !important;
-}
-
-.lang-sep {
-    opacity: 0.4;
-    font-size: 13px;
-    color: white;
-}
-
-/* ── site-lang-btn: RU/UA switcher (overrides global button green) ── */
 .site-lang-btn {
   background: rgba(255,255,255,0.08) !important;
   border: 1px solid rgba(255,255,255,0.25) !important;
@@ -995,4 +966,10 @@ button:hover {
   background: white !important;
   color: #111827 !important;
   border-color: white !important;
+}
+
+.lang-separator {
+  color: rgba(255,255,255,0.5);
+  font-weight: 700;
+  font-size: 13px;
 }
