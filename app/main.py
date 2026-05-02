@@ -3331,14 +3331,8 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
         "schedule": await db.get_setting("site_schedule") or "",
     }
 
-    site_title = await db.get_setting("site_title") or "Tech Store"
+    site_title = await db.get_setting("site_title") or "Technovlada"
     site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
-    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
-    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
-    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
-    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
-    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
-    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
@@ -3407,8 +3401,11 @@ async def product_page(request: Request, product_id: int):
         "schedule": await db.get_setting("site_schedule") or "",
     }
 
-    site_title = await db.get_setting("site_title") or "Tech Store"
+    site_title = await db.get_setting("site_title") or "Technovlada"
     site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
 
     return templates.TemplateResponse(
         request=request,
@@ -3435,7 +3432,7 @@ async def cart_page(request: Request):
         "address": await db.get_setting("site_address") or "",
         "schedule": await db.get_setting("site_schedule") or "",
     }
-    site_title = await db.get_setting("site_title") or "Tech Store"
+    site_title = await db.get_setting("site_title") or "Technovlada"
     site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"

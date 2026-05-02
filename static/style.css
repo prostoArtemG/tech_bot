@@ -51,14 +51,14 @@ body {
 
 /* ── right side: lang + cart only ── */
 .site-header .header-actions {
-    position: absolute;
-    top: 50%;
-    right: 24px;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 10px;
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    transform: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 8px !important;
 }
 
 /* base reset — no shared width */
@@ -93,25 +93,32 @@ body {
 
 /* ── language: compact auto-width ── */
 .site-header .lang-switch {
-    width: auto;
-    height: 30px;
+    width: 90px !important;
+    height: 38px !important;
     padding: 0 14px;
-    border-radius: 999px;
+    border-radius: 999px !important;
     background: rgba(255, 255, 255, 0.10);
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.04em;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 
 /* ── cart: round icon button ── */
 .site-header .cart-pill {
-    width: 44px;
-    height: 44px;
+    width: 90px !important;
+    height: 38px !important;
     padding: 0;
-    border-radius: 50%;
+    border-radius: 999px !important;
     background: #22c55e;
-    font-size: 20px;
+    font-size: 16px;
     color: white;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px;
 }
 
 .site-header .cart-pill span {
@@ -131,13 +138,13 @@ body {
     }
 
     .site-header .header-actions {
-        position: static;
-        transform: none;
-        flex-direction: row;
+        position: static !important;
+        transform: none !important;
+        flex-direction: row !important;
         flex-wrap: wrap;
-        justify-content: center;
-        align-items: center;
-        gap: 10px;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 10px !important;
         margin-top: 14px;
     }
 }
