@@ -4,7 +4,7 @@ function setLang(lang) {
 }
 
 function applyLang() {
-  var lang = localStorage.getItem('site_lang') || 'ru';
+  var lang = localStorage.getItem('site_lang') || 'uk';
 
   // Highlight active button
   document.querySelectorAll('.lang-btn').forEach(function(btn) {
@@ -22,4 +22,9 @@ function applyLang() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', applyLang);
+// Call immediately (DOM is already ready when script is at end of page)
+applyLang();
+// Also listen in case script is moved to <head>
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', applyLang);
+}
