@@ -7,7 +7,7 @@ function applyLang() {
   var lang = localStorage.getItem('site_lang') || 'uk';
 
   // Highlight active button
-  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+  document.querySelectorAll('.site-lang-btn').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.lang === lang);
   });
 

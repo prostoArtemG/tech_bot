@@ -974,3 +974,25 @@ button:hover {
     font-size: 13px;
     color: white;
 }
+
+/* ── site-lang-btn: RU/UA switcher (overrides global button green) ── */
+.site-lang-btn {
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.25) !important;
+  color: white !important;
+  border-radius: 999px !important;
+  padding: 9px 14px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  width: auto !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+.site-lang-btn:hover,
+.site-lang-btn.active {
+  background: white !important;
+  color: #111827 !important;
+  border-color: white !important;
+}
