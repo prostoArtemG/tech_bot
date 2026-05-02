@@ -879,3 +879,26 @@ button:hover {
         grid-template-columns: 1fr !important;
     }
 }
+
+@media (max-width: 1024px) {
+  .products-grid,
+  .products {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+    padding: 16px !important;
+  }
+
+  .card {
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .products-grid,
+  .products {
+    grid-template-columns: 1fr !important;
+  }
+}
