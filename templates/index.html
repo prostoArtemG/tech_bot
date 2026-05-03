@@ -74,18 +74,21 @@
     </section>
 
     <section class="search-box">
-        <form method="get" action="/">
-            <input type="text" name="q"
-                data-placeholder-ru="Поиск: Samsung, холодильник..."
-                data-placeholder-uk="Пошук: Samsung, холодильник..."
-                placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
-            <select name="brand" class="brand-select">
-              <option value="" data-ru="Все бренды" data-uk="Усі бренди">Все бренды</option>
-              {% for b in brands %}
-              <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
-              {% endfor %}
-            </select>
-            <div class="price-filters">
+        <form class="search-form" method="get" action="/">
+            <div class="search-main-row">
+                <input type="text" name="q"
+                    data-placeholder-ru="Поиск: Samsung, холодильник..."
+                    data-placeholder-uk="Пошук: Samsung, холодильник..."
+                    placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
+                <button type="submit" data-ru="Найти" data-uk="Знайти">Найти</button>
+            </div>
+            <div class="search-filters-row">
+                <select name="brand" class="brand-select">
+                  <option value="" data-ru="Все бренды" data-uk="Усі бренди">Все бренды</option>
+                  {% for b in brands %}
+                  <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
+                  {% endfor %}
+                </select>
                 <input type="number" name="price_min" class="price-input"
                     data-placeholder-ru="Цена от"
                     data-placeholder-uk="Ціна від"
@@ -94,12 +97,11 @@
                     data-placeholder-ru="Цена до"
                     data-placeholder-uk="Ціна до"
                     placeholder="Цена до" value="{{ price_max }}" min="0">
+                <label class="in-stock-label">
+                    <input type="checkbox" name="in_stock" value="1" {% if in_stock %}checked{% endif %}>
+                    <span data-ru="Только в наличии" data-uk="Тільки в наявності">Только в наличии</span>
+                </label>
             </div>
-            <label class="in-stock-label">
-                <input type="checkbox" name="in_stock" value="1" {% if in_stock %}checked{% endif %}>
-                <span data-ru="Только в наличии" data-uk="Тільки в наявності">Только в наличии</span>
-            </label>
-            <button type="submit" data-ru="Найти" data-uk="Знайти">Найти</button>
         </form>
     </section>
 
