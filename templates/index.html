@@ -38,6 +38,7 @@
             <div class="site-category-emoji">📦</div>
             <div class="site-category-title" data-ru="Все товары" data-uk="Всі товари">Все товары</div>
         </a>
+        {% set emoji_override = {'Нагреватели': '♨️', 'Вытяжки': '🌬️'} %}
         {% set uk_names = {
             'Холодильники': 'Холодильники',
             'Стиральные машины': 'Пральні машини',
@@ -67,7 +68,7 @@
         {% endif %}
 
         <a href="/?category={{ filter_name }}" class="site-category-card {% if current_category == filter_name %}active{% endif %}">
-            <div class="site-category-emoji">{{ cat.emoji }}</div>
+            <div class="site-category-emoji">{{ emoji_override[cat.name_ru] if cat.name_ru in emoji_override else cat.emoji }}</div>
             <div class="site-category-title" data-ru="{{ cat.name_ru }}" data-uk="{{ uk_names[cat.name_ru] if cat.name_ru in uk_names else cat.name_ru }}">{{ cat.name_ru }}</div>
         </a>
         {% endfor %}
