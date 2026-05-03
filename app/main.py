@@ -3295,10 +3295,12 @@ async def create_site_order(data: SiteOrderRequest):
 
 
 @web_app.get("/", response_class=HTMLResponse)
-async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = ""):
+async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = "", price_min: str = "", price_max: str = "", in_stock: str = ""):
     q = (q or "").strip()
     category = (category or "").strip()
     brand = (brand or "").strip()
+    price_min = (price_min or "").strip()
+    price_max = (price_max or "").strip()
 
     if q:
         products = await db.search_site_products(q)
@@ -3312,6 +3314,21 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
 
     if brand:
         products = [p for p in products if (p["brand"] or "") == brand]
+
+    if price_min:
+        try:
+            products = [p for p in products if float(p["price"] or 0) >= float(price_min)]
+        except ValueError:
+            pass
+
+    if price_max:
+        try:
+            products = [p for p in products if float(p["price"] or 0) <= float(price_max)]
+        except ValueError:
+            pass
+
+    if in_stock:
+        products = [p for p in products if (p["stock_qty"] or 0) > 0]
 
     per_page = 12
     total = len(products)
@@ -3350,6 +3367,9 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "pages": pages,
             "brands": brands,
             "current_brand": brand,
+            "price_min": price_min,
+            "price_max": price_max,
+            "in_stock": in_stock,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
