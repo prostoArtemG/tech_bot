@@ -1069,3 +1069,52 @@ button:hover {
     width: auto !important;
   }
 }
+
+/* ============================================================
+   SEARCH BLOCK OVERRIDE
+   ============================================================ */
+.search-main-row {
+  max-width: 900px !important;
+  margin: 0 auto !important;
+  display: grid !important;
+  grid-template-columns: minmax(300px, 1fr) 130px !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.search-main-row input {
+  width: 100% !important;
+  height: 48px !important;
+}
+
+.search-main-row button,
+.search-btn {
+  width: 130px !important;
+  min-width: 130px !important;
+  max-width: 130px !important;
+  height: 48px !important;
+  padding: 0 !important;
+}
+
+.search-filters-row {
+  max-width: 900px !important;
+  margin: 12px auto 0 !important;
+  display: flex !important;
+  gap: 10px !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+}
+
+@media (max-width: 768px) {
+  .search-main-row {
+    grid-template-columns: 1fr 110px !important;
+    padding: 0 14px !important;
+  }
+
+  .search-main-row button,
+  .search-btn {
+    width: 110px !important;
+    min-width: 110px !important;
+    max-width: 110px !important;
+  }
+}
