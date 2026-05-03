@@ -146,6 +146,11 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS sales (
             id SERIAL PRIMARY KEY,
             product_id INTEGER,
@@ -460,7 +465,7 @@ class Database:
     async def get_user_by_telegram_id(self, telegram_id: int):
         return await self.fetchrow(
             """
-            SELECT id, telegram_id, full_name, role, language
+            SELECT id, telegram_id, full_name, role, language, is_active
             FROM users
             WHERE telegram_id = $1
             """,
@@ -514,11 +519,42 @@ class Database:
     async def list_users(self):
         return await self.fetch(
             """
-            SELECT id, telegram_id, full_name, role
+            SELECT id, telegram_id, full_name, role, is_active
             FROM users
             ORDER BY id DESC
             """
         )
+
+    async def add_admin_by_telegram_id(self, telegram_id: int):
+        existing = await self.fetchrow(
+            "SELECT id FROM users WHERE telegram_id = $1",
+            telegram_id
+        )
+        if existing:
+            await self.execute(
+                "UPDATE users SET role = 'admin', is_active = TRUE WHERE telegram_id = $1",
+                telegram_id
+            )
+        else:
+            await self.execute(
+                """
+                INSERT INTO users (telegram_id, full_name, role, is_active)
+                VALUES ($1, NULL, 'admin', TRUE)
+                """,
+                telegram_id
+            )
+
+    async def deactivate_user_by_telegram_id(self, telegram_id: int):
+        await self.execute(
+            "UPDATE users SET is_active = FALSE WHERE telegram_id = $1",
+            telegram_id
+        )
+
+    async def count_active_admins(self) -> int:
+        row = await self.fetchrow(
+            "SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin' AND is_active = TRUE"
+        )
+        return int(row["cnt"]) if row else 0
 
     async def list_customers(self):
         return await self.fetch(

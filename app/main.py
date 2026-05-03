@@ -107,6 +107,14 @@ class UserRoleState(StatesGroup):
     waiting_for_role = State()
 
 
+class AddAdminState(StatesGroup):
+    waiting_for_tg_id = State()
+
+
+class DeleteUserState(StatesGroup):
+    waiting_for_tg_id = State()
+
+
 class EditProductState(StatesGroup):
     waiting_for_query = State()
     waiting_for_product_id = State()
@@ -419,6 +427,7 @@ users_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Список пользователей")],
         [KeyboardButton(text="🔁 Изменить роль")],
+        [KeyboardButton(text="➕ Добавить админа"), KeyboardButton(text="❌ Удалить пользователя")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -643,6 +652,9 @@ async def get_current_user_role(message: Message) -> str:
             telegram_id=message.from_user.id,
             full_name=message.from_user.full_name
         )
+        return "seller"
+
+    if not user.get("is_active", True):
         return "seller"
 
     return user["role"] or "seller"
@@ -2710,11 +2722,13 @@ async def list_users_handler(message: Message):
     lines = ["👥 Пользователи:\n"]
 
     for row in rows:
+        status = "✅ активен" if row.get("is_active", True) else "🚫 отключён"
         lines.append(
             f"ID: {row['id']}\n"
             f"Telegram ID: {row['telegram_id']}\n"
             f"Имя: {row['full_name'] or '-'}\n"
             f"Роль: {row['role']}\n"
+            f"Статус: {status}\n"
         )
 
     await message.answer("\n".join(lines), reply_markup=users_kb)
@@ -2784,6 +2798,86 @@ async def change_role_finish_handler(message: Message, state: FSMContext):
         f"✅ Роль обновлена\n\n"
         f"Telegram ID: {telegram_id}\n"
         f"Новая роль: {role}",
+        reply_markup=users_kb
+    )
+
+
+@router.message(lambda m: m.text == "➕ Добавить админа")
+async def add_admin_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.set_state(AddAdminState.waiting_for_tg_id)
+    await message.answer("Введите Telegram ID пользователя, которого нужно сделать админом:")
+
+
+@router.message(AddAdminState.waiting_for_tg_id)
+async def add_admin_finish_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if raw_id == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Раздел пользователей:", reply_markup=users_kb)
+        return
+
+    if not raw_id.isdigit():
+        await message.answer("Telegram ID должен быть числом. Введите ещё раз:")
+        return
+
+    telegram_id = int(raw_id)
+    await db.add_admin_by_telegram_id(telegram_id)
+    await state.clear()
+    await message.answer(
+        f"✅ Админ добавлен\n\nTelegram ID: {telegram_id}",
+        reply_markup=users_kb
+    )
+
+
+@router.message(lambda m: m.text == "❌ Удалить пользователя")
+async def delete_user_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    await state.set_state(DeleteUserState.waiting_for_tg_id)
+    await message.answer("Введите Telegram ID пользователя, которого нужно отключить:")
+
+
+@router.message(DeleteUserState.waiting_for_tg_id)
+async def delete_user_finish_handler(message: Message, state: FSMContext):
+    raw_id = (message.text or "").strip()
+
+    if raw_id == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Раздел пользователей:", reply_markup=users_kb)
+        return
+
+    if not raw_id.isdigit():
+        await message.answer("Telegram ID должен быть числом. Введите ещё раз:")
+        return
+
+    telegram_id = int(raw_id)
+
+    if telegram_id == message.from_user.id:
+        await message.answer("❌ Нельзя отключить самого себя.")
+        return
+
+    user = await db.get_user_by_telegram_id(telegram_id)
+    if not user:
+        await message.answer("Пользователь с таким Telegram ID не найден.")
+        return
+
+    if user["role"] == "admin":
+        active_admins = await db.count_active_admins()
+        if active_admins <= 1:
+            await message.answer("❌ Нельзя отключить последнего активного администратора.")
+            return
+
+    await db.deactivate_user_by_telegram_id(telegram_id)
+    await state.clear()
+    await message.answer(
+        f"✅ Пользователь отключён\n\n"
+        f"Telegram ID: {telegram_id}\n"
+        f"Имя: {user['full_name'] or '-'}",
         reply_markup=users_kb
     )
 
@@ -3026,6 +3120,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
 @router.message(lambda m: m.text not in {
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
+    "➕ Добавить админа", "❌ Удалить пользователя",
     "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
     "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⚠️ Мало остатков", "✏️ Редактировать товар", "🔍 Найти товар", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
