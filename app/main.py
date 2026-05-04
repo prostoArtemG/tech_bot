@@ -120,6 +120,8 @@ class EditProductState(StatesGroup):
     waiting_for_product_id = State()
     waiting_for_field = State()
     waiting_for_value = State()
+    waiting_for_category = State()
+    confirm_delete = State()
 
 
 class CurrencyRateState(StatesGroup):
@@ -472,7 +474,10 @@ edit_product_fields_kb = ReplyKeyboardMarkup(
 )
 
 
-def inline_edit_fields_kb():
+def inline_edit_fields_kb(product=None):
+    is_hidden = product and not product.get("is_active", True)
+    visibility_text = "👁 Показать товар" if is_hidden else "👁 Скрыть товар"
+    visibility_action = "show_product" if is_hidden else "hide_product"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -491,6 +496,14 @@ def inline_edit_fields_kb():
                 InlineKeyboardButton(text="Фото (URL)", callback_data="edit_field:photo_url"),
                 InlineKeyboardButton(text="Описание", callback_data="edit_field:description"),
                 InlineKeyboardButton(text="Характеристики", callback_data="edit_field:specs"),
+            ],
+            [
+                InlineKeyboardButton(text="📂 Изменить категорию", callback_data="edit_action:change_category"),
+                InlineKeyboardButton(text="🗑 Удалить фото", callback_data="edit_action:remove_photo"),
+            ],
+            [
+                InlineKeyboardButton(text=visibility_text, callback_data=f"edit_action:{visibility_action}"),
+                InlineKeyboardButton(text="❌ Удалить товар", callback_data="edit_action:soft_delete"),
             ],
             [
                 InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
@@ -2931,6 +2944,9 @@ async def edit_product_callback_handler(callback: CallbackQuery, state: FSMConte
     await state.update_data(product_id=product_id)
     await state.set_state(EditProductState.waiting_for_field)
 
+    visibility = "🙈 Скрыт" if not product.get("is_active", True) else "✅ Активен"
+    deleted = " | 🗑 Удалён" if product.get("deleted_at") else ""
+
     await callback.message.answer(
         f"Товар:\n"
         f"ID: {product['id']}\n"
@@ -2938,11 +2954,88 @@ async def edit_product_callback_handler(callback: CallbackQuery, state: FSMConte
         f"{await t(callback.message, 'price')}: {float(product['price'] or 0):.2f} грн\n"
         f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
         f"Артикул: {product['sku'] or '-'}\n"
-        f"{await t(callback.message, 'warranty')}: {product['warranty_months'] or 0} мес\n\n"
+        f"{await t(callback.message, 'warranty')}: {product['warranty_months'] or 0} мес\n"
+        f"Статус: {visibility}{deleted}\n\n"
         "Что изменить?",
-        reply_markup=inline_edit_fields_kb()
+        reply_markup=inline_edit_fields_kb(product)
     )
 
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("edit_action:"))
+async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
+    action = callback.data.split(":")[1]
+    data = await state.get_data()
+    product_id = data.get("product_id")
+
+    if not product_id:
+        await callback.answer("Нет выбранного товара.")
+        return
+
+    if action == "change_category":
+        categories = await db.get_categories()
+        if not categories:
+            await callback.answer("Категории не найдены.")
+            return
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=cat, callback_data=f"set_category:{cat}")]
+                for cat in categories
+            ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
+        )
+        await state.set_state(EditProductState.waiting_for_category)
+        await callback.message.answer("Выберите новую категорию:", reply_markup=keyboard)
+        await callback.answer()
+        return
+
+    if action == "remove_photo":
+        await db.remove_product_photo(product_id)
+        await state.clear()
+        await callback.message.answer("🗑 Фото удалено.", reply_markup=products_kb)
+        await callback.answer()
+        return
+
+    if action == "hide_product":
+        await db.hide_product(product_id)
+        await state.clear()
+        await callback.message.answer("👁 Товар скрыт с сайта.", reply_markup=products_kb)
+        await callback.answer()
+        return
+
+    if action == "show_product":
+        await db.show_product(product_id)
+        await state.clear()
+        await callback.message.answer("✅ Товар снова виден на сайте.", reply_markup=products_kb)
+        await callback.answer()
+        return
+
+    if action == "soft_delete":
+        await db.soft_delete_product(product_id)
+        await state.clear()
+        await callback.message.answer("🗑 Товар удалён (скрыт из базы).", reply_markup=products_kb)
+        await callback.answer()
+        return
+
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("set_category:"))
+async def set_category_callback(callback: CallbackQuery, state: FSMContext):
+    category = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    product_id = data.get("product_id")
+
+    if not product_id:
+        await callback.answer("Нет выбранного товара.")
+        return
+
+    await db.update_product_category(product_id, category)
+    await state.clear()
+    await callback.message.answer(
+        f"✅ Категория обновлена: {category}",
+        reply_markup=products_kb
+    )
     await callback.answer()
 
 

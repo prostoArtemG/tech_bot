@@ -120,6 +120,16 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL;
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
@@ -333,6 +343,8 @@ class Database:
                 warranty_months, photo_url, description, availability_status
             FROM products
             WHERE COALESCE(availability_status, 'in_stock') != 'hidden'
+              AND COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
               AND (
                 LOWER(COALESCE(category, '')) LIKE LOWER($1)
                 OR LOWER(COALESCE(brand, '')) LIKE LOWER($1)
@@ -358,7 +370,7 @@ class Database:
             SELECT
                 id, category, brand, model, price, stock_qty,
                 purchase_price, purchase_currency, sku, warranty_months,
-                photo_url, description, specs
+                photo_url, description, specs, is_active, deleted_at
             FROM products
             WHERE id = $1
             """,
@@ -421,6 +433,37 @@ class Database:
             """,
             product_id,
             value
+        )
+
+    async def update_product_category(self, product_id: int, category: str):
+        await self.execute(
+            "UPDATE products SET category = $2 WHERE id = $1",
+            product_id,
+            category
+        )
+
+    async def remove_product_photo(self, product_id: int):
+        await self.execute(
+            "UPDATE products SET photo_url = NULL WHERE id = $1",
+            product_id
+        )
+
+    async def hide_product(self, product_id: int):
+        await self.execute(
+            "UPDATE products SET is_active = FALSE WHERE id = $1",
+            product_id
+        )
+
+    async def show_product(self, product_id: int):
+        await self.execute(
+            "UPDATE products SET is_active = TRUE WHERE id = $1",
+            product_id
+        )
+
+    async def soft_delete_product(self, product_id: int):
+        await self.execute(
+            "UPDATE products SET deleted_at = NOW() WHERE id = $1",
+            product_id
         )
 
     async def create_purchase(self, product_id: int, qty: int, purchase_price: float):
