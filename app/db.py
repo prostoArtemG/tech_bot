@@ -321,6 +321,20 @@ class Database:
             """
         )
 
+    async def list_site_products(self):
+        return await self.fetch(
+            """
+            SELECT
+                id, category, brand, model, price, stock_qty,
+                warranty_months, photo_url, description, availability_status
+            FROM products
+            WHERE COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
+              AND COALESCE(availability_status, 'in_stock') != 'hidden'
+            ORDER BY id DESC
+            """
+        )
+
     async def search_products(self, query: str):
         return await self.fetch(
             """
@@ -462,7 +476,7 @@ class Database:
 
     async def soft_delete_product(self, product_id: int):
         await self.execute(
-            "UPDATE products SET deleted_at = NOW() WHERE id = $1",
+            "UPDATE products SET deleted_at = NOW(), is_active = FALSE WHERE id = $1",
             product_id
         )
 

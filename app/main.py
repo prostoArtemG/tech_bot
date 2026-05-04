@@ -3493,7 +3493,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     if q:
         products = await db.search_site_products(q)
     else:
-        products = await db.list_products()
+        products = await db.list_site_products()
 
     brands = sorted(set([p["brand"] for p in products if p["brand"]]))
 
@@ -3599,6 +3599,9 @@ async def product_page(request: Request, product_id: int):
 
     if not product:
         return HTMLResponse("Товар не найден", status_code=404)
+
+    if not product.get("is_active", True) or product.get("deleted_at") is not None:
+        return HTMLResponse("Товар недоступен", status_code=404)
 
     images = await db.get_product_images(product_id)
     site_contacts = {
