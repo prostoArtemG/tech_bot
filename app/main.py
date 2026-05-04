@@ -59,6 +59,11 @@ class SiteOrderRequest(BaseModel):
     city: str | None = None
     comment: str | None = None
 
+
+class SiteEventRequest(BaseModel):
+    event_type: str
+    product_id: int | None = None
+
 templates = Jinja2Templates(directory="templates")
 web_app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -368,6 +373,7 @@ site_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📂 Категории сайта")],
         [KeyboardButton(text="✏️ Редактировать товар")],
         [KeyboardButton(text="🌐 Язык сайта")],
+        [KeyboardButton(text="📊 Аналитика сайта")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1604,6 +1610,34 @@ async def site_photos_handler(message: Message, state: FSMContext):
 @router.message(lambda m: m.text == "🌐 Язык сайта")
 async def site_language_handler(message: Message, state: FSMContext):
     await message.answer("Здесь будет настройка языка сайта RU / UA.")
+
+
+@router.message(lambda m: m.text == "📊 Аналитика сайта")
+async def site_analytics_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    stats = await db.get_site_analytics_today()
+    top = await db.get_top_site_products(limit=10)
+
+    views = int(stats["views"] or 0) if stats else 0
+    cart_adds = int(stats["cart_adds"] or 0) if stats else 0
+    orders = int(stats["orders"] or 0) if stats else 0
+
+    lines = [
+        "📊 Аналитика сайта за сегодня\n",
+        f"👁 Просмотры товаров: {views}",
+        f"🛒 Добавлений в корзину: {cart_adds}",
+        f"🧾 Заказов: {orders}",
+    ]
+
+    if top:
+        lines.append("\n🔥 Популярные товары:")
+        for i, row in enumerate(top, start=1):
+            lines.append(f"{i}. {row['product_name'].strip()} — {row['views']} просмотров")
+
+    await message.answer("\n".join(lines), reply_markup=site_kb)
+
 
 
 @router.message(lambda m: m.text in {"👤 Клиенты", "👤 Клієнти"})
@@ -3228,6 +3262,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "🛒 Корзина: вкл/выкл",
     "📞 Контакты: вкл/выкл",
     "🌐 Язык: вкл/выкл",
+    "📊 Аналитика сайта",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -3482,6 +3517,19 @@ async def create_site_order(data: SiteOrderRequest):
     }
 
 
+@web_app.post("/api/site-event")
+async def api_site_event(data: SiteEventRequest):
+    allowed = {"product_view", "add_to_cart", "site_order"}
+    event_type = (data.event_type or "").strip()
+    if event_type not in allowed:
+        return {"ok": False, "error": "unknown_event"}
+    try:
+        await db.add_site_event(event_type, data.product_id)
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @web_app.get("/", response_class=HTMLResponse)
 async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = "", price_min: str = "", price_max: str = "", in_stock: str = ""):
     q = (q or "").strip()
@@ -3603,6 +3651,12 @@ async def product_page(request: Request, product_id: int):
     if not product.get("is_active", True) or product.get("deleted_at") is not None:
         return HTMLResponse("Товар недоступен", status_code=404)
 
+    # track view event (fire-and-forget, do not fail on error)
+    try:
+        await db.add_site_event("product_view", product_id)
+    except Exception:
+        pass
+
     images = await db.get_product_images(product_id)
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
@@ -3693,6 +3747,11 @@ async def api_cart_order(request: Request):
         total_sum += total
 
         await db.create_order(customer_id=customer['id'], product_id=pid, qty=qty, total_amount=total, comment=comment)
+
+        try:
+            await db.add_site_event("site_order", pid)
+        except Exception:
+            pass
 
         lines.append(f"{idx}) {prod.get('brand') or ''} {prod.get('model') or ''} — {qty} шт — {int(total)} грн")
 

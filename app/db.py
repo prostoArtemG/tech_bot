@@ -277,6 +277,15 @@ class Database:
         );
         """)
 
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS site_events (
+            id SERIAL PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            product_id INTEGER,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -889,6 +898,48 @@ class Database:
             "EUR": float(eur),
             "UAH": 1.0,
         }
+
+    # ── site events ──────────────────────────────────────────
+    async def add_site_event(self, event_type: str, product_id: int | None = None):
+        await self.execute(
+            """
+            INSERT INTO site_events (event_type, product_id)
+            VALUES ($1, $2)
+            """,
+            event_type,
+            product_id,
+        )
+
+    async def get_site_analytics_today(self):
+        return await self.fetchrow(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE event_type = 'product_view') AS views,
+                COUNT(*) FILTER (WHERE event_type = 'add_to_cart')  AS cart_adds,
+                COUNT(*) FILTER (WHERE event_type = 'site_order')   AS orders
+            FROM site_events
+            WHERE created_at::date = CURRENT_DATE
+            """
+        )
+
+    async def get_top_site_products(self, limit: int = 10):
+        return await self.fetch(
+            """
+            SELECT
+                se.product_id,
+                COALESCE(p.brand, '') || ' ' || COALESCE(p.model, '') AS product_name,
+                COUNT(*) AS views
+            FROM site_events se
+            LEFT JOIN products p ON p.id = se.product_id
+            WHERE se.event_type = 'product_view'
+              AND se.created_at::date = CURRENT_DATE
+              AND se.product_id IS NOT NULL
+            GROUP BY se.product_id, product_name
+            ORDER BY views DESC
+            LIMIT $1
+            """,
+            limit,
+        )
 
     async def create_warranty(self, sale_id: int, product_id: int, customer_id: int, warranty_months: int):
         await self.execute(

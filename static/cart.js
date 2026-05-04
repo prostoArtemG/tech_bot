@@ -39,6 +39,15 @@ function addToCart(id, name, price) {
 
   saveCart(cart);
   showToast("Товар добавлен в корзину");
+
+  // track analytics event (fire-and-forget)
+  try {
+    fetch('/api/site-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_type: 'add_to_cart', product_id: Number(id) })
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 function updateCartCount() {
