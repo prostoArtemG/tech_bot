@@ -130,6 +130,26 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS current_price NUMERIC(12,2);
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS old_price NUMERIC(12,2);
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS is_sale BOOLEAN NOT NULL DEFAULT FALSE;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS stock_status TEXT NOT NULL DEFAULT 'in_stock';
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
@@ -324,7 +344,8 @@ class Database:
             SELECT
                 id, category, brand, model, price, stock_qty,
                 purchase_price, purchase_currency, sku, warranty_months,
-                photo_url, description, specs
+                photo_url, description, specs,
+                current_price, old_price, is_sale, stock_status
             FROM products
             ORDER BY id DESC
             """
@@ -335,7 +356,8 @@ class Database:
             """
             SELECT
                 id, category, brand, model, price, stock_qty,
-                warranty_months, photo_url, description, availability_status
+                warranty_months, photo_url, description, availability_status,
+                current_price, old_price, is_sale, stock_status
             FROM products
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
@@ -363,7 +385,8 @@ class Database:
             """
             SELECT
                 id, category, brand, model, price, stock_qty,
-                warranty_months, photo_url, description, availability_status
+                warranty_months, photo_url, description, availability_status,
+                current_price, old_price, is_sale, stock_status
             FROM products
             WHERE COALESCE(availability_status, 'in_stock') != 'hidden'
               AND COALESCE(is_active, TRUE) = TRUE
@@ -393,7 +416,8 @@ class Database:
             SELECT
                 id, category, brand, model, price, stock_qty,
                 purchase_price, purchase_currency, sku, warranty_months,
-                photo_url, description, specs, is_active, deleted_at
+                photo_url, description, specs, is_active, deleted_at,
+                current_price, old_price, is_sale, stock_status
             FROM products
             WHERE id = $1
             """,
@@ -459,6 +483,10 @@ class Database:
             "photo_url",
             "description",
             "specs",
+            "current_price",
+            "old_price",
+            "is_sale",
+            "stock_status",
         }
 
         if field not in allowed_fields:

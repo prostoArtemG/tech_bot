@@ -62,17 +62,29 @@
                 <div class="product-meta">
                     <div class="category">{{ product.category }}</div>
                     <div class="status">
-                        {% if product.stock_qty > 0 %}
-                            <span data-ru="В наличии" data-uk="В наявності">В наличии</span>
+                        {% set ss = product.stock_status or 'in_stock' %}
+                        {% if ss == 'out_of_stock' %}
+                            <span class="stock-badge stock-out" data-ru="🔴 Нет в наличии" data-uk="🔴 Немає в наявності">🔴 Нет в наличии</span>
+                        {% elif ss == 'preorder' %}
+                            <span class="stock-badge stock-preorder" data-ru="🟡 Под заказ" data-uk="🟡 Під замовлення">🟡 Под заказ</span>
                         {% else %}
-                            <span data-ru="Под заказ" data-uk="Під замовлення">Под заказ</span>
+                            <span class="stock-badge stock-in" data-ru="🟢 В наличии" data-uk="🟢 В наявності">🟢 В наличии</span>
                         {% endif %}
                     </div>
                 </div>
 
                 <h1 class="product-title">{{ product.brand }} {{ product.model }}</h1>
 
-                <div class="price">{{ product.price }} грн</div>
+                {% set cur_price = product.current_price or product.price %}
+                <div class="price-block">
+                    {% if product.is_sale %}
+                    <span class="sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></span>
+                    {% endif %}
+                    <div class="price">{{ cur_price }} грн</div>
+                    {% if product.is_sale and product.old_price %}
+                    <div class="old-price">{{ product.old_price }} грн</div>
+                    {% endif %}
+                </div>
 
                 <div class="product-info-meta">
                     <div class="info"><span data-ru="Остаток:" data-uk="Залишок:">Остаток:</span> {{ product.stock_qty }}</div>

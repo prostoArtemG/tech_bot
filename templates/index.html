@@ -111,6 +111,9 @@
     <main class="products products-grid">
         {% for product in products %}
         <div class="card">
+            {% if product.is_sale %}
+            <div class="card-sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></div>
+            {% endif %}
             {% if product.photo_url %}
             <img src="{{ product.photo_url }}" class="product-img">
             {% else %}
@@ -122,19 +125,28 @@
             <h2>{{ product.brand }} {{ product.model }}</h2>
 
             <div class="status">
-                {% if product.stock_qty > 0 %}
-                    <span data-ru="В наличии" data-uk="В наявності">В наличии</span>
+                {% set ss = product.stock_status or 'in_stock' %}
+                {% if ss == 'out_of_stock' %}
+                    <span class="stock-badge stock-out" data-ru="🔴 Нет в наличии" data-uk="🔴 Немає в наявності">🔴 Нет в наличии</span>
+                {% elif ss == 'preorder' %}
+                    <span class="stock-badge stock-preorder" data-ru="🟡 Под заказ" data-uk="🟡 Під замовлення">🟡 Под заказ</span>
                 {% else %}
-                    <span data-ru="Под заказ" data-uk="Під замовлення">Под заказ</span>
+                    <span class="stock-badge stock-in" data-ru="🟢 В наличии" data-uk="🟢 В наявності">🟢 В наличии</span>
                 {% endif %}
             </div>
 
-            <p class="price">{{ product.price }} грн</p>
+            {% set cur_price = product.current_price or product.price %}
+            <div class="price-block">
+                <p class="price">{{ cur_price }} грн</p>
+                {% if product.is_sale and product.old_price %}
+                <p class="old-price">{{ product.old_price }} грн</p>
+                {% endif %}
+            </div>
 
             <p class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</p>
 
             <a href="/product/{{ product.id }}" class="details-btn" data-ru="Подробнее" data-uk="Детальніше">Подробнее</a>
-            <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')">🛒 <span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
+            <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ cur_price }}')">🛒 <span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
         </div>
         {% endfor %}
     </main>

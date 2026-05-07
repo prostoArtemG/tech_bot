@@ -473,6 +473,18 @@ def inline_edit_fields_kb(product=None):
     is_hidden = product and not product.get("is_active", True)
     visibility_text = "👁 Показать товар" if is_hidden else "👁 Скрыть товар"
     visibility_action = "show_product" if is_hidden else "hide_product"
+
+    is_sale = bool(product and product.get("is_sale"))
+    sale_text = "🔥 Акция: ВКЛ" if is_sale else "🔥 Акция: ВЫКЛ"
+
+    stock_status = (product and product.get("stock_status")) or "in_stock"
+    status_labels = {
+        "in_stock": "🟢 В наличии",
+        "preorder": "🟡 Под заказ",
+        "out_of_stock": "🔴 Нет в наличии",
+    }
+    status_text = f"📦 Статус: {status_labels.get(stock_status, stock_status)}"
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -491,6 +503,13 @@ def inline_edit_fields_kb(product=None):
                 InlineKeyboardButton(text="Фото (URL)", callback_data="edit_field:photo_url"),
                 InlineKeyboardButton(text="Описание", callback_data="edit_field:description"),
                 InlineKeyboardButton(text="Характеристики", callback_data="edit_field:specs"),
+            ],
+            [
+                InlineKeyboardButton(text="💰 Старая цена", callback_data="edit_field:old_price"),
+                InlineKeyboardButton(text=sale_text, callback_data="edit_action:toggle_sale"),
+            ],
+            [
+                InlineKeyboardButton(text=status_text, callback_data="edit_action:cycle_stock_status"),
             ],
             [
                 InlineKeyboardButton(text="📂 Изменить категорию", callback_data="edit_action:change_category"),
@@ -519,6 +538,7 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
         "photo_url": "Фото",
         "description": "Описание",
         "specs": "Характеристики",
+        "old_price": "Старая цена",
     }
 
     await state.update_data(field=field, field_title=field_titles[field])
@@ -529,6 +549,10 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
     elif field == "specs":
         await callback.message.answer(
             "Введите характеристики в формате:\nОбъём: 80 л\nТип: сушильная машина\nЗагрузка: 8 кг"
+        )
+    elif field == "old_price":
+        await callback.message.answer(
+            "Введите старую цену (число, грн).\nОтправьте «-» чтобы очистить."
         )
     else:
         await callback.message.answer(f"Введите новое значение для поля: {field_titles[field]}")
@@ -3001,6 +3025,47 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    if action == "toggle_sale":
+        product = await db.get_product_by_id(product_id)
+        if not product:
+            await callback.answer("Товар не найден.")
+            return
+        new_value = not bool(product.get("is_sale"))
+        await db.update_product_field(product_id, "is_sale", new_value)
+        product = await db.get_product_by_id(product_id)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=inline_edit_fields_kb(product))
+        except Exception:
+            pass
+        await callback.answer("🔥 Акция включена" if new_value else "Акция выключена")
+        return
+
+    if action == "cycle_stock_status":
+        product = await db.get_product_by_id(product_id)
+        if not product:
+            await callback.answer("Товар не найден.")
+            return
+        order = ["in_stock", "preorder", "out_of_stock"]
+        current = product.get("stock_status") or "in_stock"
+        try:
+            idx = order.index(current)
+        except ValueError:
+            idx = 0
+        new_status = order[(idx + 1) % len(order)]
+        await db.update_product_field(product_id, "stock_status", new_status)
+        product = await db.get_product_by_id(product_id)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=inline_edit_fields_kb(product))
+        except Exception:
+            pass
+        labels = {
+            "in_stock": "🟢 В наличии",
+            "preorder": "🟡 Под заказ",
+            "out_of_stock": "🔴 Нет в наличии",
+        }
+        await callback.answer(f"Статус: {labels[new_status]}")
+        return
+
     if action == "hide_product":
         await db.hide_product(product_id)
         await state.clear()
@@ -3311,6 +3376,16 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
         except ValueError:
             await message.answer(await t(message, "enter_number"))
             return
+
+    elif field == "old_price":
+        if value == "-" or value == "":
+            value = None
+        else:
+            try:
+                value = float(value.replace(",", "."))
+            except ValueError:
+                await message.answer(await t(message, "enter_number"))
+                return
 
     elif field == "warranty_months":
         if not value.isdigit():
