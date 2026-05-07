@@ -485,45 +485,55 @@ def inline_edit_fields_kb(product=None):
     }
     status_text = f"📦 Статус: {status_labels.get(stock_status, stock_status)}"
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Цена продажи", callback_data="edit_field:price"),
-                InlineKeyboardButton(text="Закупка", callback_data="edit_field:purchase_price"),
-            ],
-            [
-                InlineKeyboardButton(text="Валюта закупки", callback_data="edit_field:purchase_currency"),
-                InlineKeyboardButton(text="Артикул", callback_data="edit_field:sku"),
-            ],
-            [
-                InlineKeyboardButton(text="Гарантия", callback_data="edit_field:warranty_months"),
-                InlineKeyboardButton(text="Модель", callback_data="edit_field:model"),
-            ],
-            [
-                InlineKeyboardButton(text="Фото (URL)", callback_data="edit_field:photo_url"),
-                InlineKeyboardButton(text="Описание", callback_data="edit_field:description"),
-                InlineKeyboardButton(text="Характеристики", callback_data="edit_field:specs"),
-            ],
-            [
-                InlineKeyboardButton(text="💰 Старая цена", callback_data="edit_field:old_price"),
-                InlineKeyboardButton(text=sale_text, callback_data="edit_action:toggle_sale"),
-            ],
-            [
-                InlineKeyboardButton(text=status_text, callback_data="edit_action:cycle_stock_status"),
-            ],
-            [
-                InlineKeyboardButton(text="📂 Изменить категорию", callback_data="edit_action:change_category"),
-                InlineKeyboardButton(text="� Управление фото", callback_data="edit_action:manage_photos"),
-            ],
-            [
-                InlineKeyboardButton(text=visibility_text, callback_data=f"edit_action:{visibility_action}"),
-                InlineKeyboardButton(text="❌ Удалить товар", callback_data="edit_action:soft_delete"),
-            ],
-            [
-                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
-            ],
-        ]
-    )
+    rows = [
+        [
+            InlineKeyboardButton(text="Цена продажи", callback_data="edit_field:price"),
+            InlineKeyboardButton(text="Закупка", callback_data="edit_field:purchase_price"),
+        ],
+        [
+            InlineKeyboardButton(text="Валюта закупки", callback_data="edit_field:purchase_currency"),
+            InlineKeyboardButton(text="Артикул", callback_data="edit_field:sku"),
+        ],
+        [
+            InlineKeyboardButton(text="Гарантия", callback_data="edit_field:warranty_months"),
+            InlineKeyboardButton(text="Модель", callback_data="edit_field:model"),
+        ],
+        [
+            InlineKeyboardButton(text="Фото (URL)", callback_data="edit_field:photo_url"),
+            InlineKeyboardButton(text="Описание", callback_data="edit_field:description"),
+            InlineKeyboardButton(text="Характеристики", callback_data="edit_field:specs"),
+        ],
+        [
+            InlineKeyboardButton(text="💰 Старая цена", callback_data="edit_field:old_price"),
+            InlineKeyboardButton(text=sale_text, callback_data="edit_action:toggle_sale"),
+        ],
+        [
+            InlineKeyboardButton(text=status_text, callback_data="edit_action:cycle_stock_status"),
+        ],
+    ]
+
+    category = (product or {}).get("category") if product else None
+    if category and "Бойлер" in str(category):
+        rows.append([
+            InlineKeyboardButton(text="🚿 Объем бойлера", callback_data="edit_field:boiler_volume_liters"),
+            InlineKeyboardButton(text="🔥 Тип тена", callback_data="edit_action:set_ten_type"),
+        ])
+
+    rows.extend([
+        [
+            InlineKeyboardButton(text="📂 Изменить категорию", callback_data="edit_action:change_category"),
+            InlineKeyboardButton(text="🖼 Управление фото", callback_data="edit_action:manage_photos"),
+        ],
+        [
+            InlineKeyboardButton(text=visibility_text, callback_data=f"edit_action:{visibility_action}"),
+            InlineKeyboardButton(text="❌ Удалить товар", callback_data="edit_action:soft_delete"),
+        ],
+        [
+            InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
+        ],
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 @router.callback_query(lambda c: c.data and c.data.startswith("edit_field:"))
 async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
     field = callback.data.split(":")[1]
@@ -539,6 +549,7 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
         "description": "Описание",
         "specs": "Характеристики",
         "old_price": "Старая цена",
+        "boiler_volume_liters": "Объем бойлера (л)",
     }
 
     await state.update_data(field=field, field_title=field_titles[field])
@@ -553,6 +564,10 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
     elif field == "old_price":
         await callback.message.answer(
             "Введите старую цену (число, грн).\nОтправьте «-» чтобы очистить."
+        )
+    elif field == "boiler_volume_liters":
+        await callback.message.answer(
+            "Введите объем бойлера в литрах (число): 50, 80, 100, 120 ...\nОтправьте «-» чтобы очистить."
         )
     else:
         await callback.message.answer(f"Введите новое значение для поля: {field_titles[field]}")
@@ -3073,6 +3088,21 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    if action == "set_ten_type":
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="💧 Мокрый", callback_data="set_ten:wet"),
+                    InlineKeyboardButton(text="🌵 Сухой", callback_data="set_ten:dry"),
+                ],
+                [InlineKeyboardButton(text="❌ Очистить", callback_data="set_ten:clear")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back_to_edit:{product_id}")],
+            ]
+        )
+        await callback.message.answer("Выберите тип тена:", reply_markup=kb)
+        await callback.answer()
+        return
+
     if action == "show_product":
         await db.show_product(product_id)
         await state.clear()
@@ -3215,6 +3245,44 @@ async def back_to_edit_callback(callback: CallbackQuery, state: FSMContext):
         reply_markup=inline_edit_fields_kb(product)
     )
     await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("set_ten:"))
+async def set_ten_callback(callback: CallbackQuery, state: FSMContext):
+    choice = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    product_id = data.get("product_id")
+
+    if not product_id:
+        await callback.answer("Нет выбранного товара.")
+        return
+
+    if choice == "clear":
+        new_value = None
+        label = "очищен"
+    elif choice in {"wet", "dry"}:
+        new_value = choice
+        label = "💧 Мокрый" if choice == "wet" else "🌵 Сухой"
+    else:
+        await callback.answer("Неизвестный тип.")
+        return
+
+    await db.update_product_field(product_id, "boiler_ten_type", new_value)
+    await callback.answer(f"Тип тена: {label}")
+
+    product = await db.get_product_by_id(product_id)
+    await callback.message.answer(
+        f"✅ Тип тена обновлён.",
+        reply_markup=None
+    )
+    # show edit card again
+    await callback.message.answer(
+        f"Товар:\n"
+        f"ID: {product['id']}\n"
+        f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n\n"
+        "Что изменить?",
+        reply_markup=inline_edit_fields_kb(product)
+    )
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("set_category:"))

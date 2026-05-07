@@ -91,6 +91,32 @@
                     <div class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</div>
                 </div>
 
+                {% if product.category and 'Бойлер' in product.category and (product.boiler_volume_liters or product.boiler_ten_type) %}
+                <div class="specs-box">
+                    <h3 data-ru="Характеристики бойлера" data-uk="Характеристики бойлера">Характеристики бойлера</h3>
+                    {% if product.boiler_volume_liters %}
+                    <div class="spec-row">
+                        <span data-ru="Объем" data-uk="Об'єм">Объем</span>
+                        <b>{{ product.boiler_volume_liters }} <span data-ru="л" data-uk="л">л</span></b>
+                    </div>
+                    {% endif %}
+                    {% if product.boiler_ten_type %}
+                    <div class="spec-row">
+                        <span data-ru="Тип тена" data-uk="Тип тена">Тип тена</span>
+                        <b>
+                            {% if product.boiler_ten_type == 'wet' %}
+                                <span data-ru="💧 Мокрый" data-uk="💧 Мокрий">💧 Мокрый</span>
+                            {% elif product.boiler_ten_type == 'dry' %}
+                                <span data-ru="🌵 Сухой" data-uk="🌵 Сухий">🌵 Сухой</span>
+                            {% else %}
+                                {{ product.boiler_ten_type }}
+                            {% endif %}
+                        </b>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
                                 {% if product.specs %}
                                 <div class="specs-box">
                                     <h3>Характеристики</h3>

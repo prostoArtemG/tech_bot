@@ -150,6 +150,16 @@ class Database:
         """)
 
         await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS boiler_volume_liters INTEGER;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS boiler_ten_type TEXT;
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
@@ -417,7 +427,8 @@ class Database:
                 id, category, brand, model, price, stock_qty,
                 purchase_price, purchase_currency, sku, warranty_months,
                 photo_url, description, specs, is_active, deleted_at,
-                current_price, old_price, is_sale, stock_status
+                current_price, old_price, is_sale, stock_status,
+                boiler_volume_liters, boiler_ten_type
             FROM products
             WHERE id = $1
             """,
@@ -487,6 +498,8 @@ class Database:
             "old_price",
             "is_sale",
             "stock_status",
+            "boiler_volume_liters",
+            "boiler_ten_type",
         }
 
         if field not in allowed_fields:
