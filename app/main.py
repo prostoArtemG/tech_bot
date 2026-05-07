@@ -404,6 +404,42 @@ site_banner_kb = ReplyKeyboardMarkup(
 )
 
 
+payment_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📅 Подписка")],
+        [KeyboardButton(text="🌐 Домен")],
+        [KeyboardButton(text="🧾 История оплат")],
+        [KeyboardButton(text="📞 Связаться")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+payment_subscription_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="💰 Оплатить подписку")],
+        [KeyboardButton(text="⬅️ Назад в оплату")],
+    ],
+    resize_keyboard=True
+)
+
+
+payment_domain_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="💰 Оплатить домен")],
+        [KeyboardButton(text="⬅️ Назад в оплату")],
+    ],
+    resize_keyboard=True
+)
+
+
+payment_back_kb = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="⬅️ Назад в оплату")]],
+    resize_keyboard=True
+)
+
+
 site_contacts_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Показать контакты")],
@@ -754,6 +790,9 @@ async def get_main_menu_for_user(message: Message):
                 ],
                 [
                     KeyboardButton(text="🌐 Сайт"),
+                    KeyboardButton(text="💳 Оплата"),
+                ],
+                [
                     KeyboardButton(text=await t(message, "language")),
                 ],
                 [
@@ -772,6 +811,9 @@ async def get_main_menu_for_user(message: Message):
             ],
             [
                 KeyboardButton(text="🌐 Сайт"),
+                KeyboardButton(text="💳 Оплата"),
+            ],
+            [
                 KeyboardButton(text=await t(message, "language")),
             ],
             [KeyboardButton(text="❌ Сброс")],
@@ -789,6 +831,9 @@ async def get_main_menu(message: Message):
             ],
             [
                 KeyboardButton(text="🌐 Сайт"),
+                KeyboardButton(text="💳 Оплата"),
+            ],
+            [
                 KeyboardButton(text=await t(message, "language")),
             ],
         ],
@@ -1408,6 +1453,88 @@ async def site_banner_reset(message: Message):
     await db.set_setting("banner_image_url", "")
     await db.set_setting("banner_enabled", "false")
     await message.answer("✅ Баннер сброшен.", reply_markup=site_banner_kb)
+
+
+# ===== Payment section =====
+
+PAYMENT_DEFAULTS = {
+    "pay_sub_status": "active",
+    "pay_sub_expires": "—",
+    "pay_sub_plan": "Базовый",
+    "pay_sub_price": "10$/мес",
+    "pay_domain_name": "—",
+    "pay_domain_status": "—",
+    "pay_domain_expires": "—",
+    "pay_support_tg": "@support",
+    "pay_support_phone": "—",
+    "pay_support_text": "Если есть вопросы по оплате — напишите нам.",
+}
+
+
+async def get_payment_info():
+    out = {}
+    for key, default in PAYMENT_DEFAULTS.items():
+        out[key] = (await db.get_setting(key)) or default
+    return out
+
+
+@router.message(lambda m: m.text == "💳 Оплата")
+async def payment_menu_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("💳 Раздел оплаты:", reply_markup=payment_kb)
+
+
+@router.message(lambda m: m.text == "⬅️ Назад в оплату")
+async def payment_back_handler(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("💳 Раздел оплаты:", reply_markup=payment_kb)
+
+
+@router.message(lambda m: m.text == "📅 Подписка")
+async def payment_subscription_handler(message: Message):
+    info = await get_payment_info()
+    await message.answer(
+        "📅 Подписка\n\n"
+        f"Статус: {info['pay_sub_status']}\n"
+        f"Дата окончания: {info['pay_sub_expires']}\n"
+        f"Тариф: {info['pay_sub_plan']}\n"
+        f"Стоимость: {info['pay_sub_price']}",
+        reply_markup=payment_subscription_kb
+    )
+
+
+@router.message(lambda m: m.text == "🌐 Домен")
+async def payment_domain_handler(message: Message):
+    info = await get_payment_info()
+    await message.answer(
+        "🌐 Домен\n\n"
+        f"Текущий домен: {info['pay_domain_name']}\n"
+        f"Статус: {info['pay_domain_status']}\n"
+        f"Дата окончания: {info['pay_domain_expires']}",
+        reply_markup=payment_domain_kb
+    )
+
+
+@router.message(lambda m: m.text == "🧾 История оплат")
+async def payment_history_handler(message: Message):
+    await message.answer("🧾 История оплат скоро появится", reply_markup=payment_back_kb)
+
+
+@router.message(lambda m: m.text == "📞 Связаться")
+async def payment_contact_handler(message: Message):
+    info = await get_payment_info()
+    await message.answer(
+        "📞 Связаться\n\n"
+        f"Telegram: {info['pay_support_tg']}\n"
+        f"Телефон: {info['pay_support_phone']}\n\n"
+        f"{info['pay_support_text']}",
+        reply_markup=payment_back_kb
+    )
+
+
+@router.message(lambda m: m.text in {"💰 Оплатить подписку", "💰 Оплатить домен"})
+async def payment_pay_stub_handler(message: Message):
+    await message.answer("Для оплаты свяжитесь с администратором")
 
 
 @router.message(StateFilter("*"), lambda m: m.text in {
