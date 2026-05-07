@@ -184,14 +184,8 @@ class SiteProductPreviewState(StatesGroup):
 
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="🛒 Продажа")],
-        [KeyboardButton(text="❌ Отмена продажи"), KeyboardButton(text="🧾 История продаж")],
-        [KeyboardButton(text="📋 Заказы")],
-        [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="👥 Пользователи")],
-        [KeyboardButton(text="📈 Отчёты"), KeyboardButton(text="💰 Прибыль")],
-        [KeyboardButton(text="💱 Курсы валют"), KeyboardButton(text="🌐 Язык")],
-            [KeyboardButton(text="🧾 Гарантии")],
-            [KeyboardButton(text="🌐 Сайт")],
+        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="� Заказы")],
+        [KeyboardButton(text="🌐 Сайт"), KeyboardButton(text="🌐 Язык")],
         [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
@@ -250,10 +244,8 @@ def inline_order_actions_kb(order_id: int):
     )
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="🛒 Продажа"), KeyboardButton(text="🧾 История продаж")],
-        [KeyboardButton(text="📋 Заказы")],
-        [KeyboardButton(text="👤 Клиенты"), KeyboardButton(text="🌐 Язык")],
-        [KeyboardButton(text="🧾 Гарантии")],
+        [KeyboardButton(text="� Товары"), KeyboardButton(text="📋 Заказы")],
+        [KeyboardButton(text="🌐 Сайт"), KeyboardButton(text="🌐 Язык")],
         [KeyboardButton(text="❌ Сброс")],
     ],
     resize_keyboard=True
@@ -374,6 +366,7 @@ site_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="✏️ Редактировать товар")],
         [KeyboardButton(text="🌐 Язык сайта")],
         [KeyboardButton(text="📊 Аналитика сайта")],
+        [KeyboardButton(text="📋 Заявки/Покупатели"), KeyboardButton(text="👥 Пользователи")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -686,28 +679,12 @@ async def get_main_menu_for_user(message: Message):
         return ReplyKeyboardMarkup(
             keyboard=[
                 [
-                    KeyboardButton(text=await t(message, "products")), KeyboardButton(text=await t(message, "sale"))
-                ],
-                [
-                    KeyboardButton(text="❌ Отмена продажи"), KeyboardButton(text="🧾 История продаж")
-                ],
-                [
+                    KeyboardButton(text=await t(message, "products")),
                     KeyboardButton(text=await t(message, "orders")),
                 ],
                 [
-                    KeyboardButton(text=await t(message, "clients")), KeyboardButton(text="👥 Пользователи")
-                ],
-                [
-                    KeyboardButton(text=await t(message, "reports")), KeyboardButton(text="💰 Прибыль")
-                ],
-                [
-                    KeyboardButton(text=await t(message, "currency")), KeyboardButton(text=await t(message, "language"))
-                ],
-                [
                     KeyboardButton(text="🌐 Сайт"),
-                ],
-                [
-                    KeyboardButton(text=await t(message, "warranty")),
+                    KeyboardButton(text=await t(message, "language")),
                 ],
                 [
                     KeyboardButton(text="❌ Сброс"),
@@ -719,10 +696,14 @@ async def get_main_menu_for_user(message: Message):
     # seller
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=await t(message, "sale")), KeyboardButton(text="🧾 История продаж")],
-            [KeyboardButton(text=await t(message, "orders"))],
-            [KeyboardButton(text=await t(message, "clients")), KeyboardButton(text=await t(message, "language"))],
-            [KeyboardButton(text=await t(message, "warranty"))],
+            [
+                KeyboardButton(text=await t(message, "products")),
+                KeyboardButton(text=await t(message, "orders")),
+            ],
+            [
+                KeyboardButton(text="🌐 Сайт"),
+                KeyboardButton(text=await t(message, "language")),
+            ],
             [KeyboardButton(text="❌ Сброс")],
         ],
         resize_keyboard=True
@@ -737,18 +718,7 @@ async def get_main_menu(message: Message):
                 KeyboardButton(text=await t(message, "orders")),
             ],
             [
-                KeyboardButton(text=await t(message, "sale")),
-                KeyboardButton(text=await t(message, "receipt")),
-            ],
-            [
-                KeyboardButton(text=await t(message, "clients")),
-                KeyboardButton(text=await t(message, "reports")),
-            ],
-            [
-                KeyboardButton(text=await t(message, "currency")),
-                KeyboardButton(text=await t(message, "warranty")),
-            ],
-            [
+                KeyboardButton(text="🌐 Сайт"),
                 KeyboardButton(text=await t(message, "language")),
             ],
         ],
@@ -1640,7 +1610,7 @@ async def site_analytics_handler(message: Message, state: FSMContext):
 
 
 
-@router.message(lambda m: m.text in {"👤 Клиенты", "👤 Клієнти"})
+@router.message(lambda m: m.text in {"👤 Клиенты", "👤 Клієнти", "📋 Заявки/Покупатели", "📋 Заявки/Покупці"})
 async def customers_menu_handler(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
