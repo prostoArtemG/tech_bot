@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Technovlada</title>
     <link rel="stylesheet" href="/static/style.css">
+    {% if site_design %}
+    <style>
+        :root {
+            --site-primary: {{ site_design.primary_color }};
+            --site-accent: {{ site_design.accent_color }};
+            --site-header-bg: {{ site_design.header_bg }};
+        }
+    </style>
+    {% endif %}
 </head>
 <body>
         <header class="site-header">
@@ -32,6 +41,17 @@
                 </div>
             </div>
         </header>
+
+    {% if site_design and site_design.banner_enabled and (site_design.banner_text or site_design.banner_image_url) %}
+    <section class="site-banner">
+        {% if site_design.banner_image_url %}
+        <img src="{{ site_design.banner_image_url }}" alt="banner" class="site-banner-img">
+        {% endif %}
+        {% if site_design.banner_text %}
+        <div class="site-banner-text">{{ site_design.banner_text }}</div>
+        {% endif %}
+    </section>
+    {% endif %}
 
     <section class="site-categories">
         <a href="/" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">

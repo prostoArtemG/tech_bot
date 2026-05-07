@@ -174,6 +174,14 @@ class SiteHeaderState(StatesGroup):
     waiting_for_field = State()
 
 
+class SiteColorsState(StatesGroup):
+    waiting_for_field = State()
+
+
+class SiteBannerState(StatesGroup):
+    waiting_for_field = State()
+
+
 class SiteCategoryQuickState(StatesGroup):
     waiting = State()
 
@@ -357,12 +365,39 @@ site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакты сайта")],
         [KeyboardButton(text="🧢 Шапка сайта")],
+        [KeyboardButton(text="🎨 Цвета сайта"), KeyboardButton(text="🖼 Баннер сайта")],
         [KeyboardButton(text="👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
         [KeyboardButton(text="✏️ Редактировать товар")],
         [KeyboardButton(text="🌐 Язык сайта")],
         [KeyboardButton(text="📊 Аналитика сайта")],
         [KeyboardButton(text="📋 Заявки/Покупатели"), KeyboardButton(text="👥 Пользователи")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+site_colors_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Показать цвета")],
+        [KeyboardButton(text="🎯 Основной цвет")],
+        [KeyboardButton(text="✨ Цвет акцента")],
+        [KeyboardButton(text="🖼 Цвет фона/шапки")],
+        [KeyboardButton(text="♻️ Сбросить цвета")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+site_banner_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Показать баннер")],
+        [KeyboardButton(text="📝 Текст баннера")],
+        [KeyboardButton(text="🖼 Фото баннера (URL)")],
+        [KeyboardButton(text="👁 Баннер: вкл/выкл")],
+        [KeyboardButton(text="♻️ Сбросить баннер")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -1205,6 +1240,174 @@ async def site_header_field_save(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer("✅ Сохранено", reply_markup=site_header_kb)
+
+
+# ===== Site design: colors =====
+
+DESIGN_DEFAULTS = {
+    "design_primary_color": "#111827",
+    "design_accent_color": "#ef4444",
+    "design_header_bg": "#ffffff",
+    "banner_text": "",
+    "banner_image_url": "",
+    "banner_enabled": "false",
+}
+
+HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+async def get_site_design():
+    return {
+        "primary_color": (await db.get_setting("design_primary_color")) or DESIGN_DEFAULTS["design_primary_color"],
+        "accent_color": (await db.get_setting("design_accent_color")) or DESIGN_DEFAULTS["design_accent_color"],
+        "header_bg": (await db.get_setting("design_header_bg")) or DESIGN_DEFAULTS["design_header_bg"],
+        "banner_text": (await db.get_setting("banner_text")) or "",
+        "banner_image_url": (await db.get_setting("banner_image_url")) or "",
+        "banner_enabled": ((await db.get_setting("banner_enabled")) or "false") == "true",
+    }
+
+
+@router.message(lambda m: m.text == "🎨 Цвета сайта")
+async def site_colors_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer("Цвета сайта:", reply_markup=site_colors_kb)
+
+
+@router.message(lambda m: m.text == "📋 Показать цвета")
+async def site_colors_show(message: Message):
+    design = await get_site_design()
+    await message.answer(
+        "🎨 Текущие цвета сайта:\n\n"
+        f"🎯 Основной: {design['primary_color']}\n"
+        f"✨ Акцент: {design['accent_color']}\n"
+        f"🖼 Фон/шапка: {design['header_bg']}\n\n"
+        "Если значение совпадает с дефолтом — оно подставлено по умолчанию."
+    )
+
+
+@router.message(lambda m: m.text in {"🎯 Основной цвет", "✨ Цвет акцента", "🖼 Цвет фона/шапки"})
+async def site_color_field_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    field_map = {
+        "🎯 Основной цвет": ("design_primary_color", "Введите HEX основного цвета (например, #111827):"),
+        "✨ Цвет акцента": ("design_accent_color", "Введите HEX акцентного цвета (например, #ef4444):"),
+        "🖼 Цвет фона/шапки": ("design_header_bg", "Введите HEX цвета фона/шапки (например, #ffffff):"),
+    }
+    key, prompt = field_map[message.text]
+    await state.update_data(setting_key=key)
+    await state.set_state(SiteColorsState.waiting_for_field)
+    await message.answer(prompt + "\nОтправьте «-» чтобы вернуть значение по умолчанию.")
+
+
+@router.message(SiteColorsState.waiting_for_field)
+async def site_color_field_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    key = data.get("setting_key")
+    if not key:
+        await state.clear()
+        await message.answer("Ошибка состояния.", reply_markup=site_colors_kb)
+        return
+
+    value = (message.text or "").strip()
+
+    if value == "-" or value == "":
+        await db.set_setting(key, "")
+        await state.clear()
+        await message.answer("✅ Возвращено значение по умолчанию.", reply_markup=site_colors_kb)
+        return
+
+    if not HEX_COLOR_RE.match(value):
+        await message.answer("Неверный HEX. Пример: #ef4444 или #fff. Попробуйте ещё раз или отправьте «-».")
+        return
+
+    await db.set_setting(key, value)
+    await state.clear()
+    await message.answer(f"✅ Сохранено: {value}", reply_markup=site_colors_kb)
+
+
+@router.message(lambda m: m.text == "♻️ Сбросить цвета")
+async def site_colors_reset(message: Message):
+    if not await require_admin(message):
+        return
+    for key in ("design_primary_color", "design_accent_color", "design_header_bg"):
+        await db.set_setting(key, "")
+    await message.answer("✅ Цвета сброшены к значениям по умолчанию.", reply_markup=site_colors_kb)
+
+
+# ===== Site design: banner =====
+
+@router.message(lambda m: m.text == "🖼 Баннер сайта")
+async def site_banner_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer("Баннер сайта:", reply_markup=site_banner_kb)
+
+
+@router.message(lambda m: m.text == "📋 Показать баннер")
+async def site_banner_show(message: Message):
+    design = await get_site_design()
+    state_text = "ВКЛ" if design["banner_enabled"] else "ВЫКЛ"
+    await message.answer(
+        "🖼 Баннер сайта:\n\n"
+        f"Состояние: {state_text}\n"
+        f"Текст: {design['banner_text'] or '-'}\n"
+        f"Фото: {design['banner_image_url'] or '-'}"
+    )
+
+
+@router.message(lambda m: m.text in {"📝 Текст баннера", "🖼 Фото баннера (URL)"})
+async def site_banner_field_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    field_map = {
+        "📝 Текст баннера": ("banner_text", "Введите текст баннера (отправьте «-» чтобы очистить):"),
+        "🖼 Фото баннера (URL)": ("banner_image_url", "Введите URL изображения баннера (отправьте «-» чтобы очистить):"),
+    }
+    key, prompt = field_map[message.text]
+    await state.update_data(setting_key=key)
+    await state.set_state(SiteBannerState.waiting_for_field)
+    await message.answer(prompt)
+
+
+@router.message(SiteBannerState.waiting_for_field)
+async def site_banner_field_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    key = data.get("setting_key")
+    if not key:
+        await state.clear()
+        await message.answer("Ошибка состояния.", reply_markup=site_banner_kb)
+        return
+
+    value = (message.text or "").strip()
+    if value == "-":
+        value = ""
+
+    await db.set_setting(key, value)
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_banner_kb)
+
+
+@router.message(lambda m: m.text == "👁 Баннер: вкл/выкл")
+async def site_banner_toggle(message: Message):
+    if not await require_admin(message):
+        return
+    value = await db.toggle_setting_bool("banner_enabled", "false")
+    text = "включён" if value == "true" else "выключен"
+    await message.answer(f"✅ Баннер {text}", reply_markup=site_banner_kb)
+
+
+@router.message(lambda m: m.text == "♻️ Сбросить баннер")
+async def site_banner_reset(message: Message):
+    if not await require_admin(message):
+        return
+    await db.set_setting("banner_text", "")
+    await db.set_setting("banner_image_url", "")
+    await db.set_setting("banner_enabled", "false")
+    await message.answer("✅ Баннер сброшен.", reply_markup=site_banner_kb)
 
 
 @router.message(StateFilter("*"), lambda m: m.text in {
@@ -3830,6 +4033,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
+    site_design = await get_site_design()
 
     return templates.TemplateResponse(
         request=request,
@@ -3853,6 +4057,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "header_show_cart": header_show_cart,
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
+            "site_design": site_design,
         }
     )
 
@@ -3925,6 +4130,7 @@ async def product_page(request: Request, product_id: int):
             "header_show_cart": header_show_cart,
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
+            "site_design": await get_site_design(),
         }
     )
 
@@ -3954,6 +4160,7 @@ async def cart_page(request: Request):
             "header_show_cart": header_show_cart,
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
+            "site_design": await get_site_design(),
         }
     )
 

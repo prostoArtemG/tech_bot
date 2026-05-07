@@ -6,6 +6,15 @@
     <title>Корзина — Technovlada</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/cart.js" defer></script>
+    {% if site_design %}
+    <style>
+        :root {
+            --site-primary: {{ site_design.primary_color }};
+            --site-accent: {{ site_design.accent_color }};
+            --site-header-bg: {{ site_design.header_bg }};
+        }
+    </style>
+    {% endif %}
 </head>
 <body>
   <header class="site-header">

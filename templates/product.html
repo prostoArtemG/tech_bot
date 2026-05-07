@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ product.brand }} {{ product.model }}</title>
     <link rel="stylesheet" href="/static/style.css">
+    {% if site_design %}
+    <style>
+        :root {
+            --site-primary: {{ site_design.primary_color }};
+            --site-accent: {{ site_design.accent_color }};
+            --site-header-bg: {{ site_design.header_bg }};
+        }
+    </style>
+    {% endif %}
 </head>
 <body>
 
