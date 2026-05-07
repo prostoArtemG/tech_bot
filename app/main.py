@@ -3038,7 +3038,7 @@ async def show_product_photos_manager(message: Message, product_id: int):
                     text="🗑 Фото 1 (основное)",
                     callback_data=f"del_main_photo:{product_id}"
                 )],
-                [InlineKeyboardButton(text="⬅️ Закрыть", callback_data="cancel_flow")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back_to_edit:{product_id}")],
             ]
         )
         await message.answer(
@@ -3048,9 +3048,14 @@ async def show_product_photos_manager(message: Message, product_id: int):
         return
 
     if not images:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back_to_edit:{product_id}")],
+            ]
+        )
         await message.answer(
             f"🖼 У товара #{product_id} нет фото.",
-            reply_markup=products_kb
+            reply_markup=kb
         )
         return
 
@@ -3062,7 +3067,7 @@ async def show_product_photos_manager(message: Message, product_id: int):
                 callback_data=f"del_image:{img['id']}"
             )
         ])
-    rows.append([InlineKeyboardButton(text="⬅️ Закрыть", callback_data="cancel_flow")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back_to_edit:{product_id}")])
 
     kb = InlineKeyboardMarkup(inline_keyboard=rows)
     await message.answer(
@@ -3115,6 +3120,36 @@ async def del_main_photo_callback(callback: CallbackQuery, state: FSMContext):
     await db.remove_product_photo(product_id)
     await callback.answer("🗑 Фото удалено")
     await show_product_photos_manager(callback.message, product_id)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("back_to_edit:"))
+async def back_to_edit_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        product_id = int(callback.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await callback.answer("Неверный ID товара.")
+        return
+
+    product = await db.get_product_by_id(product_id)
+    if not product:
+        await callback.answer("Товар не найден.")
+        return
+
+    await state.update_data(product_id=product_id)
+    await state.set_state(EditProductState.waiting_for_field)
+
+    await callback.message.answer(
+        f"Товар:\n"
+        f"ID: {product['id']}\n"
+        f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n"
+        f"{await t(callback.message, 'price')}: {float(product['price'] or 0):.2f} грн\n"
+        f"Закупка: {float(product['purchase_price'] or 0):.2f} {product['purchase_currency'] or 'UAH'}\n"
+        f"Артикул: {product['sku'] or '-'}\n"
+        f"{await t(callback.message, 'warranty')}: {product['warranty_months'] or 0} мес\n\n"
+        "Что изменить?",
+        reply_markup=inline_edit_fields_kb(product)
+    )
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("set_category:"))
