@@ -111,14 +111,16 @@
     <main class="products products-grid">
         {% for product in products %}
         <div class="card">
-            {% if product.is_sale %}
-            <div class="card-sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></div>
-            {% endif %}
-            {% if product.photo_url %}
-            <img src="{{ product.photo_url }}" class="product-img">
-            {% else %}
-            <div class="no-photo">Нет фото</div>
-            {% endif %}
+            <div class="card-image-wrap">
+                {% if product.is_sale %}
+                <div class="card-sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></div>
+                {% endif %}
+                {% if product.photo_url %}
+                <img src="{{ product.photo_url }}" class="product-img">
+                {% else %}
+                <div class="no-photo">Нет фото</div>
+                {% endif %}
+            </div>
 
             <div class="category">{{ product.category }}</div>
 
