@@ -40,26 +40,18 @@
     <div class="product-grid">
 
         <div class="product-image">
-                <div class="product-gallery">
+            <div class="product-gallery">
                 <img id="mainImage" src="{% if images and images|length > 0 %}{{ images[0].image_url }}{% else %}{{ product.photo_url }}{% endif %}" class="main-image" alt="{{ product.brand }} {{ product.model }}">
 
-                {% if images and images|length > 0 %}
+                {% if images and images|length > 1 %}
                 <div class="thumbs-row">
                     {% for img in images %}
                     <img
                         src="{{ img.image_url }}"
-                        onclick="changeImage('{{ img.image_url }}')"
-                        class="thumb-img"
+                        onclick="changeImage(this, '{{ img.image_url }}')"
+                        class="thumb-img{% if loop.first %} active{% endif %}"
                     >
                     {% endfor %}
-                </div>
-                {% elif product.photo_url %}
-                <div class="thumbs-row">
-                    <img
-                        src="{{ product.photo_url }}"
-                        onclick="changeImage('{{ product.photo_url }}')"
-                        class="thumb-img"
-                    >
                 </div>
                 {% endif %}
             </div>
@@ -146,19 +138,25 @@
 
     </div>
 </main>
-</main>
 
 <script>
+    function changeImage(thumbEl, src) {
+        var main = document.getElementById('mainImage');
+        if (main) {
+            main.src = src;
+        }
+        document.querySelectorAll('.thumb-img').forEach(function(el) {
+            el.classList.remove('active');
+        });
+        if (thumbEl && thumbEl.classList) {
+            thumbEl.classList.add('active');
+        }
+    }
+</script>
 
 <script src="/static/cart.js"></script>
 <script src="/static/lang.js"></script>
 
-</body>
-</html>
-}
-</script>
-
-</body>
 <footer class="site-footer">
     <h3>Контакты</h3>
     {% if site_contacts.phone %}<p>📞 {{ site_contacts.phone }}</p>{% endif %}
@@ -168,4 +166,5 @@
     {% if site_contacts.schedule %}<p>⏰ {{ site_contacts.schedule }}</p>{% endif %}
 </footer>
 
+</body>
 </html>

@@ -526,6 +526,11 @@ button:hover {
     border-color: #111827;
 }
 
+.thumb-img.active {
+    opacity: 1;
+    border-color: #111827;
+}
+
 /* product info card */
 .product-info {
     display: block;

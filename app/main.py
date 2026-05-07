@@ -498,7 +498,7 @@ def inline_edit_fields_kb(product=None):
             ],
             [
                 InlineKeyboardButton(text="📂 Изменить категорию", callback_data="edit_action:change_category"),
-                InlineKeyboardButton(text="🗑 Удалить фото", callback_data="edit_action:remove_photo"),
+                InlineKeyboardButton(text="� Управление фото", callback_data="edit_action:manage_photos"),
             ],
             [
                 InlineKeyboardButton(text=visibility_text, callback_data=f"edit_action:{visibility_action}"),
@@ -3000,6 +3000,11 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    if action == "manage_photos":
+        await show_product_photos_manager(callback.message, product_id)
+        await callback.answer()
+        return
+
     if action == "hide_product":
         await db.hide_product(product_id)
         await state.clear()
@@ -3022,6 +3027,98 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         return
 
     await callback.answer()
+
+
+async def show_product_photos_manager(message: Message, product_id: int):
+    images = await db.get_product_images(product_id)
+    product = await db.get_product_by_id(product_id)
+
+    # backward compat: if no rows in product_images, but product.photo_url exists,
+    # show a single legacy entry that deletes via remove_product_photo
+    if not images and product and product.get("photo_url"):
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="🗑 Фото 1 (основное)",
+                    callback_data=f"del_main_photo:{product_id}"
+                )],
+                [InlineKeyboardButton(text="⬅️ Закрыть", callback_data="cancel_flow")],
+            ]
+        )
+        await message.answer(
+            f"🖼 Фото товара #{product_id}: 1 шт.\nВыберите, какое удалить:",
+            reply_markup=kb
+        )
+        return
+
+    if not images:
+        await message.answer(
+            f"🖼 У товара #{product_id} нет фото.",
+            reply_markup=products_kb
+        )
+        return
+
+    rows = []
+    for idx, img in enumerate(images, start=1):
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🗑 Фото {idx}",
+                callback_data=f"del_image:{img['id']}"
+            )
+        ])
+    rows.append([InlineKeyboardButton(text="⬅️ Закрыть", callback_data="cancel_flow")])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    await message.answer(
+        f"🖼 Фото товара #{product_id}: {len(images)} шт.\nВыберите, какое удалить:",
+        reply_markup=kb
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("del_image:"))
+async def del_image_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        image_id = int(callback.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await callback.answer("Неверный ID фото.")
+        return
+
+    img = await db.get_product_image_by_id(image_id)
+    if not img:
+        await callback.answer("Фото не найдено.")
+        return
+
+    product_id = img["product_id"]
+    image_url = img["image_url"]
+
+    await db.delete_product_image(image_id)
+
+    # sync legacy products.photo_url: if removed image was the main one,
+    # set photo_url to next remaining image or clear it
+    product = await db.get_product_by_id(product_id)
+    if product and product.get("photo_url") == image_url:
+        remaining = await db.get_product_images(product_id)
+        new_main = remaining[0]["image_url"] if remaining else None
+        if new_main:
+            await db.update_product_field(product_id, "photo_url", new_main)
+        else:
+            await db.remove_product_photo(product_id)
+
+    await callback.answer("🗑 Фото удалено")
+    await show_product_photos_manager(callback.message, product_id)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("del_main_photo:"))
+async def del_main_photo_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        product_id = int(callback.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await callback.answer("Неверный ID товара.")
+        return
+
+    await db.remove_product_photo(product_id)
+    await callback.answer("🗑 Фото удалено")
+    await show_product_photos_manager(callback.message, product_id)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("set_category:"))

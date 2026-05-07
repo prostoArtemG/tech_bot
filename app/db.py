@@ -403,12 +403,28 @@ class Database:
     async def get_product_images(self, product_id: int):
         return await self.fetch(
             """
-            SELECT image_url
+            SELECT id, image_url
             FROM product_images
             WHERE product_id = $1
             ORDER BY sort_order ASC, id ASC
             """,
             product_id
+        )
+
+    async def get_product_image_by_id(self, image_id: int):
+        return await self.fetchrow(
+            """
+            SELECT id, product_id, image_url
+            FROM product_images
+            WHERE id = $1
+            """,
+            image_id
+        )
+
+    async def delete_product_image(self, image_id: int):
+        await self.execute(
+            "DELETE FROM product_images WHERE id = $1",
+            image_id
         )
 
     async def add_product_image(self, product_id: int, image_url: str):
