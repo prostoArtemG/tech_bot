@@ -67,6 +67,7 @@ WEB_NOTIFY_CHAT_ID = os.getenv("WEB_NOTIFY_CHAT_ID")
 SAAS_BOT_TOKEN = os.getenv("SAAS_BOT_TOKEN", "")
 SAAS_ADMIN_CHAT_ID = os.getenv("SAAS_ADMIN_CHAT_ID", "")
 SAAS_WEBHOOK_URL = os.getenv("SAAS_WEBHOOK_URL", "")  # optional HTTP webhook
+SAAS_PLATFORM_URL = os.getenv("SAAS_PLATFORM_URL", "").rstrip("/")
 SAAS_CLIENT_NAME = os.getenv("SAAS_CLIENT_NAME", "Technovlada")
 SAAS_CLIENT_SLUG = os.getenv("SAAS_CLIENT_SLUG", "technovlada")
 
@@ -114,6 +115,114 @@ async def send_to_saas_platform(text: str, payload: dict | None = None) -> bool:
     except Exception as e:
         print(f"[saas] session error: {e}")
     return ok
+
+
+# Subscription gate: check status from saas_platform before allowing edit actions.
+# Cache to avoid hitting the API on every keystroke.
+_saas_status_cache: dict = {"value": None, "ts": 0.0}
+_SAAS_STATUS_TTL = 60.0  # seconds
+
+
+async def get_saas_client_status() -> str:
+    """Return 'active' / 'expired' / 'unknown'. Cached for _SAAS_STATUS_TTL seconds."""
+    import time
+    if not SAAS_PLATFORM_URL or not SAAS_CLIENT_SLUG:
+        return "unknown"
+    now_ts = time.monotonic()
+    if _saas_status_cache["value"] and (now_ts - _saas_status_cache["ts"]) < _SAAS_STATUS_TTL:
+        return _saas_status_cache["value"]
+    import aiohttp
+    url = f"{SAAS_PLATFORM_URL}/api/client-status/{SAAS_CLIENT_SLUG}"
+    status = "unknown"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    raw = (data or {}).get("status") or (data or {}).get("subscription_status") or ""
+                    raw = str(raw).lower().strip()
+                    if raw in {"active", "ok", "valid"}:
+                        status = "active"
+                    elif raw in {"expired", "overdue", "blocked", "inactive"}:
+                        status = "expired"
+                else:
+                    print(f"[saas] client-status http {resp.status}")
+    except Exception as e:
+        print(f"[saas] client-status failed: {e}")
+    _saas_status_cache["value"] = status
+    _saas_status_cache["ts"] = now_ts
+    return status
+
+
+async def require_active_subscription(message: Message) -> bool:
+    """Return False (and notify user) if subscription is expired."""
+    status = await get_saas_client_status()
+    if status == "expired":
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[[
+                InlineKeyboardButton(text="💳 Оплатить подписку", callback_data="pay_subscription_inline")
+            ]]
+        )
+        await message.answer(
+            "⚠️ Подписка просрочена. Оплатите продление.",
+            reply_markup=kb,
+        )
+        return False
+    return True
+
+
+@router.callback_query(lambda c: c.data == "pay_subscription_inline")
+async def pay_subscription_inline_callback(callback: CallbackQuery):
+    await callback.answer()
+    # reuse stub handler logic by faking a Message-like flow:
+    fake_text = "💰 Оплатить подписку"
+    # build a message from the callback to reuse handler
+    msg = callback.message
+    # call the existing payment handler
+    await payment_pay_stub_handler_internal(msg, callback.from_user, fake_text)
+
+
+async def payment_pay_stub_handler_internal(message: Message, from_user, text_value: str):
+    """Shared payment-request flow usable from both message and callback."""
+    info = await get_payment_info()
+    is_subscription = text_value == "💰 Оплатить подписку"
+    payload = {
+        "type": "subscription" if is_subscription else "domain",
+        "client_name": SAAS_CLIENT_NAME,
+        "client_slug": SAAS_CLIENT_SLUG,
+        "telegram_user_id": from_user.id if from_user else None,
+        "telegram_username": (from_user.username if from_user else None) or "",
+        "created_at": now_kyiv_str(),
+    }
+    if is_subscription:
+        payload["plan"] = info.get("pay_sub_plan", "—")
+        payload["amount"] = info.get("pay_sub_price", "—")
+        type_label = "Подписка"
+        amount_line = f"💰 Сумма: {payload['amount']}"
+        extra_line = f"📦 Тариф: {payload['plan']}"
+    else:
+        payload["domain"] = info.get("pay_domain_name", "—")
+        type_label = "Домен"
+        amount_line = f"🌐 Домен: {payload['domain']}"
+        extra_line = ""
+
+    notif = (
+        "💳 Новый запрос на оплату\n\n"
+        f"🏢 Клиент: {SAAS_CLIENT_NAME}\n"
+        f"🌐 Slug: {SAAS_CLIENT_SLUG}\n"
+        f"📦 Тип: {type_label}\n"
+        + (f"{extra_line}\n" if extra_line else "")
+        + f"{amount_line}\n"
+        f"👤 Telegram ID: {payload['telegram_user_id'] or '—'}"
+        + (f" (@{payload['telegram_username']})" if payload['telegram_username'] else "")
+        + f"\n📅 {payload['created_at']}"
+    )
+    sent = await send_to_saas_platform(notif, payload)
+    if sent:
+        await message.answer("✅ Запрос на оплату отправлен.")
+    else:
+        await message.answer("⚠️ Не удалось отправить запрос. Попробуйте позже или свяжитесь с администратором.")
+
 
 
 async def notify_admins(text: str):
@@ -1417,6 +1526,8 @@ async def get_site_design():
 async def site_colors_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
+    if not await require_active_subscription(message):
+        return
     await state.clear()
     await message.answer("Цвета сайта:", reply_markup=site_colors_kb)
 
@@ -1488,6 +1599,8 @@ async def site_colors_reset(message: Message):
 @router.message(lambda m: m.text == "🖼 Баннер сайта")
 async def site_banner_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
+        return
+    if not await require_active_subscription(message):
         return
     await state.clear()
     await message.answer("Баннер сайта:", reply_markup=site_banner_kb)
@@ -1635,45 +1748,7 @@ async def payment_contact_handler(message: Message):
 
 @router.message(lambda m: m.text in {"💰 Оплатить подписку", "💰 Оплатить домен"})
 async def payment_pay_stub_handler(message: Message):
-    info = await get_payment_info()
-    is_subscription = message.text == "💰 Оплатить подписку"
-    payload = {
-        "type": "subscription" if is_subscription else "domain",
-        "client_name": SAAS_CLIENT_NAME,
-        "client_slug": SAAS_CLIENT_SLUG,
-        "telegram_user_id": message.from_user.id if message.from_user else None,
-        "telegram_username": (message.from_user.username if message.from_user else None) or "",
-        "created_at": now_kyiv_str(),
-    }
-    if is_subscription:
-        payload["plan"] = info.get("pay_sub_plan", "—")
-        payload["amount"] = info.get("pay_sub_price", "—")
-        type_label = "Подписка"
-        amount_line = f"💰 Сумма: {payload['amount']}"
-        extra_line = f"📦 Тариф: {payload['plan']}"
-    else:
-        payload["domain"] = info.get("pay_domain_name", "—")
-        type_label = "Домен"
-        amount_line = f"🌐 Домен: {payload['domain']}"
-        extra_line = ""
-
-    text = (
-        "💳 Новый запрос на оплату\n\n"
-        f"🏢 Клиент: {SAAS_CLIENT_NAME}\n"
-        f"🌐 Slug: {SAAS_CLIENT_SLUG}\n"
-        f"📦 Тип: {type_label}\n"
-        + (f"{extra_line}\n" if extra_line else "")
-        + f"{amount_line}\n"
-        f"👤 Telegram ID: {payload['telegram_user_id'] or '—'}"
-        + (f" (@{payload['telegram_username']})" if payload['telegram_username'] else "")
-        + f"\n📅 {payload['created_at']}"
-    )
-
-    sent = await send_to_saas_platform(text, payload)
-    if sent:
-        await message.answer("✅ Запрос на оплату отправлен.")
-    else:
-        await message.answer("⚠️ Не удалось отправить запрос. Попробуйте позже или свяжитесь с администратором.")
+    await payment_pay_stub_handler_internal(message, message.from_user, message.text)
 
 
 @router.message(StateFilter("*"), lambda m: m.text in {
@@ -1828,6 +1903,8 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
 async def products_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
+    if not await require_active_subscription(message):
+        return
 
     await state.clear()
     await message.answer(await t(message, "products_section"), reply_markup=products_kb)
@@ -1837,6 +1914,8 @@ async def products_menu_handler(message: Message, state: FSMContext):
 async def site_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
+    if not await require_active_subscription(message):
+        return
 
     await state.clear()
     await message.answer("Раздел сайта:", reply_markup=site_kb)
@@ -1844,6 +1923,8 @@ async def site_menu_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "📞 Контакты сайта")
 async def site_contacts_handler(message: Message, state: FSMContext):
+    if not await require_active_subscription(message):
+        return
     await state.clear()
     await message.answer("Контакты сайта:", reply_markup=site_contacts_kb)
 
@@ -2297,6 +2378,8 @@ async def back_handler(message: Message, state: FSMContext):
 @router.message(lambda m: m.text == "➕ Добавить товар")
 async def add_product_start_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
+        return
+    if not await require_active_subscription(message):
         return
 
     await state.set_state(AddProductState.waiting_for_category)
@@ -3548,6 +3631,8 @@ async def delete_user_finish_handler(message: Message, state: FSMContext):
 @router.message(lambda m: m.text == "✏️ Редактировать товар")
 async def edit_product_start_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
+        return
+    if not await require_active_subscription(message):
         return
 
     await state.set_state(EditProductState.waiting_for_query)
