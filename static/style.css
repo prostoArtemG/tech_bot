@@ -8,7 +8,7 @@
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background: #f3f4f6;
+    background: var(--site-page-bg, #f3f4f6);
     color: #111827;
 }
 
@@ -19,8 +19,8 @@ body {
    ============================================================ */
 .site-header {
     position: relative;
-    background: var(--site-header-bg, linear-gradient(135deg, #111827, #1f2937));
-    color: white;
+    background: var(--site-header-bg, #111827);
+    color: var(--site-header-text, #ffffff);
     padding: 36px 220px;
     min-height: 100px;
     text-align: center;
@@ -385,7 +385,7 @@ button:hover {
 }
 
 .details-btn:hover {
-    background: var(--site-accent, #374151);
+    background: #374151;
 }
 
 .cart-btn {
@@ -394,7 +394,7 @@ button:hover {
     padding: 13px;
     border: none;
     border-radius: 14px;
-    background: var(--site-accent, #16a34a);
+    background: var(--site-buy, #16a34a);
     color: white;
     font-weight: bold;
     cursor: pointer;
@@ -619,7 +619,7 @@ button:hover {
 }
 
 .order-btn:hover {
-    background: var(--site-accent, #374151);
+    background: #374151;
 }
 
 /* product page mobile */
@@ -1248,7 +1248,7 @@ button:hover {
     padding: 18px 24px;
     font-size: 18px;
     font-weight: 700;
-    background: var(--site-accent, #ef4444);
+    background: var(--site-accent, #16a34a);
     color: white;
 }
 

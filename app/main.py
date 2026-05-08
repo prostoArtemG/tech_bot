@@ -1291,8 +1291,8 @@ async def site_header_field_save(message: Message, state: FSMContext):
 
 DESIGN_DEFAULTS = {
     "design_primary_color": "#111827",
-    "design_accent_color": "#ef4444",
-    "design_header_bg": "#ffffff",
+    "design_accent_color": "#16a34a",
+    "design_header_bg": "#111827",
     "banner_text": "",
     "banner_image_url": "",
     "banner_enabled": "false",
