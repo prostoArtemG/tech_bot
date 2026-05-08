@@ -190,6 +190,31 @@ async def get_saas_client_domain() -> dict:
     return out
 
 
+async def get_saas_client_payments() -> list:
+    """Return list of recent payments. Empty list on failure or if none."""
+    if not SAAS_PLATFORM_URL or not SAAS_CLIENT_SLUG:
+        return []
+    import aiohttp
+    url = f"{SAAS_PLATFORM_URL}/api/client-payments/{SAAS_CLIENT_SLUG}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status != 200:
+                    print(f"[saas] client-payments http {resp.status}")
+                    return []
+                data = await resp.json(content_type=None)
+                if isinstance(data, dict):
+                    items = data.get("payments") or data.get("items") or []
+                elif isinstance(data, list):
+                    items = data
+                else:
+                    items = []
+                return items if isinstance(items, list) else []
+    except Exception as e:
+        print(f"[saas] client-payments failed: {e}")
+        return []
+
+
 async def require_active_subscription(message: Message) -> bool:
     """Return False (and notify user) if subscription is expired."""
     status = await get_saas_client_status()
@@ -1795,7 +1820,46 @@ async def payment_domain_extend_handler(message: Message):
 
 @router.message(lambda m: m.text == "🧾 История оплат")
 async def payment_history_handler(message: Message):
-    await message.answer("🧾 История оплат скоро появится", reply_markup=payment_back_kb)
+    payments = await get_saas_client_payments()
+    if not payments:
+        await message.answer("История оплат пуста", reply_markup=payment_back_kb)
+        return
+
+    status_icons = {
+        "paid": "✅",
+        "success": "✅",
+        "completed": "✅",
+        "pending": "⏳",
+        "processing": "⏳",
+        "failed": "❌",
+        "error": "❌",
+        "cancelled": "❌",
+    }
+    type_labels = {
+        "subscription": "Подписка",
+        "domain": "Домен",
+    }
+
+    lines = ["🧾 История оплат (последние платежи):"]
+    for p in payments[:20]:
+        if not isinstance(p, dict):
+            continue
+        date = p.get("date") or p.get("created_at") or p.get("paid_at") or "—"
+        ptype_raw = str(p.get("type") or "").lower()
+        ptype = type_labels.get(ptype_raw, p.get("type") or "—")
+        amount = p.get("amount")
+        if amount is None:
+            amount_text = "—"
+        else:
+            amount_text = f"{amount}"
+            currency = p.get("currency")
+            if currency:
+                amount_text = f"{amount} {currency}"
+        status_raw = str(p.get("status") or "").lower()
+        icon = status_icons.get(status_raw, "•")
+        lines.append(f"\n{icon} {date} — {ptype}\n   Сумма: {amount_text} | Статус: {p.get('status') or '—'}")
+
+    await message.answer("\n".join(lines), reply_markup=payment_back_kb)
 
 
 @router.message(lambda m: m.text == "📞 Связаться")
