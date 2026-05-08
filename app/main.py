@@ -154,6 +154,42 @@ async def get_saas_client_status() -> str:
     return status
 
 
+_saas_domain_cache: dict = {"value": None, "ts": 0.0}
+_SAAS_DOMAIN_TTL = 60.0
+
+
+async def get_saas_client_domain() -> dict:
+    """Return dict with keys: domain, status, dns_connected, expires_at. Empty dict on failure."""
+    import time
+    if not SAAS_PLATFORM_URL or not SAAS_CLIENT_SLUG:
+        return {}
+    now_ts = time.monotonic()
+    cached = _saas_domain_cache["value"]
+    if cached is not None and (now_ts - _saas_domain_cache["ts"]) < _SAAS_DOMAIN_TTL:
+        return cached
+    import aiohttp
+    url = f"{SAAS_PLATFORM_URL}/api/client-domain/{SAAS_CLIENT_SLUG}"
+    out: dict = {}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None) or {}
+                    out = {
+                        "domain": data.get("domain") or data.get("name") or "",
+                        "status": data.get("status") or "",
+                        "dns_connected": data.get("dns_connected"),
+                        "expires_at": data.get("expires_at") or data.get("expires") or "",
+                    }
+                else:
+                    print(f"[saas] client-domain http {resp.status}")
+    except Exception as e:
+        print(f"[saas] client-domain failed: {e}")
+    _saas_domain_cache["value"] = out
+    _saas_domain_cache["ts"] = now_ts
+    return out
+
+
 async def require_active_subscription(message: Message) -> bool:
     """Return False (and notify user) if subscription is expired."""
     status = await get_saas_client_status()
@@ -623,7 +659,8 @@ payment_subscription_kb = ReplyKeyboardMarkup(
 
 payment_domain_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="💰 Оплатить домен")],
+        [KeyboardButton(text="📋 Інструкція підключення")],
+        [KeyboardButton(text="💳 Продовжити домен")],
         [KeyboardButton(text="⬅️ Назад в оплату")],
     ],
     resize_keyboard=True
@@ -1720,13 +1757,40 @@ async def payment_subscription_handler(message: Message):
 @router.message(lambda m: m.text == "🌐 Домен")
 async def payment_domain_handler(message: Message):
     info = await get_payment_info()
+    remote = await get_saas_client_domain()
+    domain = remote.get("domain") or info.get("pay_domain_name") or "—"
+    status = remote.get("status") or info.get("pay_domain_status") or "—"
+    dns_raw = remote.get("dns_connected")
+    if dns_raw is None:
+        dns_text = "—"
+    else:
+        dns_text = "✅ підключено" if dns_raw else "❌ не підключено"
+    expires = remote.get("expires_at") or info.get("pay_domain_expires") or "—"
     await message.answer(
         "🌐 Домен\n\n"
-        f"Текущий домен: {info['pay_domain_name']}\n"
-        f"Статус: {info['pay_domain_status']}\n"
-        f"Дата окончания: {info['pay_domain_expires']}",
+        f"Текущий домен: {domain}\n"
+        f"Статус: {status}\n"
+        f"DNS: {dns_text}\n"
+        f"Дата окончания: {expires}",
         reply_markup=payment_domain_kb
     )
+
+
+@router.message(lambda m: m.text == "📋 Інструкція підключення")
+async def payment_domain_instruction_handler(message: Message):
+    await message.answer(
+        "📋 Інструкція підключення домену\n\n"
+        "1. Додайте A-record\n"
+        "2. Або CNAME\n"
+        "3. Підключіть Railway Custom Domain",
+        reply_markup=payment_domain_kb
+    )
+
+
+@router.message(lambda m: m.text == "💳 Продовжити домен")
+async def payment_domain_extend_handler(message: Message):
+    # reuse existing domain-payment flow
+    await payment_pay_stub_handler_internal(message, message.from_user, "💰 Оплатить домен")
 
 
 @router.message(lambda m: m.text == "🧾 История оплат")
