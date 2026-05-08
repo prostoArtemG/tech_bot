@@ -1,4 +1,5 @@
 import asyncio
+import json
 import math
 import os
 import re
@@ -160,6 +161,11 @@ class OrderStatusState(StatesGroup):
 
 class SiteContactsState(StatesGroup):
     waiting_for_field = State()
+
+
+class SitePhonesState(StatesGroup):
+    waiting_for_add = State()
+    waiting_for_delete = State()
 
 
 class SiteCategoryState(StatesGroup):
@@ -443,7 +449,8 @@ payment_back_kb = ReplyKeyboardMarkup(
 site_contacts_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Показать контакты")],
-        [KeyboardButton(text="📞 Телефон"), KeyboardButton(text="💬 Telegram")],
+        [KeyboardButton(text="➕ Добавить телефон"), KeyboardButton(text="🗑 Удалить телефон")],
+        [KeyboardButton(text="📞 Телефон (1 номер)"), KeyboardButton(text="💬 Telegram")],
         [KeyboardButton(text="📷 Instagram"), KeyboardButton(text="📍 Адрес")],
         [KeyboardButton(text="⏰ График работы")],
         [KeyboardButton(text="⬅️ Назад")],
@@ -1216,10 +1223,10 @@ async def order_status_back(message: Message, state: FSMContext):
 
 
 
-@router.message(lambda m: m.text in {"📞 Телефон", "💬 Telegram", "📷 Instagram", "📍 Адрес", "⏰ График работы"})
+@router.message(lambda m: m.text in {"📞 Телефон (1 номер)", "💬 Telegram", "📷 Instagram", "📍 Адрес", "⏰ График работы"})
 async def site_contact_field_start(message: Message, state: FSMContext):
     field_map = {
-        "📞 Телефон": ("site_phone", "Введите телефон сайта:"),
+        "📞 Телефон (1 номер)": ("site_phone", "Введите телефон сайта:"),
         "💬 Telegram": ("site_tg", "Введите Telegram сайта:"),
         "📷 Instagram": ("site_instagram", "Введите Instagram сайта:"),
         "📍 Адрес": ("site_address", "Введите адрес сайта:"),
@@ -1541,7 +1548,7 @@ async def payment_pay_stub_handler(message: Message):
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
     "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
-    "🌐 Сайт", "📞 Контакты сайта", "📋 Показать контакты", "📞 Телефон", "💬 Telegram",
+    "🌐 Сайт", "📞 Контакты сайта", " Telegram",
     "📂 Категории сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию", "📝 Описание товара",
     "⚙️ Характеристики товара", "🖼 Фото товара", "📷 Instagram", "📍 Адрес", "⏰ График работы", "🌐 Язык сайта",
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
@@ -1711,18 +1718,143 @@ async def site_contacts_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "📋 Показать контакты")
 async def show_contacts(message: Message):
-    phone = await db.get_setting("site_phone") or "-"
+    phones = await get_phones_list()
     tg = await db.get_setting("site_tg") or "-"
     insta = await db.get_setting("site_instagram") or "-"
     address = await db.get_setting("site_address") or "-"
     schedule = await db.get_setting("site_schedule") or "-"
 
+    if phones:
+        phones_block = "\n".join(
+            f"  {i+1}. {(p.get('name') or 'Контакт')}: {p.get('phone') or '-'}"
+            for i, p in enumerate(phones)
+        )
+    else:
+        single = await db.get_setting("site_phone") or "-"
+        phones_block = f"  {single}"
+
     await message.answer(
-        f"📞 Телефон: {phone}\n"
+        f"📞 Телефоны:\n{phones_block}\n\n"
         f"💬 Telegram: {tg}\n"
         f"📷 Instagram: {insta}\n"
         f"📍 Адрес: {address}\n"
-        f"⏰ График: {schedule}"
+        f"⏰ График: {schedule}",
+        reply_markup=site_contacts_kb,
+    )
+
+
+# ===== Multiple phones =====
+
+async def get_phones_list():
+    raw = await db.get_setting("site_phones_json")
+    if not raw:
+        legacy = await db.get_setting("site_phone")
+        if legacy:
+            return [{"name": "", "phone": legacy}]
+        return []
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return [
+                {"name": str(x.get("name", "")), "phone": str(x.get("phone", ""))}
+                for x in data
+                if isinstance(x, dict) and x.get("phone")
+            ]
+    except (ValueError, TypeError):
+        pass
+    return []
+
+
+async def save_phones_list(phones):
+    cleaned = [
+        {"name": (p.get("name") or "").strip(), "phone": (p.get("phone") or "").strip()}
+        for p in phones
+        if (p.get("phone") or "").strip()
+    ]
+    await db.set_setting("site_phones_json", json.dumps(cleaned, ensure_ascii=False))
+    # keep legacy single phone in sync (first one)
+    await db.set_setting("site_phone", cleaned[0]["phone"] if cleaned else "")
+
+
+@router.message(lambda m: m.text == "➕ Добавить телефон")
+async def site_phone_add_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.set_state(SitePhonesState.waiting_for_add)
+    await message.answer(
+        "Введите имя/подпись и телефон в одной строке через двоеточие или пробел.\n"
+        "Пример:\nОлег: +380501234567\nили\nМагазин +380441234567"
+    )
+
+
+@router.message(SitePhonesState.waiting_for_add)
+async def site_phone_add_save(message: Message, state: FSMContext):
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer("Пустой ввод. Попробуйте ещё раз.")
+        return
+
+    if ":" in raw:
+        name, _, phone = raw.partition(":")
+    else:
+        # split on last whitespace before phone-like token
+        parts = raw.rsplit(None, 1)
+        if len(parts) == 2:
+            name, phone = parts
+        else:
+            name, phone = "", parts[0]
+
+    name = name.strip()
+    phone = phone.strip()
+
+    if not phone:
+        await message.answer("Не указан телефон. Попробуйте ещё раз.")
+        return
+
+    phones = await get_phones_list()
+    phones.append({"name": name, "phone": phone})
+    await save_phones_list(phones)
+
+    await state.clear()
+    await message.answer(
+        f"✅ Телефон добавлен: {(name or 'Контакт')}: {phone}",
+        reply_markup=site_contacts_kb,
+    )
+
+
+@router.message(lambda m: m.text == "🗑 Удалить телефон")
+async def site_phone_delete_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    phones = await get_phones_list()
+    if not phones:
+        await message.answer("Список телефонов пуст.", reply_markup=site_contacts_kb)
+        return
+
+    lines = ["Введите номер позиции для удаления:"]
+    for i, p in enumerate(phones, 1):
+        lines.append(f"  {i}. {(p.get('name') or 'Контакт')}: {p.get('phone')}")
+    await state.set_state(SitePhonesState.waiting_for_delete)
+    await message.answer("\n".join(lines))
+
+
+@router.message(SitePhonesState.waiting_for_delete)
+async def site_phone_delete_save(message: Message, state: FSMContext):
+    raw = (message.text or "").strip()
+    if not raw.isdigit():
+        await message.answer("Введите номер позиции (число).")
+        return
+    idx = int(raw) - 1
+    phones = await get_phones_list()
+    if idx < 0 or idx >= len(phones):
+        await message.answer("Неверный номер позиции.")
+        return
+    removed = phones.pop(idx)
+    await save_phones_list(phones)
+    await state.clear()
+    await message.answer(
+        f"✅ Удалено: {(removed.get('name') or 'Контакт')}: {removed.get('phone')}",
+        reply_markup=site_contacts_kb,
     )
 
 
@@ -4145,7 +4277,13 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     brands = sorted(set([p["brand"] for p in products if p["brand"]]))
 
     if category:
-        products = [p for p in products if (p["category"] or "") == category]
+        # category aliases — let "Нагреватели" / "Нагрівачі" cover boiler-like
+        heater_aliases = {"Нагреватели", "Нагрівачі", "Нагреватель", "Бойлер", "Бойлеры", "Бойлери", "Водонагреватель", "Водонагрівач"}
+        if category in heater_aliases:
+            allowed = heater_aliases
+            products = [p for p in products if (p["category"] or "") in allowed]
+        else:
+            products = [p for p in products if (p["category"] or "") == category]
 
     if brand:
         products = [p for p in products if (p["brand"] or "") == brand]
@@ -4177,6 +4315,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
 
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
+        "phones": await get_phones_list(),
         "tg": await db.get_setting("site_tg") or "",
         "instagram": await db.get_setting("site_instagram") or "",
         "address": await db.get_setting("site_address") or "",
@@ -4261,6 +4400,7 @@ async def product_page(request: Request, product_id: int):
     images = await db.get_product_images(product_id)
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
+        "phones": await get_phones_list(),
         "tg": await db.get_setting("site_tg") or "",
         "instagram": await db.get_setting("site_instagram") or "",
         "address": await db.get_setting("site_address") or "",
@@ -4294,6 +4434,7 @@ async def product_page(request: Request, product_id: int):
 async def cart_page(request: Request):
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
+        "phones": await get_phones_list(),
         "tg": await db.get_setting("site_tg") or "",
         "instagram": await db.get_setting("site_instagram") or "",
         "address": await db.get_setting("site_address") or "",

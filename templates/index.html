@@ -21,8 +21,14 @@
                 <div class="header-title">
                     <h1>{{ site_title or '⚡ Technovlada' }}</h1>
                     <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
-                    {% if header_show_contacts and site_contacts.phone %}
-                    <a href="tel:{{ site_contacts.phone }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
+                    {% if header_show_contacts %}
+                    {% if site_contacts.phones %}
+                        {% for p in site_contacts.phones %}
+                        <a href="tel:{{ p.phone }}" class="header-phone">📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</a>
+                        {% endfor %}
+                    {% elif site_contacts.phone %}
+                        <a href="tel:{{ site_contacts.phone }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
+                    {% endif %}
                     {% endif %}
                 </div>
 
@@ -104,7 +110,7 @@
                 <button type="submit" data-ru="Найти" data-uk="Знайти">Найти</button>
             </div>
             <div class="search-filters-row">
-                <select name="brand" class="brand-select">
+                <select name="brand" class="brand-select" onchange="this.form.submit()">
                   <option value="" data-ru="Все бренды" data-uk="Усі бренди">Все бренды</option>
                   {% for b in brands %}
                   <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
@@ -196,7 +202,13 @@
 
 <footer class="site-footer">
     <h3>Контакты</h3>
-    {% if site_contacts.phone %}<p>📞 {{ site_contacts.phone }}</p>{% endif %}
+    {% if site_contacts.phones %}
+        {% for p in site_contacts.phones %}
+        <p>📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</p>
+        {% endfor %}
+    {% elif site_contacts.phone %}
+        <p>📞 {{ site_contacts.phone }}</p>
+    {% endif %}
     {% if site_contacts.tg %}<p>💬 {{ site_contacts.tg }}</p>{% endif %}
     {% if site_contacts.instagram %}<p>📷 {{ site_contacts.instagram }}</p>{% endif %}
     {% if site_contacts.address %}<p>📍 {{ site_contacts.address }}</p>{% endif %}
