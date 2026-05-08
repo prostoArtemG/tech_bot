@@ -215,6 +215,86 @@ async def get_saas_client_payments() -> list:
         return []
 
 
+_saas_limits_cache: dict = {"value": None, "ts": 0.0}
+_SAAS_LIMITS_TTL = 60.0
+
+
+async def get_saas_client_limits() -> dict:
+    """Return dict with keys: products_limit, products_used, images_per_product_limit. Empty dict on failure."""
+    import time
+    if not SAAS_PLATFORM_URL or not SAAS_CLIENT_SLUG:
+        return {}
+    now_ts = time.monotonic()
+    cached = _saas_limits_cache["value"]
+    if cached is not None and (now_ts - _saas_limits_cache["ts"]) < _SAAS_LIMITS_TTL:
+        return cached
+    import aiohttp
+    url = f"{SAAS_PLATFORM_URL}/api/client-limits/{SAAS_CLIENT_SLUG}"
+    out: dict = {}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None) or {}
+                    out = {
+                        "products_limit": data.get("products_limit"),
+                        "products_used": data.get("products_used"),
+                        "images_per_product_limit": data.get("images_per_product_limit"),
+                    }
+                else:
+                    print(f"[saas] client-limits http {resp.status}")
+    except Exception as e:
+        print(f"[saas] client-limits failed: {e}")
+    _saas_limits_cache["value"] = out
+    _saas_limits_cache["ts"] = now_ts
+    return out
+
+
+async def get_image_limit_for_product() -> int:
+    """Return effective per-product image limit (from API, fallback 6)."""
+    limits = await get_saas_client_limits()
+    raw = limits.get("images_per_product_limit")
+    try:
+        v = int(raw)
+        if v > 0:
+            return v
+    except (TypeError, ValueError):
+        pass
+    return 6
+
+
+async def require_under_products_limit(message: Message) -> bool:
+    """Check products_used vs products_limit from saas_platform. Returns False if exceeded."""
+    limits = await get_saas_client_limits()
+    products_limit = limits.get("products_limit")
+    products_used = limits.get("products_used")
+    # if API not available, count locally as best-effort upper bound
+    if products_used is None:
+        try:
+            products_used = await db.count_products_active()
+        except Exception:
+            products_used = None
+    try:
+        limit_int = int(products_limit) if products_limit is not None else None
+        used_int = int(products_used) if products_used is not None else None
+    except (TypeError, ValueError):
+        return True
+    if limit_int is None or used_int is None or limit_int <= 0:
+        return True  # unknown / unlimited → allow
+    if used_int >= limit_int:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[[
+                InlineKeyboardButton(text="💳 Оновити тариф", callback_data="pay_subscription_inline")
+            ]]
+        )
+        await message.answer(
+            f"⚠️ Лимит товаров по тарифу достигнут ({used_int}/{limit_int}).",
+            reply_markup=kb,
+        )
+        return False
+    return True
+
+
 async def require_active_subscription(message: Message) -> bool:
     """Return False (and notify user) if subscription is expired."""
     status = await get_saas_client_status()
@@ -2509,6 +2589,8 @@ async def add_product_start_handler(message: Message, state: FSMContext):
         return
     if not await require_active_subscription(message):
         return
+    if not await require_under_products_limit(message):
+        return
 
     await state.set_state(AddProductState.waiting_for_category)
     await message.answer(
@@ -4265,10 +4347,17 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
 
         product_id = data.get("product_id")
 
-        # PRE-CHECK: enforce 6-photo limit before Cloudinary upload
-        if await db.count_product_images_total(product_id) >= 6:
+        # PRE-CHECK: enforce per-product photo limit (from saas_platform tariff, fallback 6)
+        photo_limit = await get_image_limit_for_product()
+        if await db.count_product_images_total(product_id) >= photo_limit:
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[[
+                    InlineKeyboardButton(text="💳 Оновити тариф", callback_data="pay_subscription_inline")
+                ]]
+            )
             await message.answer(
-                "⚠️ Максимум 6 фото для одного товара. Удалите одно фото, чтобы добавить новое."
+                f"⚠️ Максимум {photo_limit} фото для одного товара. Удалите одно фото, чтобы добавить новое.",
+                reply_markup=kb,
             )
             return
 
@@ -4279,10 +4368,10 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
         photo_url = await save_telegram_photo(message.bot, file_id)
 
         # ATOMIC add with limit check (handles race when sending media group)
-        inserted_id = await db.add_product_image_if_under_limit(product_id, photo_url, limit=6)
+        inserted_id = await db.add_product_image_if_under_limit(product_id, photo_url, limit=photo_limit)
         if inserted_id is None:
             await message.answer(
-                "⚠️ Максимум 6 фото для одного товара. Удалите одно фото, чтобы добавить новое."
+                f"⚠️ Максимум {photo_limit} фото для одного товара. Удалите одно фото, чтобы добавить новое."
             )
             return
 

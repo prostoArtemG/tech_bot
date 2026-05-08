@@ -361,6 +361,16 @@ class Database:
             """
         )
 
+    async def count_products_active(self) -> int:
+        row = await self.fetchrow(
+            """
+            SELECT COUNT(*) AS c FROM products
+            WHERE COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
+            """
+        )
+        return int(row["c"]) if row else 0
+
     async def list_site_products(self):
         return await self.fetch(
             """
