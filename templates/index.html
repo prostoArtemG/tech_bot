@@ -173,8 +173,10 @@
 
             <p class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</p>
 
-            <a href="/product/{{ product.id }}" class="details-btn" data-ru="Подробнее" data-uk="Детальніше">Подробнее</a>
-            <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ cur_price }}')">🛒 <span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
+            <div class="card-actions">
+                <a href="/product/{{ product.id }}" class="details-btn" data-ru="Подробнее" data-uk="Детальніше">Подробнее</a>
+                <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ cur_price }}')">🛒 <span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
+            </div>
         </div>
         {% endfor %}
     </main>
