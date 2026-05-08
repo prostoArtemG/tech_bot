@@ -1725,8 +1725,12 @@ async def show_contacts(message: Message):
     schedule = await db.get_setting("site_schedule") or "-"
 
     if phones:
+        def _fmt(p):
+            name = (p.get("name") or "").strip()
+            phone = (p.get("phone") or "-").strip()
+            return f"{name}: {phone}" if name else phone
         phones_block = "\n".join(
-            f"  {i+1}. {(p.get('name') or 'Контакт')}: {p.get('phone') or '-'}"
+            f"  {i+1}. {_fmt(p)}"
             for i, p in enumerate(phones)
         )
     else:
@@ -1782,8 +1786,11 @@ async def site_phone_add_start(message: Message, state: FSMContext):
         return
     await state.set_state(SitePhonesState.waiting_for_add)
     await message.answer(
-        "Введите имя/подпись и телефон в одной строке через двоеточие или пробел.\n"
-        "Пример:\nОлег: +380501234567\nили\nМагазин +380441234567"
+        "Введите телефон. Можно с подписью через двоеточие.\n"
+        "Примеры:\n"
+        "+380 (96) 812 84 45\n"
+        "Олег: +380501234567\n"
+        "Магазин: +380-44-123-45-67"
     )
 
 
@@ -1796,9 +1803,12 @@ async def site_phone_add_save(message: Message, state: FSMContext):
 
     if ":" in raw:
         name, _, phone = raw.partition(":")
+    elif re.fullmatch(r"[\d\s+\-().]+", raw):
+        # phone-only input (digits, spaces, +, -, parentheses, dots)
+        name, phone = "", raw
     else:
-        # split on last whitespace before phone-like token
-        parts = raw.rsplit(None, 1)
+        # split on first whitespace: name first, phone after
+        parts = raw.split(None, 1)
         if len(parts) == 2:
             name, phone = parts
         else:
@@ -1816,8 +1826,9 @@ async def site_phone_add_save(message: Message, state: FSMContext):
     await save_phones_list(phones)
 
     await state.clear()
+    label = f"{name}: {phone}" if name else phone
     await message.answer(
-        f"✅ Телефон добавлен: {(name or 'Контакт')}: {phone}",
+        f"✅ Телефон добавлен: {label}",
         reply_markup=site_contacts_kb,
     )
 
@@ -1833,7 +1844,9 @@ async def site_phone_delete_start(message: Message, state: FSMContext):
 
     lines = ["Введите номер позиции для удаления:"]
     for i, p in enumerate(phones, 1):
-        lines.append(f"  {i}. {(p.get('name') or 'Контакт')}: {p.get('phone')}")
+        nm = (p.get("name") or "").strip()
+        ph = (p.get("phone") or "").strip()
+        lines.append(f"  {i}. " + (f"{nm}: {ph}" if nm else ph))
     await state.set_state(SitePhonesState.waiting_for_delete)
     await message.answer("\n".join(lines))
 
@@ -1852,8 +1865,11 @@ async def site_phone_delete_save(message: Message, state: FSMContext):
     removed = phones.pop(idx)
     await save_phones_list(phones)
     await state.clear()
+    rn = (removed.get("name") or "").strip()
+    rp = (removed.get("phone") or "").strip()
+    label = f"{rn}: {rp}" if rn else rp
     await message.answer(
-        f"✅ Удалено: {(removed.get('name') or 'Контакт')}: {removed.get('phone')}",
+        f"✅ Удалено: {label}",
         reply_markup=site_contacts_kb,
     )
 
