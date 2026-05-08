@@ -3,6 +3,18 @@ import json
 import math
 import os
 import re
+from datetime import datetime
+try:
+    from zoneinfo import ZoneInfo  # py>=3.9
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
+
+KYIV_TZ = ZoneInfo("Europe/Kyiv") if ZoneInfo else None
+
+
+def now_kyiv_str() -> str:
+    now = datetime.now(KYIV_TZ) if KYIV_TZ else datetime.now()
+    return now.strftime("%d.%m.%Y %H:%M")
 
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command, StateFilter
@@ -4269,6 +4281,7 @@ async def create_site_order(data: SiteOrderRequest):
     if telegram_bot:
         await notify_admins(
             "🛒 Новый заказ с сайта\n\n"
+            f"📅 {now_kyiv_str()}\n\n"
             f"ID заказа: {order['id']}\n"
             f"Клиент: {data.name}\n"
             f"Телефон: {phone}\n"
@@ -4541,6 +4554,7 @@ async def api_cart_order(request: Request):
     if telegram_bot:
         text = (
             "🛒 Новый заказ с сайта\n\n"
+            f"📅 {now_kyiv_str()}\n\n"
             f"Клиент: {name}\n"
             f"Телефон: {phone}\n"
             f"Город: {city}\n\n"
