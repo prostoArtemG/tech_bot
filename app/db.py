@@ -472,6 +472,36 @@ class Database:
             image_url
         )
 
+    async def count_product_images(self, product_id: int) -> int:
+        row = await self.fetchrow(
+            "SELECT COUNT(*) AS c FROM product_images WHERE product_id = $1",
+            product_id
+        )
+        return int(row["c"]) if row else 0
+
+    async def set_main_product_image(self, image_id: int):
+        img = await self.fetchrow(
+            "SELECT id, product_id, image_url FROM product_images WHERE id = $1",
+            image_id
+        )
+        if not img:
+            return None
+        product_id = img["product_id"]
+        await self.execute(
+            "UPDATE product_images SET sort_order = 100 WHERE product_id = $1",
+            product_id
+        )
+        await self.execute(
+            "UPDATE product_images SET sort_order = 0 WHERE id = $1",
+            image_id
+        )
+        await self.execute(
+            "UPDATE products SET photo_url = $2 WHERE id = $1",
+            product_id,
+            img["image_url"]
+        )
+        return img
+
     async def update_stock_qty(self, product_id: int, stock_qty: int):
         await self.execute(
             """

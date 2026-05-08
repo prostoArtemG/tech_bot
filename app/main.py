@@ -968,12 +968,24 @@ async def list_orders_handler(message: Message):
     messages = []
 
     for row in rows:
-        created_at = row["created_at"].strftime("%d.%m.%Y %H:%M") if row["created_at"] else "-"
+        created_at_raw = row["created_at"]
+        if created_at_raw:
+            if KYIV_TZ is not None:
+                if created_at_raw.tzinfo is None:
+                    from datetime import timezone as _tz
+                    created_at_raw = created_at_raw.replace(tzinfo=_tz.utc)
+                created_at_local = created_at_raw.astimezone(KYIV_TZ)
+            else:
+                created_at_local = created_at_raw
+            created_at = created_at_local.strftime("%d.%m.%Y %H:%M")
+        else:
+            created_at = "-"
         status_ru = status_map.get(row["status"], row["status"])
 
         messages.append(
             """
 🧾 Заказ #{id}
+📅 {created_at}
 📍 Статус: {status}
 👤 Клиент: {name} | {phone}
 🏙 Город: {city}
@@ -983,6 +995,7 @@ async def list_orders_handler(message: Message):
 💬 Комментарий: {comment}
 """.format(
                 id=row["id"],
+                created_at=created_at,
                 status=status_ru,
                 name=(row["customer_name"] or "-"),
                 phone=(row["customer_phone"] or "-"),
@@ -3662,8 +3675,15 @@ async def show_product_photos_manager(message: Message, product_id: int):
         return
 
     rows = []
+    main_url = (product.get("photo_url") if product else None) or (images[0]["image_url"] if images else None)
     for idx, img in enumerate(images, start=1):
+        is_main = img["image_url"] == main_url
+        main_label = f"✅ Фото {idx} (главное)" if is_main else f"⭐ Сделать главным (Фото {idx})"
         rows.append([
+            InlineKeyboardButton(
+                text=main_label,
+                callback_data=f"set_main_image:{img['id']}"
+            ),
             InlineKeyboardButton(
                 text=f"🗑 Фото {idx}",
                 callback_data=f"del_image:{img['id']}"
@@ -3709,6 +3729,23 @@ async def del_image_callback(callback: CallbackQuery, state: FSMContext):
 
     await callback.answer("🗑 Фото удалено")
     await show_product_photos_manager(callback.message, product_id)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("set_main_image:"))
+async def set_main_image_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        image_id = int(callback.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await callback.answer("Неверный ID фото.")
+        return
+
+    img = await db.set_main_product_image(image_id)
+    if not img:
+        await callback.answer("Фото не найдено.")
+        return
+
+    await callback.answer("⭐ Фото установлено главным")
+    await show_product_photos_manager(callback.message, img["product_id"])
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("del_main_photo:"))
@@ -3925,17 +3962,24 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
 
         product_id = data.get("product_id")
 
-        # enforce 6-photo limit
+        # enforce 6-photo limit (count product_images + legacy photo_url if not duplicated)
         existing = await db.get_product_images(product_id) or []
-        if len(existing) >= 6:
-            await message.answer("Максимум 6 фото для одного товара.")
+        existing_urls = {img["image_url"] for img in existing}
+        product = await db.get_product_by_id(product_id)
+        legacy = product.get("photo_url") if product else None
+        total_count = len(existing) + (1 if legacy and legacy not in existing_urls else 0)
+        if total_count >= 6:
+            await message.answer(
+                "⚠️ Максимум 6 фото для одного товара. Удалите одно фото, чтобы добавить новое."
+            )
             return
 
         file_id = message.photo[-1].file_id
         photo_url = await save_telegram_photo(message.bot, file_id)
 
-        # Update main photo_url (keep backward compatibility)
-        await db.update_product_field(product_id, "photo_url", photo_url)
+        # Update main photo_url only if not set yet (don't overwrite chosen main)
+        if not legacy:
+            await db.update_product_field(product_id, "photo_url", photo_url)
 
         # Add to product_images for gallery
         await db.add_product_image(product_id, photo_url)
