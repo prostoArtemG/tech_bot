@@ -52,6 +52,23 @@ telegram_bot = None
 WEB_NOTIFY_CHAT_ID = os.getenv("WEB_NOTIFY_CHAT_ID")
 
 
+async def notify_admins(text: str):
+    """Send a message to every admin (ADMIN_IDS + WEB_NOTIFY_CHAT_ID)."""
+    if not telegram_bot:
+        return
+    recipients = set(ADMIN_IDS)
+    if WEB_NOTIFY_CHAT_ID:
+        try:
+            recipients.add(int(WEB_NOTIFY_CHAT_ID))
+        except (TypeError, ValueError):
+            pass
+    for chat_id in recipients:
+        try:
+            await telegram_bot.send_message(chat_id, text)
+        except Exception as e:
+            print(f"[notify_admins] failed to send to {chat_id}: {e}")
+
+
 class SiteOrderRequest(BaseModel):
     product_id: int
     qty: int = 1
@@ -3894,10 +3911,16 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
             await message.answer("Это поле не для фото.")
             return
 
+        product_id = data.get("product_id")
+
+        # enforce 6-photo limit
+        existing = await db.get_product_images(product_id) or []
+        if len(existing) >= 6:
+            await message.answer("Максимум 6 фото для одного товара.")
+            return
+
         file_id = message.photo[-1].file_id
         photo_url = await save_telegram_photo(message.bot, file_id)
-
-        product_id = data.get("product_id")
 
         # Update main photo_url (keep backward compatibility)
         await db.update_product_field(product_id, "photo_url", photo_url)
@@ -4243,9 +4266,8 @@ async def create_site_order(data: SiteOrderRequest):
         comment=data.comment
     )
 
-    if telegram_bot and WEB_NOTIFY_CHAT_ID:
-        await telegram_bot.send_message(
-            int(WEB_NOTIFY_CHAT_ID),
+    if telegram_bot:
+        await notify_admins(
             "🛒 Новый заказ с сайта\n\n"
             f"ID заказа: {order['id']}\n"
             f"Клиент: {data.name}\n"
@@ -4516,7 +4538,7 @@ async def api_cart_order(request: Request):
         lines.append(f"{idx}) {prod.get('brand') or ''} {prod.get('model') or ''} — {qty} шт — {int(total)} грн")
 
     # send telegram notification
-    if telegram_bot and WEB_NOTIFY_CHAT_ID:
+    if telegram_bot:
         text = (
             "🛒 Новый заказ с сайта\n\n"
             f"Клиент: {name}\n"
@@ -4527,7 +4549,7 @@ async def api_cart_order(request: Request):
             + f"\n\nИтого: {int(total_sum)} грн\n"
             + f"Комментарий: {comment or '-'}"
         )
-        await telegram_bot.send_message(int(WEB_NOTIFY_CHAT_ID), text)
+        await notify_admins(text)
 
     return {"ok": True, "total": total_sum}
 
