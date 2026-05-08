@@ -479,6 +479,65 @@ class Database:
         )
         return int(row["c"]) if row else 0
 
+    async def count_product_images_total(self, product_id: int) -> int:
+        """Count gallery images + legacy products.photo_url if not duplicated."""
+        row = await self.fetchrow(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM product_images WHERE product_id = $1) AS gallery,
+                (SELECT photo_url FROM products WHERE id = $1) AS legacy
+            """,
+            product_id
+        )
+        if not row:
+            return 0
+        gallery = int(row["gallery"] or 0)
+        legacy = row["legacy"]
+        if not legacy:
+            return gallery
+        dup = await self.fetchrow(
+            "SELECT 1 FROM product_images WHERE product_id = $1 AND image_url = $2 LIMIT 1",
+            product_id, legacy
+        )
+        return gallery + (0 if dup else 1)
+
+    async def add_product_image_if_under_limit(self, product_id: int, image_url: str, limit: int = 6) -> int | None:
+        """Atomically add image only if total photos < limit. Returns new image id or None."""
+        if not self.pool:
+            raise RuntimeError("DB pool not initialized")
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("SELECT pg_advisory_xact_lock($1)", int(product_id))
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        (SELECT COUNT(*) FROM product_images WHERE product_id = $1) AS gallery,
+                        (SELECT photo_url FROM products WHERE id = $1) AS legacy
+                    """,
+                    product_id
+                )
+                gallery = int(row["gallery"] or 0) if row else 0
+                legacy = row["legacy"] if row else None
+                total = gallery
+                if legacy:
+                    dup = await conn.fetchrow(
+                        "SELECT 1 FROM product_images WHERE product_id = $1 AND image_url = $2 LIMIT 1",
+                        product_id, legacy
+                    )
+                    if not dup:
+                        total += 1
+                if total >= limit:
+                    return None
+                inserted = await conn.fetchrow(
+                    """
+                    INSERT INTO product_images (product_id, image_url, sort_order)
+                    VALUES ($1, $2, 100)
+                    RETURNING id
+                    """,
+                    product_id, image_url
+                )
+                return int(inserted["id"]) if inserted else None
+
     async def set_main_product_image(self, image_id: int):
         img = await self.fetchrow(
             "SELECT id, product_id, image_url FROM product_images WHERE id = $1",

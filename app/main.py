@@ -3962,27 +3962,30 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
 
         product_id = data.get("product_id")
 
-        # enforce 6-photo limit (count product_images + legacy photo_url if not duplicated)
-        existing = await db.get_product_images(product_id) or []
-        existing_urls = {img["image_url"] for img in existing}
-        product = await db.get_product_by_id(product_id)
-        legacy = product.get("photo_url") if product else None
-        total_count = len(existing) + (1 if legacy and legacy not in existing_urls else 0)
-        if total_count >= 6:
+        # PRE-CHECK: enforce 6-photo limit before Cloudinary upload
+        if await db.count_product_images_total(product_id) >= 6:
             await message.answer(
                 "⚠️ Максимум 6 фото для одного товара. Удалите одно фото, чтобы добавить новое."
             )
             return
 
+        product = await db.get_product_by_id(product_id)
+        legacy = product.get("photo_url") if product else None
+
         file_id = message.photo[-1].file_id
         photo_url = await save_telegram_photo(message.bot, file_id)
+
+        # ATOMIC add with limit check (handles race when sending media group)
+        inserted_id = await db.add_product_image_if_under_limit(product_id, photo_url, limit=6)
+        if inserted_id is None:
+            await message.answer(
+                "⚠️ Максимум 6 фото для одного товара. Удалите одно фото, чтобы добавить новое."
+            )
+            return
 
         # Update main photo_url only if not set yet (don't overwrite chosen main)
         if not legacy:
             await db.update_product_field(product_id, "photo_url", photo_url)
-
-        # Add to product_images for gallery
-        await db.add_product_image(product_id, photo_url)
 
         # Do not clear state — allow sending multiple photos
         await message.answer("✅ Фото сохранено. Можно отправить ещё или нажмите ⬅️ Назад.", reply_markup=products_kb)
