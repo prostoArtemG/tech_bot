@@ -63,6 +63,58 @@ telegram_bot = None
 
 WEB_NOTIFY_CHAT_ID = os.getenv("WEB_NOTIFY_CHAT_ID")
 
+# ===== SaaS platform integration (notifications between bots) =====
+SAAS_BOT_TOKEN = os.getenv("SAAS_BOT_TOKEN", "")
+SAAS_ADMIN_CHAT_ID = os.getenv("SAAS_ADMIN_CHAT_ID", "")
+SAAS_WEBHOOK_URL = os.getenv("SAAS_WEBHOOK_URL", "")  # optional HTTP webhook
+SAAS_CLIENT_NAME = os.getenv("SAAS_CLIENT_NAME", "Technovlada")
+SAAS_CLIENT_SLUG = os.getenv("SAAS_CLIENT_SLUG", "technovlada")
+
+
+async def send_to_saas_platform(text: str, payload: dict | None = None) -> bool:
+    """
+    Send a payment-request notification to saas_platform.
+    Two transports (any one configured is enough):
+      1. SAAS_BOT_TOKEN + SAAS_ADMIN_CHAT_ID — direct Telegram Bot API call.
+      2. SAAS_WEBHOOK_URL — HTTP POST with JSON payload.
+    Returns True if at least one delivery succeeded.
+    """
+    import aiohttp
+    ok = False
+    try:
+        async with aiohttp.ClientSession() as session:
+            if SAAS_BOT_TOKEN and SAAS_ADMIN_CHAT_ID:
+                url = f"https://api.telegram.org/bot{SAAS_BOT_TOKEN}/sendMessage"
+                try:
+                    async with session.post(
+                        url,
+                        json={"chat_id": SAAS_ADMIN_CHAT_ID, "text": text},
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as resp:
+                        if resp.status == 200:
+                            ok = True
+                        else:
+                            print(f"[saas] telegram api {resp.status}: {await resp.text()}")
+                except Exception as e:
+                    print(f"[saas] telegram send failed: {e}")
+
+            if SAAS_WEBHOOK_URL and payload is not None:
+                try:
+                    async with session.post(
+                        SAAS_WEBHOOK_URL,
+                        json={"text": text, **payload},
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as resp:
+                        if resp.status < 400:
+                            ok = True
+                        else:
+                            print(f"[saas] webhook {resp.status}: {await resp.text()}")
+                except Exception as e:
+                    print(f"[saas] webhook failed: {e}")
+    except Exception as e:
+        print(f"[saas] session error: {e}")
+    return ok
+
 
 async def notify_admins(text: str):
     """Send a message to every admin (ADMIN_IDS + WEB_NOTIFY_CHAT_ID)."""
@@ -1583,7 +1635,45 @@ async def payment_contact_handler(message: Message):
 
 @router.message(lambda m: m.text in {"💰 Оплатить подписку", "💰 Оплатить домен"})
 async def payment_pay_stub_handler(message: Message):
-    await message.answer("Для оплаты свяжитесь с администратором")
+    info = await get_payment_info()
+    is_subscription = message.text == "💰 Оплатить подписку"
+    payload = {
+        "type": "subscription" if is_subscription else "domain",
+        "client_name": SAAS_CLIENT_NAME,
+        "client_slug": SAAS_CLIENT_SLUG,
+        "telegram_user_id": message.from_user.id if message.from_user else None,
+        "telegram_username": (message.from_user.username if message.from_user else None) or "",
+        "created_at": now_kyiv_str(),
+    }
+    if is_subscription:
+        payload["plan"] = info.get("pay_sub_plan", "—")
+        payload["amount"] = info.get("pay_sub_price", "—")
+        type_label = "Подписка"
+        amount_line = f"💰 Сумма: {payload['amount']}"
+        extra_line = f"📦 Тариф: {payload['plan']}"
+    else:
+        payload["domain"] = info.get("pay_domain_name", "—")
+        type_label = "Домен"
+        amount_line = f"🌐 Домен: {payload['domain']}"
+        extra_line = ""
+
+    text = (
+        "💳 Новый запрос на оплату\n\n"
+        f"🏢 Клиент: {SAAS_CLIENT_NAME}\n"
+        f"🌐 Slug: {SAAS_CLIENT_SLUG}\n"
+        f"📦 Тип: {type_label}\n"
+        + (f"{extra_line}\n" if extra_line else "")
+        + f"{amount_line}\n"
+        f"👤 Telegram ID: {payload['telegram_user_id'] or '—'}"
+        + (f" (@{payload['telegram_username']})" if payload['telegram_username'] else "")
+        + f"\n📅 {payload['created_at']}"
+    )
+
+    sent = await send_to_saas_platform(text, payload)
+    if sent:
+        await message.answer("✅ Запрос на оплату отправлен.")
+    else:
+        await message.answer("⚠️ Не удалось отправить запрос. Попробуйте позже или свяжитесь с администратором.")
 
 
 @router.message(StateFilter("*"), lambda m: m.text in {
