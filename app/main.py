@@ -3422,14 +3422,14 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="💧 Мокрый", callback_data="set_ten:wet"),
-                    InlineKeyboardButton(text="🌵 Сухой", callback_data="set_ten:dry"),
+                    InlineKeyboardButton(text="💧 Мокрый ТЕН", callback_data="set_ten:wet"),
+                    InlineKeyboardButton(text="✨ Сухой ТЕН", callback_data="set_ten:dry"),
                 ],
                 [InlineKeyboardButton(text="❌ Очистить", callback_data="set_ten:clear")],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back_to_edit:{product_id}")],
             ]
         )
-        await callback.message.answer("Выберите тип тена:", reply_markup=kb)
+        await callback.message.answer("Выберите тип ТЕНа:", reply_markup=kb)
         await callback.answer()
         return
 
@@ -3592,17 +3592,17 @@ async def set_ten_callback(callback: CallbackQuery, state: FSMContext):
         label = "очищен"
     elif choice in {"wet", "dry"}:
         new_value = choice
-        label = "💧 Мокрый" if choice == "wet" else "🌵 Сухой"
+        label = "💧 Мокрый ТЕН" if choice == "wet" else "✨ Сухой ТЕН"
     else:
         await callback.answer("Неизвестный тип.")
         return
 
     await db.update_product_field(product_id, "boiler_ten_type", new_value)
-    await callback.answer(f"Тип тена: {label}")
+    await callback.answer(f"Тип ТЕНа: {label}")
 
     product = await db.get_product_by_id(product_id)
     await callback.message.answer(
-        f"✅ Тип тена обновлён.",
+        f"✅ Тип ТЕНа обновлён.",
         reply_markup=None
     )
     # show edit card again
@@ -3801,10 +3801,38 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
         if value == "-":
             value = None
 
+    elif field == "boiler_volume_liters":
+        if value == "-" or value == "":
+            value = None
+        else:
+            if not value.isdigit():
+                await message.answer("Введите объём бойлера числом (например, 80).")
+                return
+            value = int(value)
+            if value <= 0 or value > 1000:
+                await message.answer("Объём должен быть от 1 до 1000 литров.")
+                return
+
     await db.update_product_field(product_id, field, value)
 
     product = await db.get_product_by_id(product_id)
     await state.clear()
+
+    if field == "boiler_volume_liters":
+        if value is None:
+            await message.answer("✅ Объём бойлера очищен")
+        else:
+            await message.answer(f"✅ Объём бойлера сохранён: {value} л")
+        await state.update_data(product_id=product_id)
+        await state.set_state(EditProductState.waiting_for_field)
+        await message.answer(
+            f"Товар:\n"
+            f"ID: {product['id']}\n"
+            f"{product['category'] or '-'} | {product['brand'] or '-'} | {product['model'] or '-'}\n\n"
+            "Что изменить?",
+            reply_markup=inline_edit_fields_kb(product)
+        )
+        return
 
     await message.answer(
         await t(message, "product_updated") + "\n\n"

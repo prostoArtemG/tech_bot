@@ -111,12 +111,12 @@
                     {% endif %}
                     {% if product.boiler_ten_type %}
                     <div class="spec-row">
-                        <span data-ru="Тип тена" data-uk="Тип тена">Тип тена</span>
+                        <span data-ru="Тип ТЕНа" data-uk="Тип ТЕНа">Тип ТЕНа</span>
                         <b>
                             {% if product.boiler_ten_type == 'wet' %}
-                                <span data-ru="💧 Мокрый" data-uk="💧 Мокрий">💧 Мокрый</span>
+                                <span data-ru="Мокрый ТЕН" data-uk="Мокрий ТЕН">Мокрый ТЕН</span>
                             {% elif product.boiler_ten_type == 'dry' %}
-                                <span data-ru="🌵 Сухой" data-uk="🌵 Сухий">🌵 Сухой</span>
+                                <span data-ru="Сухой ТЕН" data-uk="Сухий ТЕН">Сухой ТЕН</span>
                             {% else %}
                                 {{ product.boiler_ten_type }}
                             {% endif %}
