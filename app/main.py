@@ -20,7 +20,7 @@ from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
 from dotenv import load_dotenv
 import cloudinary
 import cloudinary.uploader
@@ -59,7 +59,13 @@ ADMIN_IDS = {
 router = Router()
 
 web_app = FastAPI()
-telegram_bot = None
+telegram_bot: Bot | None = None
+dispatcher: Dispatcher | None = None
+_polling_task: asyncio.Task | None = None
+
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").rstrip("/")
+WEBHOOK_PATH = "/telegram/webhook"
+LOCAL_POLLING = os.getenv("LOCAL_POLLING", "").lower() in {"1", "true", "yes"}
 
 WEB_NOTIFY_CHAT_ID = os.getenv("WEB_NOTIFY_CHAT_ID")
 
@@ -5056,6 +5062,66 @@ async def start_web_server():
     server = uvicorn.Server(config)
     await server.serve()
 
+
+@web_app.post(WEBHOOK_PATH)
+async def telegram_webhook(request: Request):
+    if telegram_bot is None or dispatcher is None:
+        raise HTTPException(status_code=503, detail="Bot not ready")
+    data = await request.json()
+    update = Update.model_validate(data, context={"bot": telegram_bot})
+    await dispatcher.feed_update(telegram_bot, update)
+    return {"ok": True}
+
+
+@web_app.on_event("startup")
+async def _on_startup():
+    global telegram_bot, dispatcher, _polling_task
+
+    if telegram_bot is not None:
+        return
+
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher()
+    dp.include_router(router)
+
+    telegram_bot = bot
+    dispatcher = dp
+
+    await db.connect()
+    await db.init_schema()
+
+    if LOCAL_POLLING:
+        await bot.delete_webhook(drop_pending_updates=True)
+        _polling_task = asyncio.create_task(dp.start_polling(bot))
+        print("Бот запущен в режиме polling (LOCAL_POLLING=true) 🚀")
+    elif WEBHOOK_URL:
+        full_url = WEBHOOK_URL + WEBHOOK_PATH
+        await bot.set_webhook(full_url, drop_pending_updates=True)
+        print(f"Webhook установлен: {full_url} 🚀")
+    else:
+        print("⚠️ Ни WEBHOOK_URL, ни LOCAL_POLLING не заданы — бот не получает апдейты.")
+
+
+@web_app.on_event("shutdown")
+async def _on_shutdown():
+    global _polling_task
+    if _polling_task is not None:
+        _polling_task.cancel()
+        try:
+            await _polling_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        _polling_task = None
+    if telegram_bot is not None:
+        try:
+            await telegram_bot.session.close()
+        except Exception:
+            pass
+    try:
+        await db.close()
+    except Exception:
+        pass
+
 async def save_telegram_photo(bot: Bot, file_id: str) -> str:
     file = await bot.get_file(file_id)
     file_path = file.file_path
@@ -5072,27 +5138,9 @@ async def save_telegram_photo(bot: Bot, file_id: str) -> str:
     return result["secure_url"]
 
 async def main():
-    global telegram_bot
-
-    bot = Bot(token=BOT_TOKEN)
-    telegram_bot = bot
-
-    dp = Dispatcher()
-    dp.include_router(router)
-
-    await db.connect()
-    await db.init_schema()
-
-    print("Бот и сайт API запущены 🚀")
-
-    try:
-        await asyncio.gather(
-            dp.start_polling(bot),
-            start_web_server()
-        )
-    finally:
-        await bot.session.close()
-        await db.close()
+    # Запускаем uvicorn; startup-хук поднимет бота (webhook или polling).
+    print("Бот и сайт API запускаются 🚀")
+    await start_web_server()
 @router.message(EditProductState.waiting_for_product_id)
 async def edit_product_id_handler(message: Message, state: FSMContext):
     raw_id = (message.text or "").strip()
