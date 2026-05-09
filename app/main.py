@@ -323,6 +323,29 @@ async def pay_subscription_inline_callback(callback: CallbackQuery):
     await payment_pay_stub_handler_internal(msg, callback.from_user, fake_text)
 
 
+async def create_saas_payment_link(payload: dict) -> str | None:
+    """POST {SAAS_PLATFORM_URL}/api/create-payment-link → returns payment_url or None."""
+    if not SAAS_PLATFORM_URL:
+        return None
+    import aiohttp
+    url = f"{SAAS_PLATFORM_URL}/api/create-payment-link"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=payload,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    print(f"[saas] create-payment-link http {resp.status}: {await resp.text()}")
+                    return None
+                data = await resp.json(content_type=None) or {}
+                link = data.get("payment_url") or data.get("url") or data.get("link")
+                return link if isinstance(link, str) and link else None
+    except Exception as e:
+        print(f"[saas] create-payment-link failed: {e}")
+        return None
+
+
 async def payment_pay_stub_handler_internal(message: Message, from_user, text_value: str):
     """Shared payment-request flow usable from both message and callback."""
     info = await get_payment_info()
@@ -347,6 +370,21 @@ async def payment_pay_stub_handler_internal(message: Message, from_user, text_va
         amount_line = f"🌐 Домен: {payload['domain']}"
         extra_line = ""
 
+    # 1) Try to get a payment link from saas_platform
+    payment_url = await create_saas_payment_link(payload)
+    if payment_url:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="💳 Перейти к оплате", url=payment_url)]]
+        )
+        await message.answer(
+            f"💳 Счёт на оплату ({type_label})\n\n"
+            + (f"{extra_line}\n" if extra_line else "")
+            + f"{amount_line}",
+            reply_markup=kb,
+        )
+        return
+
+    # 2) Fallback: notify admin in saas_platform
     notif = (
         "💳 Новый запрос на оплату\n\n"
         f"🏢 Клиент: {SAAS_CLIENT_NAME}\n"
@@ -362,7 +400,7 @@ async def payment_pay_stub_handler_internal(message: Message, from_user, text_va
     if sent:
         await message.answer("✅ Запрос на оплату отправлен.")
     else:
-        await message.answer("⚠️ Не удалось отправить запрос. Попробуйте позже или свяжитесь с администратором.")
+        await message.answer("⚠️ Не удалось получить ссылку на оплату. Попробуйте позже или свяжитесь с администратором.")
 
 
 
