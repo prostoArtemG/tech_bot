@@ -66,6 +66,8 @@ _polling_task: asyncio.Task | None = None
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").rstrip("/")
 WEBHOOK_PATH = "/telegram/webhook"
 LOCAL_POLLING = os.getenv("LOCAL_POLLING", "").lower() in {"1", "true", "yes"}
+TELEGRAM_SECRET_TOKEN = os.getenv("TELEGRAM_SECRET_TOKEN", "").strip()
+SAAS_PAYMENT_PROVIDER = os.getenv("SAAS_PAYMENT_PROVIDER", "mock").strip() or "mock"
 
 WEB_NOTIFY_CHAT_ID = os.getenv("WEB_NOTIFY_CHAT_ID")
 
@@ -406,7 +408,7 @@ async def payment_pay_stub_handler_internal(message: Message, from_user, text_va
         "payment_type": payment_type,
         "amount": amount,
         "currency": currency,
-        "provider": "mock",
+        "provider": SAAS_PAYMENT_PROVIDER,
         "telegram_user_id": from_user.id if from_user else None,
     }
 
@@ -5078,6 +5080,10 @@ async def start_web_server():
 async def telegram_webhook(request: Request):
     if telegram_bot is None or dispatcher is None:
         raise HTTPException(status_code=503, detail="Bot not ready")
+    if TELEGRAM_SECRET_TOKEN:
+        header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if header_token != TELEGRAM_SECRET_TOKEN:
+            raise HTTPException(status_code=403, detail="Forbidden")
     data = await request.json()
     update = Update.model_validate(data, context={"bot": telegram_bot})
     await dispatcher.feed_update(telegram_bot, update)
@@ -5107,7 +5113,10 @@ async def _on_startup():
         print("Бот запущен в режиме polling (LOCAL_POLLING=true) 🚀")
     elif WEBHOOK_URL:
         full_url = WEBHOOK_URL + WEBHOOK_PATH
-        await bot.set_webhook(full_url, drop_pending_updates=True)
+        set_webhook_kwargs = {"drop_pending_updates": True}
+        if TELEGRAM_SECRET_TOKEN:
+            set_webhook_kwargs["secret_token"] = TELEGRAM_SECRET_TOKEN
+        await bot.set_webhook(full_url, **set_webhook_kwargs)
         print(f"Webhook установлен: {full_url} 🚀")
     else:
         print("⚠️ Ни WEBHOOK_URL, ни LOCAL_POLLING не заданы — бот не получает апдейты.")
@@ -5139,14 +5148,21 @@ async def save_telegram_photo(bot: Bot, file_id: str) -> str:
 
     local_filename = f"/tmp/{uuid4()}.jpg"
 
-    await bot.download_file(file_path, local_filename)
+    try:
+        await bot.download_file(file_path, local_filename)
 
-    result = cloudinary.uploader.upload(
-        local_filename,
-        folder="tech_bot_products"
-    )
+        result = cloudinary.uploader.upload(
+            local_filename,
+            folder="tech_bot_products"
+        )
 
-    return result["secure_url"]
+        return result["secure_url"]
+    finally:
+        try:
+            if os.path.exists(local_filename):
+                os.remove(local_filename)
+        except Exception as e:
+            print(f"[save_telegram_photo] cleanup failed: {e}")
 
 async def main():
     # Запускаем uvicorn; startup-хук поднимет бота (webhook или polling).
