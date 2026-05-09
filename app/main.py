@@ -346,7 +346,18 @@ async def create_saas_payment_link(payload: dict) -> str | None:
                     return None
                 data = await resp.json(content_type=None) or {}
                 link = data.get("payment_url") or data.get("url") or data.get("link")
-                return link if isinstance(link, str) and link else None
+                if not isinstance(link, str) or not link:
+                    return None
+                # Telegram inline button требует absolute URL — нормализуем относительные ссылки.
+                if link.startswith("/"):
+                    base = (os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+                            or SAAS_PLATFORM_URL)
+                    if base:
+                        link = base + link
+                if not (link.startswith("http://") or link.startswith("https://")):
+                    print(f"[saas] create-payment-link: невалидный URL: {link}")
+                    return None
+                return link
     except Exception as e:
         print(f"[saas] create-payment-link failed: {e}")
         return None
