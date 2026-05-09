@@ -346,61 +346,62 @@ async def create_saas_payment_link(payload: dict) -> str | None:
         return None
 
 
+def _parse_amount_currency(raw: str, default_amount: float = 15.0, default_currency: str = "USD") -> tuple[float, str]:
+    """Parse '15$/мес', '10 USD', '500 грн' → (amount, currency)."""
+    if not raw:
+        return default_amount, default_currency
+    s = str(raw)
+    m = re.search(r"(\d+(?:[.,]\d+)?)", s)
+    amount = default_amount
+    if m:
+        try:
+            amount = float(m.group(1).replace(",", "."))
+        except ValueError:
+            pass
+    s_low = s.lower()
+    if "$" in s or "usd" in s_low:
+        currency = "USD"
+    elif "€" in s or "eur" in s_low:
+        currency = "EUR"
+    elif "грн" in s_low or "uah" in s_low or "₴" in s:
+        currency = "UAH"
+    else:
+        currency = default_currency
+    return amount, currency
+
+
 async def payment_pay_stub_handler_internal(message: Message, from_user, text_value: str):
-    """Shared payment-request flow usable from both message and callback."""
+    """Create a payment link via saas_platform and present it to the client."""
     info = await get_payment_info()
     is_subscription = text_value == "💰 Оплатить подписку"
-    payload = {
-        "type": "subscription" if is_subscription else "domain",
-        "client_name": SAAS_CLIENT_NAME,
-        "client_slug": SAAS_CLIENT_SLUG,
-        "telegram_user_id": from_user.id if from_user else None,
-        "telegram_username": (from_user.username if from_user else None) or "",
-        "created_at": now_kyiv_str(),
-    }
-    if is_subscription:
-        payload["plan"] = info.get("pay_sub_plan", "—")
-        payload["amount"] = info.get("pay_sub_price", "—")
-        type_label = "Подписка"
-        amount_line = f"💰 Сумма: {payload['amount']}"
-        extra_line = f"📦 Тариф: {payload['plan']}"
-    else:
-        payload["domain"] = info.get("pay_domain_name", "—")
-        type_label = "Домен"
-        amount_line = f"🌐 Домен: {payload['domain']}"
-        extra_line = ""
 
-    # 1) Try to get a payment link from saas_platform
+    if is_subscription:
+        payment_type = "subscription"
+        amount, currency = _parse_amount_currency(info.get("pay_sub_price", ""), default_amount=15.0)
+        title = "💳 Оплата подписки"
+    else:
+        payment_type = "domain"
+        amount, currency = _parse_amount_currency(info.get("pay_domain_price", ""), default_amount=15.0)
+        title = "💳 Оплата домена"
+
+    payload = {
+        "client_slug": SAAS_CLIENT_SLUG,
+        "payment_type": payment_type,
+        "amount": amount,
+        "currency": currency,
+        "provider": "mock",
+        "telegram_user_id": from_user.id if from_user else None,
+    }
+
     payment_url = await create_saas_payment_link(payload)
-    if payment_url:
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="💳 Перейти к оплате", url=payment_url)]]
-        )
-        await message.answer(
-            f"💳 Счёт на оплату ({type_label})\n\n"
-            + (f"{extra_line}\n" if extra_line else "")
-            + f"{amount_line}",
-            reply_markup=kb,
-        )
+    if not payment_url:
+        await message.answer("Не удалось создать ссылку на оплату. Попробуйте позже.")
         return
 
-    # 2) Fallback: notify admin in saas_platform
-    notif = (
-        "💳 Новый запрос на оплату\n\n"
-        f"🏢 Клиент: {SAAS_CLIENT_NAME}\n"
-        f"🌐 Slug: {SAAS_CLIENT_SLUG}\n"
-        f"📦 Тип: {type_label}\n"
-        + (f"{extra_line}\n" if extra_line else "")
-        + f"{amount_line}\n"
-        f"👤 Telegram ID: {payload['telegram_user_id'] or '—'}"
-        + (f" (@{payload['telegram_username']})" if payload['telegram_username'] else "")
-        + f"\n📅 {payload['created_at']}"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="💳 Перейти к оплате", url=payment_url)]]
     )
-    sent = await send_to_saas_platform(notif, payload)
-    if sent:
-        await message.answer("✅ Запрос на оплату отправлен.")
-    else:
-        await message.answer("⚠️ Не удалось получить ссылку на оплату. Попробуйте позже или свяжитесь с администратором.")
+    await message.answer(title, reply_markup=kb)
 
 
 
