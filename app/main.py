@@ -556,6 +556,55 @@ class EditProductState(StatesGroup):
     confirm_delete = State()
 
 
+class EditSpecsState(StatesGroup):
+    waiting_for_value = State()
+
+
+# ——— Specifications (JSON-based) ———
+SPEC_FIELDS = [
+    ("volume",                "Обʼєм"),
+    ("control",               "Керування"),
+    ("ten_type",              "Тип ТЕНу"),
+    ("power",                 "Потужність"),
+    ("ten_count",             "Кількість ТЕНів"),
+    ("brand_country",         "Країна реєстрації бренду"),
+    ("manufacturer_country",  "Країна виробник"),
+    ("dimensions",            "Розміри"),
+    ("warranty_manufacturer", "Гарантія від виробника"),
+]
+SPEC_LABELS = dict(SPEC_FIELDS)
+SPEC_OPTIONS = {
+    "ten_type":              ["Сухий", "Мокрий"],
+    "control":               ["Механічне", "Електронне", "Wi-Fi"],
+    "ten_count":             ["1", "2"],
+    "warranty_manufacturer": ["12 міс", "24 міс", "36 міс", "60 міс"],
+}
+
+
+def inline_specs_kb(product_id: int, current: dict) -> InlineKeyboardMarkup:
+    rows = []
+    for key, label in SPEC_FIELDS:
+        value = (current or {}).get(key)
+        text = f"{label}: {value}" if value else label
+        if len(text) > 60:
+            text = text[:57] + "…"
+        rows.append([InlineKeyboardButton(text=text, callback_data=f"specs_field:{product_id}:{key}")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"specs_back:{product_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def inline_specs_options_kb(product_id: int, key: str) -> InlineKeyboardMarkup:
+    options = SPEC_OPTIONS.get(key, [])
+    rows = []
+    for idx, opt in enumerate(options):
+        rows.append([InlineKeyboardButton(text=opt, callback_data=f"specs_opt:{product_id}:{key}:{idx}")])
+    rows.append([
+        InlineKeyboardButton(text="🗑 Очистить", callback_data=f"specs_clear:{product_id}:{key}"),
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=f"specs_open:{product_id}"),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 class CurrencyRateState(StatesGroup):
     waiting_for_currency = State()
     waiting_for_rate = State()
@@ -1006,7 +1055,7 @@ def inline_edit_fields_kb(product=None):
         [
             InlineKeyboardButton(text="Фото (URL)", callback_data="edit_field:photo_url"),
             InlineKeyboardButton(text="Описание", callback_data="edit_field:description"),
-            InlineKeyboardButton(text="Характеристики", callback_data="edit_field:specs"),
+            InlineKeyboardButton(text="📋 Характеристики", callback_data="edit_action:specs_open"),
         ],
         [
             InlineKeyboardButton(text="💰 Старая цена", callback_data="edit_field:old_price"),
@@ -4042,6 +4091,15 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    if action == "specs_open":
+        current = await db.get_product_specifications(product_id)
+        await callback.message.answer(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(product_id, current),
+        )
+        await callback.answer()
+        return
+
     if action == "toggle_sale":
         product = await db.get_product_by_id(product_id)
         if not product:
@@ -4120,6 +4178,175 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         return
 
     await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("specs_open:"))
+async def specs_open_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        product_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        await callback.answer("Ошибка")
+        return
+    current = await db.get_product_specifications(product_id)
+    try:
+        await callback.message.edit_text(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(product_id, current),
+        )
+    except Exception:
+        await callback.message.answer(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(product_id, current),
+        )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("specs_field:"))
+async def specs_field_callback(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":", 2)
+    if len(parts) < 3:
+        await callback.answer("Ошибка")
+        return
+    try:
+        product_id = int(parts[1])
+    except ValueError:
+        await callback.answer("Ошибка")
+        return
+    key = parts[2]
+    label = SPEC_LABELS.get(key)
+    if not label:
+        await callback.answer("Неизвестное поле")
+        return
+
+    if key in SPEC_OPTIONS:
+        await callback.message.answer(
+            f"Выберите значение для поля «{label}»:",
+            reply_markup=inline_specs_options_kb(product_id, key),
+        )
+        await callback.answer()
+        return
+
+    # Free-text field
+    await state.set_state(EditSpecsState.waiting_for_value)
+    await state.update_data(specs_product_id=product_id, specs_key=key, specs_label=label)
+    await callback.message.answer(
+        f"Введите значение для поля «{label}». Отправьте «-» чтобы очистить."
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("specs_opt:"))
+async def specs_opt_callback(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":", 3)
+    if len(parts) < 4:
+        await callback.answer("Ошибка")
+        return
+    try:
+        product_id = int(parts[1])
+        idx = int(parts[3])
+    except ValueError:
+        await callback.answer("Ошибка")
+        return
+    key = parts[2]
+    options = SPEC_OPTIONS.get(key) or []
+    if idx < 0 or idx >= len(options):
+        await callback.answer("Опция не найдена")
+        return
+    value = options[idx]
+    await db.set_product_specification(product_id, key, value)
+    current = await db.get_product_specifications(product_id)
+    try:
+        await callback.message.edit_text(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(product_id, current),
+        )
+    except Exception:
+        await callback.message.answer(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(product_id, current),
+        )
+    await callback.answer(f"✅ {SPEC_LABELS.get(key, key)}: {value}")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("specs_clear:"))
+async def specs_clear_callback(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":", 2)
+    if len(parts) < 3:
+        await callback.answer("Ошибка")
+        return
+    try:
+        product_id = int(parts[1])
+    except ValueError:
+        await callback.answer("Ошибка")
+        return
+    key = parts[2]
+    await db.clear_product_specification(product_id, key)
+    current = await db.get_product_specifications(product_id)
+    try:
+        await callback.message.edit_text(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(product_id, current),
+        )
+    except Exception:
+        await callback.message.answer(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(product_id, current),
+        )
+    await callback.answer("🗑 Очищено")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("specs_back:"))
+async def specs_back_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        product_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        await callback.answer("Ошибка")
+        return
+    product = await db.get_product_by_id(product_id)
+    if not product:
+        await callback.answer("Товар не найден")
+        return
+    await state.update_data(product_id=product_id)
+    await state.set_state(EditProductState.waiting_for_field)
+    try:
+        await callback.message.edit_text(
+            f"Товар:\n{product['brand'] or '-'} {product['model'] or '-'}\n\nЧто изменить?",
+            reply_markup=inline_edit_fields_kb(product),
+        )
+    except Exception:
+        await callback.message.answer(
+            f"Товар:\n{product['brand'] or '-'} {product['model'] or '-'}\n\nЧто изменить?",
+            reply_markup=inline_edit_fields_kb(product),
+        )
+    await callback.answer()
+
+
+@router.message(EditSpecsState.waiting_for_value)
+async def edit_specs_value_handler(message: Message, state: FSMContext):
+    value = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("specs_product_id")
+    key = data.get("specs_key")
+    label = data.get("specs_label", "")
+
+    if not product_id or not key:
+        await state.clear()
+        await message.answer("Сессия редактирования потеряна. Откройте характеристики заново.")
+        return
+
+    if value == "-" or value == "":
+        await db.clear_product_specification(int(product_id), key)
+        await message.answer(f"🗑 Поле «{label}» очищено.")
+    else:
+        await db.set_product_specification(int(product_id), key, value)
+        await message.answer(f"✅ {label}: {value}")
+
+    current = await db.get_product_specifications(int(product_id))
+    await state.clear()
+    await message.answer(
+        "📋 Характеристики товара. Выберите поле для редактирования:",
+        reply_markup=inline_specs_kb(int(product_id), current),
+    )
 
 
 async def show_product_photos_manager(message: Message, product_id: int):
@@ -4985,6 +5212,7 @@ async def product_page(request: Request, product_id: int):
         pass
 
     images = await db.get_product_images(product_id)
+    specifications = await db.get_product_specifications(product_id)
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
         "phones": await get_phones_list(),
@@ -5006,6 +5234,9 @@ async def product_page(request: Request, product_id: int):
         context={
             "product": product,
             "images": images,
+            "specifications": specifications,
+            "spec_labels": SPEC_LABELS,
+            "spec_field_order": [k for k, _ in SPEC_FIELDS],
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,

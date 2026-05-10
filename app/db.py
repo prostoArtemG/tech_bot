@@ -116,6 +116,11 @@ class Database:
 
         await self.execute("""
         ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS specifications_json JSONB NOT NULL DEFAULT '{}'::jsonb;
+        """)
+
+        await self.execute("""
+        ALTER TABLE products
         ADD COLUMN IF NOT EXISTS availability_status TEXT NOT NULL DEFAULT 'in_stock';
         """)
 
@@ -460,7 +465,8 @@ class Database:
                 purchase_price, purchase_currency, sku, warranty_months,
                 photo_url, description, specs, is_active, deleted_at,
                 current_price, old_price, is_sale, stock_status,
-                boiler_volume_liters, boiler_ten_type
+                boiler_volume_liters, boiler_ten_type,
+                specifications_json
             FROM products
             WHERE id = $1
             """,
@@ -665,6 +671,48 @@ class Database:
         await self.execute(
             "UPDATE products SET deleted_at = NOW(), is_active = FALSE WHERE id = $1",
             product_id
+        )
+
+    async def get_product_specifications(self, product_id: int) -> dict:
+        row = await self.fetchrow(
+            "SELECT specifications_json FROM products WHERE id = $1",
+            product_id,
+        )
+        if not row:
+            return {}
+        raw = row["specifications_json"]
+        if raw is None:
+            return {}
+        if isinstance(raw, dict):
+            return raw
+        try:
+            import json
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    async def set_product_specification(self, product_id: int, key: str, value: str):
+        import json
+        await self.execute(
+            """
+            UPDATE products
+            SET specifications_json = COALESCE(specifications_json, '{}'::jsonb) || $2::jsonb
+            WHERE id = $1
+            """,
+            product_id,
+            json.dumps({key: value}),
+        )
+
+    async def clear_product_specification(self, product_id: int, key: str):
+        await self.execute(
+            """
+            UPDATE products
+            SET specifications_json = COALESCE(specifications_json, '{}'::jsonb) - $2
+            WHERE id = $1
+            """,
+            product_id,
+            key,
         )
 
     async def soft_delete_broken_products(self) -> int:

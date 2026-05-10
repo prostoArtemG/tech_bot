@@ -131,7 +131,21 @@
                 </div>
                 {% endif %}
 
-                                {% if product.specs %}
+                                {% set has_specs = specifications and (specifications.values()|select|list)|length > 0 %}
+                                {% if has_specs %}
+                                <div class="specs-box">
+                                    <h3 data-ru="📋 Характеристики" data-uk="📋 Характеристики">📋 Характеристики</h3>
+                                    {% for key in spec_field_order %}
+                                        {% set val = specifications.get(key) %}
+                                        {% if val %}
+                                        <div class="spec-row">
+                                            <span>{{ spec_labels.get(key, key) }}</span>
+                                            <b>{{ val }}</b>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                {% elif product.specs %}
                                 <div class="specs-box">
                                     <h3>Характеристики</h3>
                                     {% for line in (product.specs or '').split('\n') %}
