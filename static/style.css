@@ -271,12 +271,12 @@ body {
 }
 
 .site-category-img {
-    width: 42px;
-    height: 42px;
-    max-width: 42px;
-    max-height: 42px;
-    object-fit: contain;
-    display: block;
+    width: 42px !important;
+    height: 42px !important;
+    max-width: 42px !important;
+    max-height: 42px !important;
+    object-fit: contain !important;
+    display: block !important;
     margin: 0 auto 12px;
     flex-shrink: 0;
 }
@@ -287,10 +287,12 @@ body {
 
 @media (max-width: 768px) {
     .site-category-img {
-        width: 34px;
-        height: 34px;
-        max-width: 34px;
-        max-height: 34px;
+        width: 34px !important;
+        height: 34px !important;
+        max-width: 34px !important;
+        max-height: 34px !important;
+        object-fit: contain !important;
+        display: block !important;
     }
 }
 
