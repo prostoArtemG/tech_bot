@@ -257,6 +257,7 @@ body {
     color: #111827;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
     transition: 0.2s;
+    overflow: hidden;
 }
 
 .site-category-card:hover {
@@ -270,17 +271,26 @@ body {
 }
 
 .site-category-img {
-    width: 46px;
-    height: 46px;
+    width: 42px;
+    height: 42px;
+    max-width: 42px;
+    max-height: 42px;
     object-fit: contain;
     display: block;
-    margin: 0 auto 0;
+    margin: 0 auto 12px;
+    flex-shrink: 0;
+}
+
+.site-category-card img {
+    flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
     .site-category-img {
-        width: 38px;
-        height: 38px;
+        width: 34px;
+        height: 34px;
+        max-width: 34px;
+        max-height: 34px;
     }
 }
 
