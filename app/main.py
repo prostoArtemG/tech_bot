@@ -589,6 +589,7 @@ def inline_specs_kb(product_id: int, current: dict) -> InlineKeyboardMarkup:
         if len(text) > 60:
             text = text[:57] + "…"
         rows.append([InlineKeyboardButton(text=text, callback_data=f"specs_field:{product_id}:{key}")])
+    rows.append([InlineKeyboardButton(text="📝 Описание", callback_data=f"specs_desc:{product_id}")])
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"specs_back:{product_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1042,10 +1043,6 @@ def inline_edit_fields_kb(product=None):
     rows = [
         [
             InlineKeyboardButton(text="Цена продажи", callback_data="edit_field:price"),
-            InlineKeyboardButton(text="Закупка", callback_data="edit_field:purchase_price"),
-        ],
-        [
-            InlineKeyboardButton(text="Валюта закупки", callback_data="edit_field:purchase_currency"),
             InlineKeyboardButton(text="Артикул", callback_data="edit_field:sku"),
         ],
         [
@@ -1054,7 +1051,6 @@ def inline_edit_fields_kb(product=None):
         ],
         [
             InlineKeyboardButton(text="Фото (URL)", callback_data="edit_field:photo_url"),
-            InlineKeyboardButton(text="Описание", callback_data="edit_field:description"),
             InlineKeyboardButton(text="📋 Характеристики", callback_data="edit_action:specs_open"),
         ],
         [
@@ -4293,6 +4289,19 @@ async def specs_clear_callback(callback: CallbackQuery, state: FSMContext):
             reply_markup=inline_specs_kb(product_id, current),
         )
     await callback.answer("🗑 Очищено")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("specs_desc:"))
+async def specs_desc_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        product_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        await callback.answer("Ошибка")
+        return
+    await state.update_data(product_id=product_id, field="description", field_title="Описание")
+    await state.set_state(EditProductState.waiting_for_value)
+    await callback.message.answer("Введите новое значение для поля: Описание")
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("specs_back:"))
