@@ -822,22 +822,174 @@ button:hover {
 /* ============================================================
    SITE FOOTER
    ============================================================ */
-.site-footer {
-    margin-top: 40px;
-    padding: 30px 20px;
-    background: #111827;
-    color: white;
-    text-align: center;
+
+/* ── Text logo (shared header + footer) ── */
+.site-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: inherit;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.3px;
+    white-space: nowrap;
+}
+.site-logo .logo-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--site-accent, #2563eb);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 900;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.site-logo .logo-text {
+    font-size: 18px;
+    font-weight: 800;
 }
 
-.site-footer p {
-    margin: 6px 0;
+/* ── Main footer layout ── */
+.site-footer {
+    margin-top: 60px;
+    background: #111827;
     color: #d1d5db;
 }
 
-.site-footer a {
-    color: white !important;
+.site-footer .footer-top {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 36px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 40px;
+    align-items: start;
+}
+
+/* Brand column */
+.site-footer .footer-brand {
+    grid-column: 1;
+}
+.site-footer .footer-brand .site-logo {
+    color: #fff;
+    font-size: 20px;
+    margin-bottom: 14px;
+    display: flex;
+}
+.site-footer .footer-brand p {
+    font-size: 13px;
+    color: #9ca3af;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Nav columns */
+.site-footer .footer-col h4 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #fff;
+    margin: 0 0 16px;
+}
+.site-footer .footer-col ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.site-footer .footer-col ul li a {
+    color: #9ca3af;
     text-decoration: none;
+    font-size: 14px;
+    transition: color 0.18s;
+}
+.site-footer .footer-col ul li a:hover {
+    color: #fff;
+}
+
+/* Contacts column */
+.site-footer .footer-contacts p {
+    font-size: 13px;
+    color: #9ca3af;
+    margin: 0 0 8px;
+    line-height: 1.5;
+}
+.site-footer .footer-contacts a {
+    color: #9ca3af;
+    text-decoration: none;
+    transition: color 0.18s;
+}
+.site-footer .footer-contacts a:hover {
+    color: #fff;
+}
+
+/* Divider */
+.site-footer .footer-divider {
+    border: none;
+    border-top: 1px solid #1f2937;
+    margin: 0;
+}
+
+/* Bottom bar */
+.site-footer .footer-bottom {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.site-footer .footer-bottom .copyright {
+    font-size: 13px;
+    color: #4b5563;
+}
+.site-footer .footer-bottom .footer-bottom-links {
+    display: flex;
+    gap: 16px;
+}
+.site-footer .footer-bottom .footer-bottom-links a {
+    font-size: 12px;
+    color: #4b5563;
+    text-decoration: none;
+    transition: color 0.18s;
+}
+.site-footer .footer-bottom .footer-bottom-links a:hover {
+    color: #9ca3af;
+}
+
+/* ── Footer mobile ── */
+@media (max-width: 768px) {
+    .site-footer .footer-top {
+        grid-template-columns: 1fr 1fr;
+        gap: 32px 24px;
+        padding: 36px 20px 28px;
+    }
+    .site-footer .footer-brand {
+        grid-column: 1 / -1;
+    }
+    .site-footer .footer-bottom {
+        flex-direction: column;
+        text-align: center;
+        gap: 8px;
+        padding: 16px 20px;
+    }
+    .site-footer .footer-bottom-links {
+        justify-content: center;
+    }
+}
+@media (max-width: 480px) {
+    .site-footer .footer-top {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ============================================================

@@ -20,7 +20,10 @@
 <header class="site-header">
     <div class="header-inner">
         <div class="header-title">
-            <h1>{{ site_title or '⚡ Technovlada' }}</h1>
+            <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                <span class="logo-badge">T</span>
+                <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+            </a>
             <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
             {% if header_show_contacts %}
             {% if site_contacts.phones %}
@@ -223,19 +226,58 @@
 <script src="/static/cart.js"></script>
 <script src="/static/lang.js"></script>
 
-<footer class="site-footer">
-    <h3>Контакты</h3>
-    {% if site_contacts.phones %}
+<footer class="site-footer" aria-label="Подвал сайта">
+  <div class="footer-top">
+    <div class="footer-brand">
+      <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
+        <span class="logo-badge">T</span>
+        <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+      </a>
+      <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">
+        {{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}
+      </p>
+    </div>
+    <div class="footer-col">
+      <h4 data-ru="Каталог" data-uk="Каталог">Каталог</h4>
+      <ul>
+        <li><a href="/?category=Бойлер" data-ru="Бойлеры" data-uk="Бойлери">Бойлеры</a></li>
+        <li><a href="/?category=Холодильник" data-ru="Холодильники" data-uk="Холодильники">Холодильники</a></li>
+        <li><a href="/?category=Стиральная машина" data-ru="Стиральные машины" data-uk="Пральні машини">Стиральные машины</a></li>
+        <li><a href="/" data-ru="Все товары" data-uk="Всі товари">Все товары</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4 data-ru="Покупателям" data-uk="Покупцям">Покупателям</h4>
+      <ul>
+        <li><a href="/cart" data-ru="Корзина" data-uk="Кошик">Корзина</a></li>
+        <li><a href="/" data-ru="Доставка" data-uk="Доставка">Доставка</a></li>
+        <li><a href="/" data-ru="Гарантия" data-uk="Гарантія">Гарантия</a></li>
+        <li><a href="/" data-ru="Возврат" data-uk="Повернення">Возврат</a></li>
+      </ul>
+    </div>
+    <div class="footer-col footer-contacts">
+      <h4 data-ru="Контакты" data-uk="Контакти">Контакты</h4>
+      {% if site_contacts.phones %}
         {% for p in site_contacts.phones %}
-        <p>📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</p>
+        <p><a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}">📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</a></p>
         {% endfor %}
-    {% elif site_contacts.phone %}
-        <p>📞 {{ site_contacts.phone }}</p>
-    {% endif %}
-    {% if site_contacts.tg %}<p>💬 {{ site_contacts.tg }}</p>{% endif %}
-    {% if site_contacts.instagram %}<p>📷 {{ site_contacts.instagram }}</p>{% endif %}
-    {% if site_contacts.address %}<p>📍 {{ site_contacts.address }}</p>{% endif %}
-    {% if site_contacts.schedule %}<p>⏰ {{ site_contacts.schedule }}</p>{% endif %}
+      {% elif site_contacts.phone %}
+        <p><a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}">📞 {{ site_contacts.phone }}</a></p>
+      {% endif %}
+      {% if site_contacts.tg %}<p>💬 {{ site_contacts.tg }}</p>{% endif %}
+      {% if site_contacts.instagram %}<p>📷 {{ site_contacts.instagram }}</p>{% endif %}
+      {% if site_contacts.address %}<p>📍 {{ site_contacts.address }}</p>{% endif %}
+      {% if site_contacts.schedule %}<p>⏰ {{ site_contacts.schedule }}</p>{% endif %}
+    </div>
+  </div>
+  <hr class="footer-divider">
+  <div class="footer-bottom">
+    <span class="copyright">&copy; 2026 {{ site_title or 'Technovlada' }}. <span data-ru="Все права защищены." data-uk="Всі права захищені.">Все права защищены.</span></span>
+    <div class="footer-bottom-links">
+      <a href="/" data-ru="Каталог" data-uk="Каталог">Каталог</a>
+      <a href="/cart" data-ru="Корзина" data-uk="Кошик">Корзина</a>
+    </div>
+  </div>
 </footer>
 
 </body>
