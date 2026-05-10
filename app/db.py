@@ -360,8 +360,8 @@ class Database:
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
               AND NOT (
-                COALESCE(NULLIF(TRIM(brand), ''), '-') = '-'
-                AND COALESCE(NULLIF(TRIM(model), ''), '-') = '-'
+                LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
+                AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
               )
             ORDER BY id DESC
             """
@@ -388,6 +388,10 @@ class Database:
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
               AND COALESCE(availability_status, 'in_stock') != 'hidden'
+              AND NOT (
+                LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
+                AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
+              )
             ORDER BY id DESC
             """
         )
@@ -400,8 +404,8 @@ class Database:
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
               AND NOT (
-                COALESCE(NULLIF(TRIM(brand), ''), '-') = '-'
-                AND COALESCE(NULLIF(TRIM(model), ''), '-') = '-'
+                LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
+                AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
               )
               AND (
                 LOWER(COALESCE(brand, '')) LIKE LOWER($1)
@@ -425,6 +429,10 @@ class Database:
             WHERE COALESCE(availability_status, 'in_stock') != 'hidden'
               AND COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
+              AND NOT (
+                LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
+                AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
+              )
               AND (
                 LOWER(COALESCE(category, '')) LIKE LOWER($1)
                 OR LOWER(COALESCE(brand, '')) LIKE LOWER($1)
@@ -660,7 +668,7 @@ class Database:
         )
 
     async def soft_delete_broken_products(self) -> int:
-        """Soft-delete products with no name AND no photo AND no category AND no sku."""
+        """Soft-delete products whose display name (brand + model) is empty/null/'-'/'None'."""
         row = await self.fetchrow(
             """
             WITH updated AS (
@@ -668,11 +676,8 @@ class Database:
                 SET deleted_at = NOW(), is_active = FALSE
                 WHERE COALESCE(is_active, TRUE) = TRUE
                   AND deleted_at IS NULL
-                  AND COALESCE(NULLIF(TRIM(brand), ''), '-') = '-'
-                  AND COALESCE(NULLIF(TRIM(model), ''), '-') = '-'
-                  AND COALESCE(NULLIF(TRIM(photo_url), ''), '') = ''
-                  AND COALESCE(NULLIF(TRIM(category), ''), '-') = '-'
-                  AND COALESCE(NULLIF(TRIM(sku), ''), '-') = '-'
+                  AND LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
+                  AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
                 RETURNING id
             )
             SELECT COUNT(*) AS c FROM updated

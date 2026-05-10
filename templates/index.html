@@ -136,6 +136,9 @@
 
     <main class="products products-grid">
         {% for product in products %}
+        {% set _b = (product.brand or '')|trim %}
+        {% set _m = (product.model or '')|trim %}
+        {% if (_b and _b not in ['-', 'None']) or (_m and _m not in ['-', 'None']) %}
         <div class="card">
             <div class="card-image-wrap">
                 {% if product.is_sale %}
@@ -178,6 +181,7 @@
                 <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ cur_price }}')">🛒 <span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
             </div>
         </div>
+        {% endif %}
         {% endfor %}
     </main>
 
