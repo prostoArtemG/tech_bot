@@ -425,20 +425,57 @@ async def payment_pay_stub_handler_internal(message: Message, from_user, text_va
 
 
 async def notify_admins(text: str):
-    """Send a message to every admin (ADMIN_IDS + WEB_NOTIFY_CHAT_ID)."""
+    """Send a message to every admin (ADMIN_IDS env + WEB_NOTIFY_CHAT_ID + DB users with role='admin')."""
     if not telegram_bot:
+        print("[notify_admins] telegram_bot is not ready, skipping")
         return
-    recipients = set(ADMIN_IDS)
+
+    recipients: set[int] = set()
+
+    # 1) ADMIN_IDS из env
+    for tid in ADMIN_IDS:
+        try:
+            recipients.add(int(tid))
+        except (TypeError, ValueError):
+            pass
+
+    # 2) WEB_NOTIFY_CHAT_ID (отдельный канал/чат)
     if WEB_NOTIFY_CHAT_ID:
         try:
             recipients.add(int(WEB_NOTIFY_CHAT_ID))
         except (TypeError, ValueError):
             pass
+
+    # 3) Активные админы из БД (роль 'admin', is_active=TRUE)
+    try:
+        users = await db.list_users()
+        for u in users or []:
+            if u.get("role") == "admin" and u.get("is_active") and u.get("telegram_id"):
+                try:
+                    recipients.add(int(u["telegram_id"]))
+                except (TypeError, ValueError):
+                    pass
+    except Exception as e:
+        print(f"[notify_admins] failed to load admins from DB: {e}")
+
+    if not recipients:
+        print("[notify_admins] no recipients found")
+        return
+
+    print(f"[notify_admins] recipients={len(recipients)} ids={sorted(recipients)}")
+
+    sent_ok: list[int] = []
+    sent_fail: list[tuple[int, str]] = []
+
     for chat_id in recipients:
         try:
             await telegram_bot.send_message(chat_id, text)
+            sent_ok.append(chat_id)
         except Exception as e:
+            sent_fail.append((chat_id, str(e)))
             print(f"[notify_admins] failed to send to {chat_id}: {e}")
+
+    print(f"[notify_admins] ok={sent_ok} fail={[c for c, _ in sent_fail]}")
 
 
 class SiteOrderRequest(BaseModel):
