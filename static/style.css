@@ -136,6 +136,20 @@ body {
         font-size: 28px;
     }
 
+    .site-header .site-logo {
+        font-size: 22px;
+        gap: 10px;
+    }
+    .site-header .site-logo .logo-badge {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+        border-radius: 10px;
+    }
+    .site-header .site-logo .logo-text {
+        font-size: 20px;
+    }
+
     .site-header .header-actions {
         position: static !important;
         transform: none !important;
@@ -852,6 +866,23 @@ button:hover {
 .site-logo .logo-text {
     font-size: 18px;
     font-weight: 800;
+}
+
+/* ── Logo in header — larger, primary visual element ── */
+.site-header .site-logo {
+    font-size: 28px;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+.site-header .site-logo .logo-badge {
+    width: 48px;
+    height: 48px;
+    font-size: 22px;
+    border-radius: 12px;
+}
+.site-header .site-logo .logo-text {
+    font-size: 26px;
+    letter-spacing: -0.5px;
 }
 
 /* ── Main footer layout ── */
