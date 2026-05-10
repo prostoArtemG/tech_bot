@@ -97,7 +97,11 @@
         {% endif %}
 
         <a href="/?category={{ filter_name }}" class="site-category-card {% if current_category == filter_name %}active{% endif %}">
+            {% if cat.name_ru == 'Вытяжки' %}
+            <div class="site-category-emoji"><img src="/static/icons/hood.png" class="site-category-img" alt="Вытяжки"></div>
+            {% else %}
             <div class="site-category-emoji">{{ emoji_override[cat.name_ru] if cat.name_ru in emoji_override else cat.emoji }}</div>
+            {% endif %}
             <div class="site-category-title" data-ru="{{ cat.name_ru }}" data-uk="{{ uk_names[cat.name_ru] if cat.name_ru in uk_names else cat.name_ru }}">{{ cat.name_ru }}</div>
         </a>
         {% endfor %}
