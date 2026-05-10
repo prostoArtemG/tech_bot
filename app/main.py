@@ -663,6 +663,7 @@ products_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📋 Список товаров")],
         [KeyboardButton(text="🔍 Найти товар")],
         [KeyboardButton(text="✏️ Редактировать товар")],
+        [KeyboardButton(text="🧹 Очистить битые товары")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -2945,26 +2946,28 @@ async def list_products_handler(message: Message):
 
     lines = ["📦 Список товаров:\n"]
     for row in rows:
-        category = row["category"] or "-"
-        brand = row["brand"] or "-"
-        model = row["model"] or "-"
-        price = float(row["price"])
-        stock_qty = row["stock_qty"] or 0
-        purchase_price = float(row["purchase_price"] or 0)
-        purchase_currency = row["purchase_currency"] or "UAH"
-        sku = row["sku"] or "-"
+        category = (row["category"] or "").strip() or "-"
+        brand = (row["brand"] or "").strip() or "-"
+        model = (row["model"] or "").strip() or "-"
+        price = float(row["price"] or 0)
+        sku = (row["sku"] or "").strip() or "-"
         warranty_months = row["warranty_months"] or 0
 
         lines.append(
-            f"{row['id']}. {category} | {brand} | {model}\n"
-            f"{await t(message, 'price')}: {price:.2f} грн\n"
-            f"Закупка: {purchase_price:.2f} {purchase_currency}\n"
+            f"ID: {row['id']} | {brand} {model} | {category} | {price:.2f} грн\n"
             f"Артикул: {sku}\n"
             f"{await t(message, 'warranty')}: {warranty_months} мес\n"
-            f"{await t(message, 'stock')}: {stock_qty} шт\n"
         )
 
     await message.answer("\n".join(lines))
+
+
+@router.message(lambda m: m.text == "🧹 Очистить битые товары")
+async def cleanup_broken_products_handler(message: Message):
+    if not await require_admin(message):
+        return
+    count = await db.soft_delete_broken_products()
+    await message.answer(f"✅ Битые товары скрыты: {count} шт.", reply_markup=products_kb)
 
 @router.message(lambda m: m.text == "❌ Отмена продажи")
 async def cancel_sale_start_handler(message: Message, state: FSMContext):
@@ -4526,7 +4529,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "📦 Товары", "🛒 Продажа", "❌ Отмена продажи", "🧾 История продаж", "👤 Клиенты",
     "👥 Пользователи", "📋 Список пользователей", "🔁 Изменить роль",
     "➕ Добавить админа", "❌ Удалить пользователя",
-    "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход",
+    "➕ Добавить товар", "📋 Список товаров", "✏️ Изменить остаток", "➕ Приход", "🧹 Очистить битые товары",
     "📋 Список клиентов", "🔍 Найти клиента", "📥 История приходов", "⚠️ Мало остатков", "✏️ Редактировать товар", "🔍 Найти товар", "⬅️ Назад",
     "📈 Отчёты", "📅 Отчёт за сегодня", "📆 Отчёт за месяц",
     "💰 Прибыль", "💰 Прибыль за сегодня", "💰 Прибыль за месяц",
