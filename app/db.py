@@ -357,6 +357,8 @@ class Database:
                 photo_url, description, specs,
                 current_price, old_price, is_sale, stock_status
             FROM products
+            WHERE COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
             ORDER BY id DESC
             """
         )
@@ -391,9 +393,13 @@ class Database:
             """
             SELECT id, category, brand, model, price, stock_qty
             FROM products
-            WHERE LOWER(COALESCE(brand, '')) LIKE LOWER($1)
-               OR LOWER(COALESCE(model, '')) LIKE LOWER($1)
-               OR LOWER(COALESCE(category, '')) LIKE LOWER($1)
+            WHERE COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
+              AND (
+                LOWER(COALESCE(brand, '')) LIKE LOWER($1)
+                OR LOWER(COALESCE(model, '')) LIKE LOWER($1)
+                OR LOWER(COALESCE(category, '')) LIKE LOWER($1)
+              )
             ORDER BY id DESC
             LIMIT 10
             """,

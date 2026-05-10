@@ -760,7 +760,6 @@ site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакты сайта")],
         [KeyboardButton(text="🧢 Шапка сайта")],
-        [KeyboardButton(text="🎨 Цвета сайта"), KeyboardButton(text="🖼 Баннер сайта")],
         [KeyboardButton(text="👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
         [KeyboardButton(text="✏️ Редактировать товар")],
