@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Корзина — Technovlada</title>
+    <title>{{ page_title }} — {{ site_title or 'Technovlada' }}</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/cart.js" defer></script>
     {% if site_design %}
     <style>
         :root {
@@ -17,79 +16,49 @@
     {% endif %}
 </head>
 <body>
-  <header class="site-header">
+
+<header class="site-header">
     <div class="header-inner">
-      <div class="header-title">
-        <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
-          <span class="logo-badge">T</span>
-          <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
-        </a>
-        <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
-        {% if header_show_contacts %}
-        {% if site_contacts.phones %}
-            {% for p in site_contacts.phones %}
-            <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</a>
-            {% endfor %}
-        {% elif site_contacts.phone %}
-            <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
-        {% endif %}
-        {% endif %}
-      </div>
-
-      <div class="header-actions">
-        {% if header_show_language %}
-        <div class="lang-switch">
-            <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-            <span class="lang-separator">|</span>
-            <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+        <div class="header-title">
+            <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                <span class="logo-badge">T</span>
+                <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+            </a>
+            <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
+            {% if header_show_contacts %}
+            {% if site_contacts.phones %}
+                {% for p in site_contacts.phones %}
+                <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</a>
+                {% endfor %}
+            {% elif site_contacts.phone %}
+                <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
+            {% endif %}
+            {% endif %}
         </div>
-        {% endif %}
 
-        {% if header_show_cart %}
-        <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
-        {% endif %}
-      </div>
-    </div>
-  </header>
+        <div class="header-actions">
+            {% if header_show_language %}
+            <div class="lang-switch">
+                <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                <span class="lang-separator">|</span>
+                <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+            </div>
+            {% endif %}
 
-  <main style="max-width:1100px;margin:20px auto;padding:0 20px;">
-    <div style="margin-bottom:14px;">
-      <a href="/" class="back-btn" data-ru="← Назад в каталог" data-uk="← Назад до каталогу">← Назад до каталогу</a>
-    </div>
-    <div class="cart-layout">
-      <section id="cartSection" class="cart-items-col">
-        <div id="cartItems"></div>
-      </section>
-
-      <aside class="order-col">
-        <div class="order-card">
-          <h3 data-ru="Итог" data-uk="Разом">Итог</h3>
-          <div class="order-total"><span data-ru="Итого:" data-uk="Разом:">Итого:</span> <span id="cartTotal">0 грн</span></div>
-
-          <h4 style="margin-top:14px;" data-ru="Оформление заказа" data-uk="Оформлення замовлення">Оформление заказа</h4>
-          <form onsubmit="event.preventDefault(); submitCartOrder(this);">
-            <input type="text" name="name"
-                data-placeholder-ru="Ваше имя"
-                data-placeholder-uk="Ваше ім'я"
-                placeholder="Ваше имя" required>
-            <input type="tel" name="phone"
-                data-placeholder-ru="Телефон"
-                data-placeholder-uk="Телефон"
-                placeholder="Телефон" required>
-            <input type="text" name="city"
-                data-placeholder-ru="Город"
-                data-placeholder-uk="Місто"
-                placeholder="Город">
-            <input type="text" name="comment"
-                data-placeholder-ru="Комментарий"
-                data-placeholder-uk="Коментар"
-                placeholder="Комментарий">
-            <button type="submit" class="order-btn" data-ru="Оформить заказ" data-uk="Оформити замовлення">Оформить заказ</button>
-          </form>
+            {% if header_show_cart %}
+            <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
+            {% endif %}
         </div>
-      </aside>
     </div>
-  </main>
+</header>
+
+<main class="infopage-main">
+    <div class="infopage-inner">
+        <a href="/" class="back-link">← <span data-ru="Назад в каталог" data-uk="Назад до каталогу">Назад в каталог</span></a>
+        <h1 class="infopage-title">{{ page_title }}</h1>
+        <div class="infopage-body">{{ page_html | safe }}</div>
+    </div>
+</main>
 
 <footer class="site-footer" aria-label="Подвал сайта">
   <div class="footer-top">
@@ -145,6 +114,7 @@
   </div>
 </footer>
 
-</body>
+<script src="/static/cart.js"></script>
 <script src="/static/lang.js"></script>
+</body>
 </html>

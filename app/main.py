@@ -664,6 +664,10 @@ class SiteBannerState(StatesGroup):
     waiting_for_field = State()
 
 
+class SitePagesState(StatesGroup):
+    waiting_for_text = State()
+
+
 class SiteCategoryQuickState(StatesGroup):
     waiting = State()
 
@@ -850,6 +854,7 @@ site_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="🧢 Шапка сайта")],
         [KeyboardButton(text="👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
+        [KeyboardButton(text="📄 Страницы сайта")],
         [KeyboardButton(text="✏️ Редактировать товар")],
         [KeyboardButton(text="🌐 Язык сайта")],
         [KeyboardButton(text="📊 Аналитика сайта")],
@@ -930,6 +935,17 @@ site_contacts_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📞 Телефон (1 номер)"), KeyboardButton(text="💬 Telegram")],
         [KeyboardButton(text="📷 Instagram"), KeyboardButton(text="📍 Адрес")],
         [KeyboardButton(text="⏰ График работы")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+site_pages_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🚚 Доставка")],
+        [KeyboardButton(text="🛡 Гарантия")],
+        [KeyboardButton(text="↩️ Повернення")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -2107,6 +2123,7 @@ async def payment_pay_stub_handler(message: Message):
     "📂 Категории сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию", "📝 Описание товара",
     "⚙️ Характеристики товара", "🖼 Фото товара", "📷 Instagram", "📍 Адрес", "⏰ График работы", "🌐 Язык сайта",
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
+    "📄 Страницы сайта", "🚚 Доставка", "🛡 Гарантия", "↩️ Повернення",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -2441,6 +2458,89 @@ async def site_header_handler(message: Message, state: FSMContext):
         return
     await state.clear()
     await message.answer("Настройки шапки сайта:", reply_markup=header_kb)
+
+
+# ── Site pages CMS ──────────────────────────────────────────
+
+PAGE_DEFAULTS = {
+    "delivery_text": (
+        "🚚 Доставка\n\n"
+        "Доставляємо по всій Україні:\n"
+        "• Нова Пошта\n"
+        "• Укрпошта\n"
+        "• Кур'єрська доставка (Київ та область)\n\n"
+        "Термін доставки: 1–3 робочих дні.\n"
+        "Велика техніка — доставка за домовленістю.\n\n"
+        "Самовивіз — за адресою магазину."
+    ),
+    "warranty_text": (
+        "🛡 Гарантія\n\n"
+        "На всі товари надається офіційна гарантія виробника.\n\n"
+        "• Побутова техніка — від 12 до 36 місяців.\n"
+        "• Гарантійний талон видається разом із товаром.\n\n"
+        "При виникненні несправності протягом гарантійного терміну — "
+        "ремонт або заміна безкоштовно."
+    ),
+    "returns_text": (
+        "↩️ Повернення\n\n"
+        "Повернення товару можливе протягом 14 днів з моменту отримання.\n\n"
+        "Умови повернення:\n"
+        "• Товар у заводській упаковці\n"
+        "• Не був у використанні\n"
+        "• Наявність чека або накладної\n\n"
+        "Для оформлення зверніться до нас за контактами."
+    ),
+}
+
+PAGE_BUTTONS = {
+    "🚚 Доставка": ("delivery_text", "Доставка"),
+    "🛡 Гарантия": ("warranty_text", "Гарантия"),
+    "↩️ Повернення": ("returns_text", "Повернення"),
+}
+
+
+@router.message(lambda m: m.text == "📄 Страницы сайта")
+async def site_pages_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer("📄 Страницы сайта:", reply_markup=site_pages_kb)
+
+
+@router.message(lambda m: m.text in PAGE_BUTTONS)
+async def site_page_show_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    key, label = PAGE_BUTTONS[message.text]
+    current = await db.get_setting(key) or PAGE_DEFAULTS.get(key, "")
+    await state.update_data(page_key=key, page_label=label)
+    await state.set_state(SitePagesState.waiting_for_text)
+    await message.answer(
+        f"📄 {label}\n\nТекущий текст:\n\n{current}\n\n"
+        "Отправьте новый текст или «-» чтобы сбросить к умолчанию.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+
+@router.message(SitePagesState.waiting_for_text)
+async def site_page_save_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    key = data.get("page_key")
+    if not key:
+        await state.clear()
+        await message.answer("Ошибка состояния.", reply_markup=site_pages_kb)
+        return
+
+    value = (message.text or "").strip()
+    if value == "-":
+        await db.set_setting(key, "")
+        await state.clear()
+        await message.answer("✅ Текст сброшен к значению по умолчанию.", reply_markup=site_pages_kb)
+        return
+
+    await db.set_setting(key, value)
+    await state.clear()
+    await message.answer("✅ Текст сохранён.", reply_markup=site_pages_kb)
 
 
 @router.message(lambda m: m.text == "🛒 Корзина: вкл/выкл")
@@ -4817,6 +4917,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "📞 Контакты: вкл/выкл",
     "🌐 Язык: вкл/выкл",
     "📊 Аналитика сайта",
+    "📄 Страницы сайта", "🚚 Доставка", "🛡 Гарантия", "↩️ Повернення",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -5286,6 +5387,55 @@ async def cart_page(request: Request):
             "site_design": await get_site_design(),
         }
     )
+
+
+async def _get_page_context(request: Request, page_key: str, page_title: str):
+    """Shared helper for info pages (delivery, warranty, returns)."""
+    site_contacts = {
+        "phone": await db.get_setting("site_phone") or "",
+        "phones": await get_phones_list(),
+        "tg": await db.get_setting("site_tg") or "",
+        "instagram": await db.get_setting("site_instagram") or "",
+        "address": await db.get_setting("site_address") or "",
+        "schedule": await db.get_setting("site_schedule") or "",
+    }
+    site_title = await db.get_setting("site_title") or "Technovlada"
+    site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
+    raw_text = await db.get_setting(page_key) or PAGE_DEFAULTS.get(page_key, "")
+    # Convert newlines to <br> for HTML display
+    page_html = raw_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+    return {
+        "site_contacts": site_contacts,
+        "site_title": site_title,
+        "site_subtitle": site_subtitle,
+        "header_show_cart": header_show_cart,
+        "header_show_contacts": header_show_contacts,
+        "header_show_language": header_show_language,
+        "site_design": await get_site_design(),
+        "page_title": page_title,
+        "page_html": page_html,
+    }
+
+
+@web_app.get("/dostavka", response_class=HTMLResponse)
+async def delivery_page(request: Request):
+    ctx = await _get_page_context(request, "delivery_text", "🚚 Доставка")
+    return templates.TemplateResponse(request=request, name="infopage.html", context=ctx)
+
+
+@web_app.get("/garantiya", response_class=HTMLResponse)
+async def warranty_info_page(request: Request):
+    ctx = await _get_page_context(request, "warranty_text", "🛡 Гарантія")
+    return templates.TemplateResponse(request=request, name="infopage.html", context=ctx)
+
+
+@web_app.get("/povernennya", response_class=HTMLResponse)
+async def returns_page(request: Request):
+    ctx = await _get_page_context(request, "returns_text", "↩️ Повернення")
+    return templates.TemplateResponse(request=request, name="infopage.html", context=ctx)
 
 
 @web_app.post("/api/cart-order")

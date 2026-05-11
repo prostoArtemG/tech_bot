@@ -301,6 +301,44 @@ body {
 }
 
 /* ============================================================
+   INFO PAGES (delivery, warranty, returns)
+   ============================================================ */
+.infopage-main {
+    max-width: 780px;
+    margin: 40px auto 60px;
+    padding: 0 20px;
+}
+
+.infopage-inner {
+    background: white;
+    border-radius: 20px;
+    padding: 36px 40px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+}
+
+.infopage-title {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 20px 0 24px;
+    color: #111827;
+}
+
+.infopage-body {
+    font-size: 15px;
+    line-height: 1.8;
+    color: #374151;
+}
+
+@media (max-width: 600px) {
+    .infopage-inner {
+        padding: 24px 20px;
+    }
+    .infopage-title {
+        font-size: 22px;
+    }
+}
+
+/* ============================================================
    FORMS & GLOBAL BUTTONS
    ============================================================ */
 form {
