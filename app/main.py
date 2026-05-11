@@ -2264,6 +2264,29 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
         await message.answer("Категории сайта:", reply_markup=site_categories_kb)
         return
 
+    if text == "📄 Страницы сайта":
+        if not await require_admin(message):
+            return
+        await state.clear()
+        await message.answer("📄 Страницы сайта:", reply_markup=site_pages_kb)
+        return
+
+    if text in {"🚚 Доставка", "🛡 Гарантия", "↩️ Повернення"}:
+        if not await require_admin(message):
+            return
+        key, label = PAGE_BUTTONS.get(text, (None, None))
+        if not key:
+            return
+        current = await db.get_setting(key) or PAGE_DEFAULTS.get(key, "")
+        await state.update_data(page_key=key, page_label=label)
+        await state.set_state(SitePagesState.waiting_for_text)
+        await message.answer(
+            f"📄 {label}\n\nТекущий текст:\n\n{current}\n\n"
+            "Отправьте новый текст или «-» чтобы сбросить к умолчанию.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return
+
 @router.message(lambda m: m.text in {"📦 Товары", "📦 Товари"})
 async def products_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
