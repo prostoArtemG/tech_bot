@@ -109,6 +109,7 @@
 
     <section class="search-box">
         <form class="search-form" method="get" action="/">
+            {% if current_category %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
             <div class="search-main-row">
                 <input type="text" name="q"
                     data-placeholder-ru="Поиск: Samsung, холодильник..."
@@ -123,6 +124,14 @@
                   <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
                   {% endfor %}
                 </select>
+                {% if show_volume_filter and available_volumes %}
+                <select name="volume" class="brand-select volume-select" onchange="this.form.submit()">
+                    <option value="" data-ru="Все объёмы" data-uk="Усі обʼєми">Все объёмы</option>
+                    {% for v in available_volumes %}
+                    <option value="{{ v }}" {% if current_volume == v|string %}selected{% endif %}>{{ v }} л</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
                 <input type="number" name="price_min" class="price-input"
                     data-placeholder-ru="Цена от"
                     data-placeholder-uk="Ціна від"
@@ -193,17 +202,18 @@
     </main>
 
     {% if pages > 1 %}
+    {% set _qs = (('&q=' ~ q) if q else '') ~ (('&category=' ~ current_category) if current_category else '') ~ (('&brand=' ~ current_brand) if current_brand else '') ~ (('&price_min=' ~ price_min) if price_min else '') ~ (('&price_max=' ~ price_max) if price_max else '') ~ ('&in_stock=1' if in_stock else '') ~ (('&volume=' ~ current_volume) if current_volume else '') %}
     <div class="pagination">
       {% if page > 1 %}
-      <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_brand %}&brand={{ current_brand }}{% endif %}{% if price_min %}&price_min={{ price_min }}{% endif %}{% if price_max %}&price_max={{ price_max }}{% endif %}{% if in_stock %}&in_stock=1{% endif %}">← Назад</a>
+      <a href="/?page={{ page - 1 }}{{ _qs }}">← Назад</a>
       {% endif %}
 
       {% for p in range(1, pages + 1) %}
-      <a class="{% if p == page %}active{% endif %}" href="/?page={{ p }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_brand %}&brand={{ current_brand }}{% endif %}{% if price_min %}&price_min={{ price_min }}{% endif %}{% if price_max %}&price_max={{ price_max }}{% endif %}{% if in_stock %}&in_stock=1{% endif %}">{{ p }}</a>
+      <a class="{% if p == page %}active{% endif %}" href="/?page={{ p }}{{ _qs }}">{{ p }}</a>
       {% endfor %}
 
       {% if page < pages %}
-      <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_brand %}&brand={{ current_brand }}{% endif %}{% if price_min %}&price_min={{ price_min }}{% endif %}{% if price_max %}&price_max={{ price_max }}{% endif %}{% if in_stock %}&in_stock=1{% endif %}">Вперёд →</a>
+      <a href="/?page={{ page + 1 }}{{ _qs }}">Вперёд →</a>
       {% endif %}
     </div>
     {% endif %}

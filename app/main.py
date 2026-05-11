@@ -5216,12 +5216,13 @@ async def api_site_event(data: SiteEventRequest):
 
 
 @web_app.get("/", response_class=HTMLResponse)
-async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = "", price_min: str = "", price_max: str = "", in_stock: str = ""):
+async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = "", price_min: str = "", price_max: str = "", in_stock: str = "", volume: str = ""):
     q = (q or "").strip()
     category = (category or "").strip()
     brand = (brand or "").strip()
     price_min = (price_min or "").strip()
     price_max = (price_max or "").strip()
+    volume = (volume or "").strip()
 
     if q:
         products = await db.search_site_products(q)
@@ -5256,6 +5257,48 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
 
     if in_stock:
         products = [p for p in products if (p["stock_qty"] or 0) > 0]
+
+    # ── Boiler volume filter (only relevant when boiler/heater category is active) ──
+    heater_aliases_set = {"Нагреватели", "Нагрівачі", "Нагреватель", "Бойлер", "Бойлеры", "Бойлери", "Водонагреватель", "Водонагрівач"}
+    show_volume_filter = (category in heater_aliases_set) if category else False
+
+    def _product_volume(p):
+        v = p.get("boiler_volume_liters") if isinstance(p, dict) else p["boiler_volume_liters"]
+        if v:
+            try:
+                return int(float(v))
+            except (TypeError, ValueError):
+                pass
+        # Fallback to specifications_json["volume"]
+        try:
+            spec_raw = p["specifications_json"]
+            if isinstance(spec_raw, str):
+                spec = json.loads(spec_raw)
+            else:
+                spec = spec_raw or {}
+            raw = (spec.get("volume") or "").strip() if isinstance(spec, dict) else ""
+            if raw:
+                # Extract digits
+                digits = "".join(ch for ch in raw if ch.isdigit())
+                if digits:
+                    return int(digits)
+        except (KeyError, ValueError, TypeError):
+            pass
+        return None
+
+    if show_volume_filter and volume:
+        try:
+            wanted = int(volume)
+            products = [p for p in products if _product_volume(p) == wanted]
+        except ValueError:
+            pass
+
+    available_volumes = []
+    if show_volume_filter:
+        vols = {v for v in (_product_volume(p) for p in products) if v}
+        # Standard ladder, only those actually present
+        standard = [5, 10, 15, 30, 50, 80, 100, 120, 150]
+        available_volumes = [v for v in standard if v in vols]
 
     per_page = 12
     total = len(products)
@@ -5299,6 +5342,9 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "price_min": price_min,
             "price_max": price_max,
             "in_stock": in_stock,
+            "show_volume_filter": show_volume_filter,
+            "available_volumes": available_volumes,
+            "current_volume": volume,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,

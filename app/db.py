@@ -388,7 +388,8 @@ class Database:
             SELECT
                 id, category, brand, model, price, stock_qty,
                 warranty_months, photo_url, description, availability_status,
-                current_price, old_price, is_sale, stock_status
+                current_price, old_price, is_sale, stock_status,
+                boiler_volume_liters, specifications_json
             FROM products
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
@@ -429,7 +430,8 @@ class Database:
             SELECT
                 id, category, brand, model, price, stock_qty,
                 warranty_months, photo_url, description, availability_status,
-                current_price, old_price, is_sale, stock_status
+                current_price, old_price, is_sale, stock_status,
+                boiler_volume_liters, specifications_json
             FROM products
             WHERE COALESCE(availability_status, 'in_stock') != 'hidden'
               AND COALESCE(is_active, TRUE) = TRUE
