@@ -2123,7 +2123,7 @@ async def payment_pay_stub_handler(message: Message):
     "📂 Категории сайта", "📋 Показать категории сайта", "➕ Холодильники", "➕ Стиральные машины", "➕ Кондиционеры", "➕ Нагреватели", "➕ Своя категория", "👁 Вкл/выкл категорию", "📝 Описание товара",
     "⚙️ Характеристики товара", "🖼 Фото товара", "📷 Instagram", "📍 Адрес", "⏰ График работы", "🌐 Язык сайта",
     "new", "processing", "ordered_supplier", "in_transit", "ready", "done", "cancelled",
-    "📄 Страницы сайта", "🚚 Доставка", "🛡 Гарантия", "↩️ Повернення",
+    "📄 Страницы сайта", "🚚 Доставка", "🛡 Гарантия", "↩️ Повернення", "✏️ Изменить текст",
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -2278,11 +2278,33 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
         if not key:
             return
         current = await db.get_setting(key) or PAGE_DEFAULTS.get(key, "")
+        await state.clear()
         await state.update_data(page_key=key, page_label=label)
+        kb = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="✏️ Изменить текст")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True
+        )
+        await message.answer(
+            f"📄 {label}\n\nТекущий текст:\n\n{current}",
+            reply_markup=kb
+        )
+        return
+
+    if text == "✏️ Изменить текст":
+        if not await require_admin(message):
+            return
+        data = await state.get_data()
+        key = data.get("page_key")
+        label = data.get("page_label")
+        if not key:
+            await message.answer("Сначала выберите страницу.", reply_markup=site_pages_kb)
+            return
         await state.set_state(SitePagesState.waiting_for_text)
         await message.answer(
-            f"📄 {label}\n\nТекущий текст:\n\n{current}\n\n"
-            "Отправьте новый текст или «-» чтобы сбросить к умолчанию.",
+            f"Отправьте новый текст для «{label}» или «-» чтобы сбросить к умолчанию.",
             reply_markup=ReplyKeyboardRemove()
         )
         return
@@ -2528,21 +2550,6 @@ async def site_pages_menu_handler(message: Message, state: FSMContext):
         return
     await state.clear()
     await message.answer("📄 Страницы сайта:", reply_markup=site_pages_kb)
-
-
-@router.message(lambda m: m.text in PAGE_BUTTONS)
-async def site_page_show_handler(message: Message, state: FSMContext):
-    if not await require_admin(message):
-        return
-    key, label = PAGE_BUTTONS[message.text]
-    current = await db.get_setting(key) or PAGE_DEFAULTS.get(key, "")
-    await state.update_data(page_key=key, page_label=label)
-    await state.set_state(SitePagesState.waiting_for_text)
-    await message.answer(
-        f"📄 {label}\n\nТекущий текст:\n\n{current}\n\n"
-        "Отправьте новый текст или «-» чтобы сбросить к умолчанию.",
-        reply_markup=ReplyKeyboardRemove()
-    )
 
 
 @router.message(SitePagesState.waiting_for_text)
@@ -4940,7 +4947,7 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
     "📞 Контакты: вкл/выкл",
     "🌐 Язык: вкл/выкл",
     "📊 Аналитика сайта",
-    "📄 Страницы сайта", "🚚 Доставка", "🛡 Гарантия", "↩️ Повернення",
+    "📄 Страницы сайта", "🚚 Доставка", "🛡 Гарантия", "↩️ Повернення", "✏️ Изменить текст",
 })
 async def free_customer_search_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
