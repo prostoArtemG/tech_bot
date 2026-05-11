@@ -4,6 +4,7 @@ import math
 import os
 import re
 from datetime import datetime
+from urllib.parse import quote
 try:
     from zoneinfo import ZoneInfo  # py>=3.9
 except ImportError:  # pragma: no cover
@@ -27,7 +28,7 @@ import cloudinary.uploader
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -5512,6 +5513,94 @@ async def warranty_info_page(request: Request):
 async def returns_page(request: Request):
     ctx = await _get_page_context(request, "returns_text", "↩️ Повернення")
     return templates.TemplateResponse(request=request, name="infopage.html", context=ctx)
+
+
+def _seo_base_url(request: Request) -> str:
+    base = (os.getenv("PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
+    if base:
+        if not (base.startswith("http://") or base.startswith("https://")):
+            base = "https://" + base
+        return base
+    # Fallback на текущий хост запроса
+    return str(request.base_url).rstrip("/")
+
+
+def _xml_escape(s: str) -> str:
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
+@web_app.get("/sitemap.xml")
+async def sitemap_xml(request: Request):
+    base = _seo_base_url(request)
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    urls: list[tuple[str, str, str]] = []  # (loc, changefreq, priority)
+    urls.append((f"{base}/", "daily", "1.0"))
+    urls.append((f"{base}/dostavka", "monthly", "0.5"))
+    urls.append((f"{base}/garantiya", "monthly", "0.5"))
+    urls.append((f"{base}/povernennya", "monthly", "0.5"))
+
+    # Категории
+    try:
+        categories = await db.list_active_site_categories()
+    except Exception as e:
+        print(f"[sitemap] categories failed: {e}")
+        categories = []
+    for cat in categories:
+        try:
+            name_ru = cat["name_ru"] if not isinstance(cat, dict) else cat.get("name_ru")
+        except Exception:
+            name_ru = None
+        if not name_ru:
+            continue
+        urls.append((f"{base}/?category={quote(str(name_ru), safe='')}", "weekly", "0.8"))
+
+    # Товары
+    try:
+        products = await db.list_site_products()
+    except Exception as e:
+        print(f"[sitemap] products failed: {e}")
+        products = []
+    for p in products:
+        try:
+            pid = p["id"] if not isinstance(p, dict) else p.get("id")
+        except Exception:
+            pid = None
+        if not pid:
+            continue
+        urls.append((f"{base}/product/{pid}", "weekly", "0.7"))
+
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for loc, changefreq, priority in urls:
+        parts.append("  <url>")
+        parts.append(f"    <loc>{_xml_escape(loc)}</loc>")
+        parts.append(f"    <lastmod>{today}</lastmod>")
+        parts.append(f"    <changefreq>{changefreq}</changefreq>")
+        parts.append(f"    <priority>{priority}</priority>")
+        parts.append("  </url>")
+    parts.append("</urlset>")
+
+    return Response(content="\n".join(parts), media_type="application/xml")
+
+
+@web_app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt(request: Request):
+    base = _seo_base_url(request)
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "\n"
+        f"Sitemap: {base}/sitemap.xml\n"
+    )
+    return PlainTextResponse(content=body, media_type="text/plain")
 
 
 @web_app.post("/api/cart-order")
