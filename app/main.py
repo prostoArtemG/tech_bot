@@ -1169,28 +1169,13 @@ def inline_categories_kb():
     )
 
 
-DEFAULT_SITE_BRANDS = ["Samsung", "LG", "Bosch", "Beko", "Philips", "Xiaomi"]
-
-
-async def _ensure_default_brands():
-    """Сидим дефолтные бренды, если справочник пуст."""
-    try:
-        rows = await db.list_site_brands()
-        if rows:
-            return
-        for idx, name in enumerate(DEFAULT_SITE_BRANDS):
-            try:
-                await db.add_site_brand(name, sort_order=(idx + 1) * 10)
-            except Exception as e:
-                print(f"[brands] seed {name} failed: {e}")
-    except Exception as e:
-        print(f"[brands] ensure defaults failed: {e}")
-
-
 async def inline_brands_kb():
-    """Список активных брендов сайта + кнопки управления."""
+    """Список активных брендов сайта + кнопки управления.
+
+    Никаких hardcoded брендов: показываем только то, что есть в справочнике.
+    Если список пуст — показываем только кнопку '➕ Добавить бренд'.
+    """
     try:
-        await _ensure_default_brands()
         rows = await db.list_active_site_brands()
     except Exception as e:
         print(f"[brands] load failed: {e}")
@@ -1209,10 +1194,15 @@ async def inline_brands_kb():
     if pair:
         keyboard.append(pair)
 
+    # Кнопка добавления бренда всегда доступна — и при пустом списке тоже.
     keyboard.append([
         InlineKeyboardButton(text="➕ Добавить бренд", callback_data="add_brand_new"),
-        InlineKeyboardButton(text="🔍 Поиск бренда", callback_data="add_brand_search"),
     ])
+    # Поиск показываем только если есть, что искать.
+    if rows:
+        keyboard.append([
+            InlineKeyboardButton(text="🔍 Поиск бренда", callback_data="add_brand_search"),
+        ])
     keyboard.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 TEXTS = {
