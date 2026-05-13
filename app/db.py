@@ -1502,6 +1502,103 @@ class Database:
         except Exception:
             return 0
 
+    async def list_brands_from_active_products(self) -> list[str]:
+        """Уникальные бренды, которые реально встречаются в активных товарах сайта.
+
+        Без пустых/None/'-'. Сортировка алфавитная (case-insensitive).
+        """
+        rows = await self.fetch(
+            """
+            SELECT DISTINCT TRIM(brand) AS brand
+            FROM products
+            WHERE COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
+              AND COALESCE(availability_status, 'in_stock') != 'hidden'
+              AND brand IS NOT NULL
+              AND LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) NOT IN ('-', 'none')
+            ORDER BY TRIM(brand)
+            """
+        )
+        return [r["brand"] for r in rows if (r["brand"] or "").strip()]
+
+    async def sync_site_brands_from_products(self) -> dict:
+        """Добавляет в site_brands бренды, реально используемые в товарах.
+
+        - Не дублирует (case-insensitive по LOWER(TRIM(name))).
+        - Уже существующие записи не трогает (НЕ активирует скрытые!).
+        - Возвращает {'added': int, 'skipped': int, 'reactivated': int=0}.
+        """
+        used = await self.list_brands_from_active_products()
+        if not used:
+            return {"added": 0, "skipped": 0}
+
+        # Получаем все имеющиеся записи (включая скрытые), чтобы знать,
+        # что уже есть в справочнике и не дублировать.
+        existing_rows = await self.fetch(
+            "SELECT LOWER(TRIM(name)) AS lname FROM site_brands"
+        )
+        existing_lower = {r["lname"] for r in existing_rows}
+
+        added = 0
+        skipped = 0
+        for name in used:
+            key = name.strip().lower()
+            if not key or key in existing_lower:
+                skipped += 1
+                continue
+            await self.execute(
+                """
+                INSERT INTO site_brands (name, sort_order, is_active)
+                VALUES ($1, 100, TRUE)
+                ON CONFLICT DO NOTHING
+                """,
+                name.strip(),
+            )
+            existing_lower.add(key)
+            added += 1
+        return {"added": added, "skipped": skipped}
+
+    async def list_brands_for_selection(self) -> list[str]:
+        """Бренды для выбора в боте при добавлении товара.
+
+        Объединение:
+          1) site_brands.is_active = TRUE
+          2) бренды из активных товаров, КРОМЕ тех, что явно скрыты
+             в site_brands (is_active = FALSE).
+        Сортировка алфавитная (case-insensitive). Без дублей.
+        """
+        active_rows = await self.fetch(
+            """
+            SELECT TRIM(name) AS name, LOWER(TRIM(name)) AS lname
+            FROM site_brands
+            WHERE is_active = TRUE
+              AND TRIM(name) <> ''
+            """
+        )
+        hidden_rows = await self.fetch(
+            """
+            SELECT LOWER(TRIM(name)) AS lname
+            FROM site_brands
+            WHERE is_active = FALSE
+            """
+        )
+        hidden_lower = {r["lname"] for r in hidden_rows}
+
+        result: dict[str, str] = {}
+        for r in active_rows:
+            name = (r["name"] or "").strip()
+            if name:
+                result[r["lname"]] = name
+
+        used = await self.list_brands_from_active_products()
+        for name in used:
+            key = name.strip().lower()
+            if not key or key in hidden_lower or key in result:
+                continue
+            result[key] = name.strip()
+
+        return sorted(result.values(), key=lambda s: s.lower())
+
     async def toggle_site_brand(self, brand_id: int):
         await self.execute(
             """

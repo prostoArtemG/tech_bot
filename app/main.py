@@ -1172,18 +1172,17 @@ def inline_categories_kb():
 async def inline_brands_kb():
     """Список активных брендов сайта + кнопки управления.
 
-    Никаких hardcoded брендов: показываем только то, что есть в справочнике.
-    Если список пуст — показываем только кнопку '➕ Добавить бренд'.
+    Источник: union активных site_brands + бренды из активных товаров
+    (если не скрыты в site_brands). Никаких hardcoded брендов.
     """
     try:
-        rows = await db.list_active_site_brands()
+        names = await db.list_brands_for_selection()
     except Exception as e:
         print(f"[brands] load failed: {e}")
-        rows = []
+        names = []
 
     keyboard: list[list[InlineKeyboardButton]] = []
-    for row in rows:
-        name = (row["name"] or "").strip()
+    for name in names:
         if not name:
             continue
         # По одной кнопке в ряд — широкие кнопки.
@@ -1196,7 +1195,7 @@ async def inline_brands_kb():
         InlineKeyboardButton(text="➕ Добавить бренд", callback_data="add_brand_new"),
     ])
     # Поиск показываем только если есть, что искать.
-    if rows:
+    if names:
         keyboard.append([
             InlineKeyboardButton(text="🔍 Поиск бренда", callback_data="add_brand_search"),
         ])
@@ -1389,6 +1388,12 @@ async def reset_handler(message: Message, state: FSMContext):
 
 
 async def _send_brands_admin(message: Message, edit: bool = False):
+    # Подтягиваем в справочник бренды из реальных товаров (idempotent).
+    try:
+        await db.sync_site_brands_from_products()
+    except Exception as e:
+        print(f"[brands] sync from products failed: {e}")
+
     try:
         rows = await db.list_site_brands()
     except Exception as e:
@@ -1410,7 +1415,14 @@ async def _send_brands_admin(message: Message, edit: bool = False):
             InlineKeyboardButton(text="🧹 Скрыть стандартные бренды", callback_data="brands_hide_defaults"),
         ])
         keyboard.append([
+            InlineKeyboardButton(text="� Синхронизировать с товарами", callback_data="brands_sync"),
+        ])
+        keyboard.append([
             InlineKeyboardButton(text="🚫 Скрыть все", callback_data="brands_hide_all"),
+        ])
+    else:
+        keyboard.append([
+            InlineKeyboardButton(text="🔄 Синхронизировать с товарами", callback_data="brands_sync"),
         ])
 
     if not rows:
@@ -1476,6 +1488,18 @@ async def brands_hide_defaults_callback(callback: CallbackQuery):
         return
     await _send_brands_admin(callback.message, edit=True)
     await callback.answer(f"Скрыто: {hidden}")
+
+
+@router.callback_query(lambda c: c.data == "brands_sync")
+async def brands_sync_callback(callback: CallbackQuery):
+    try:
+        stats = await db.sync_site_brands_from_products()
+    except Exception as e:
+        print(f"[brands] sync failed: {e}")
+        await callback.answer("Ошибка", show_alert=False)
+        return
+    await _send_brands_admin(callback.message, edit=True)
+    await callback.answer(f"Добавлено: {stats.get('added', 0)}")
 
 
 @router.callback_query(lambda c: c.data == "brands_hide_all")
@@ -3278,8 +3302,7 @@ async def search_brand_handler(message: Message, state: FSMContext):
     query = (message.text or "").strip().lower()
 
     try:
-        all_brands = await db.list_active_site_brands()
-        brands = [(r["name"] or "").strip() for r in all_brands if (r["name"] or "").strip()]
+        brands = await db.list_brands_for_selection()
     except Exception as e:
         print(f"[brands] search failed: {e}")
         brands = []
