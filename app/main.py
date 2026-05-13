@@ -1393,15 +1393,10 @@ async def reset_handler(message: Message, state: FSMContext):
 
 async def _send_brands_admin(message: Message, edit: bool = False):
     try:
-        await _ensure_default_brands()
         rows = await db.list_site_brands()
     except Exception as e:
         print(f"[brands] admin load failed: {e}")
         rows = []
-
-    if not rows:
-        await message.answer("Бренды пока не созданы. Используйте «➕ Добавить бренд» при добавлении товара.")
-        return
 
     keyboard: list[list[InlineKeyboardButton]] = []
     for r in rows:
@@ -1410,17 +1405,44 @@ async def _send_brands_admin(message: Message, edit: bool = False):
             InlineKeyboardButton(
                 text=f"{emoji} {r['name']}",
                 callback_data=f"brand_toggle:{r['id']}",
-            )
+            ),
+            InlineKeyboardButton(
+                text="🗑",
+                callback_data=f"brand_delete:{r['id']}",
+            ),
         ])
-    text = "🏷 Бренды сайта (нажмите, чтобы скрыть/показать):"
+
+    if rows:
+        keyboard.append([
+            InlineKeyboardButton(text="🚫 Скрыть все", callback_data="brands_hide_all"),
+            InlineKeyboardButton(text="🗑 Удалить все", callback_data="brands_wipe_all"),
+        ])
+
+    if not rows:
+        text = (
+            "🏷 Справочник брендов пуст.\n"
+            "Используйте «➕ Добавить бренд» при добавлении товара."
+        )
+    else:
+        text = (
+            "🏷 Бренды сайта\n"
+            "Нажмите на бренд, чтобы скрыть/показать. 🗑 — удалить."
+        )
+
     try:
         if edit:
             try:
-                await message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+                await message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None,
+                )
                 return
             except Exception:
                 pass
-        await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+        await message.answer(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None,
+        )
     except Exception as e:
         print(f"[brands] admin send failed: {e}")
 
@@ -1443,6 +1465,72 @@ async def brand_toggle_callback(callback: CallbackQuery):
         return
     await _send_brands_admin(callback.message, edit=True)
     await callback.answer("Готово")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("brand_delete:"))
+async def brand_delete_callback(callback: CallbackQuery):
+    try:
+        brand_id = int(callback.data.split(":", 1)[1])
+        await db.delete_site_brand(brand_id)
+    except Exception as e:
+        print(f"[brands] delete failed: {e}")
+        await callback.answer("Ошибка", show_alert=False)
+        return
+    await _send_brands_admin(callback.message, edit=True)
+    await callback.answer("Удалён")
+
+
+@router.callback_query(lambda c: c.data == "brands_hide_all")
+async def brands_hide_all_callback(callback: CallbackQuery):
+    try:
+        await db.deactivate_all_site_brands()
+    except Exception as e:
+        print(f"[brands] hide all failed: {e}")
+        await callback.answer("Ошибка", show_alert=False)
+        return
+    await _send_brands_admin(callback.message, edit=True)
+    await callback.answer("Все бренды скрыты")
+
+
+@router.callback_query(lambda c: c.data == "brands_wipe_all")
+async def brands_wipe_all_callback(callback: CallbackQuery):
+    # Подтверждение через дополнительный шаг
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да, удалить все", callback_data="brands_wipe_confirm"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="brands_wipe_cancel"),
+        ]
+    ])
+    try:
+        await callback.message.edit_text(
+            "⚠️ Удалить ВСЕ бренды из справочника?\n"
+            "Это не повлияет на уже созданные товары (бренд хранится строкой).",
+            reply_markup=kb,
+        )
+    except Exception:
+        await callback.message.answer(
+            "⚠️ Удалить ВСЕ бренды из справочника?",
+            reply_markup=kb,
+        )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "brands_wipe_confirm")
+async def brands_wipe_confirm_callback(callback: CallbackQuery):
+    try:
+        await db.delete_all_site_brands()
+    except Exception as e:
+        print(f"[brands] wipe all failed: {e}")
+        await callback.answer("Ошибка", show_alert=False)
+        return
+    await _send_brands_admin(callback.message, edit=True)
+    await callback.answer("Справочник очищен")
+
+
+@router.callback_query(lambda c: c.data == "brands_wipe_cancel")
+async def brands_wipe_cancel_callback(callback: CallbackQuery):
+    await _send_brands_admin(callback.message, edit=True)
+    await callback.answer("Отменено")
 
 
 @router.errors()

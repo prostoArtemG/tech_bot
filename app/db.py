@@ -1476,5 +1476,14 @@ class Database:
             brand_id
         )
 
+    async def delete_site_brand(self, brand_id: int):
+        await self.execute("DELETE FROM site_brands WHERE id = $1", brand_id)
+
+    async def deactivate_all_site_brands(self):
+        await self.execute("UPDATE site_brands SET is_active = FALSE")
+
+    async def delete_all_site_brands(self):
+        await self.execute("DELETE FROM site_brands")
+
 
 db = Database(DATABASE_URL)
