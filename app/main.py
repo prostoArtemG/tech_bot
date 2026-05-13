@@ -3214,8 +3214,53 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
     )
 
 
-@router.message(lambda m: m.text == "📋 Список товаров")
-async def list_products_handler(message: Message):
+PRODUCTS_PAGE_SIZE = 10
+
+
+def _sanitize_plain(s: str) -> str:
+    """Удаляет управляющие символы и обрезает крайние пробелы.
+    Сообщения отправляются без parse_mode, поэтому экранировать HTML/MD не нужно,
+    но убираем символы, которые могут ломать рендер."""
+    if s is None:
+        return ""
+    s = str(s)
+    s = "".join(ch for ch in s if ch == "\n" or ch == "\t" or ord(ch) >= 32)
+    return s.strip()
+
+
+def _format_product_line(row) -> str:
+    try:
+        pid = row["id"]
+        brand = _sanitize_plain(row["brand"]) or "-"
+        model = _sanitize_plain(row["model"]) or "-"
+        try:
+            price = float(row["price"] or 0)
+        except (TypeError, ValueError):
+            price = 0.0
+        title = f"{brand} {model}".strip() or "-"
+        # компактная карточка: ID | Название | Цена
+        return f"#{pid} | {title} | {price:.0f} грн"
+    except Exception as e:
+        print(f"[list_products] row failed: {e}")
+        try:
+            return f"#{row['id']} | (битые данные)"
+        except Exception:
+            return "(пропущено)"
+
+
+def _products_page_kb(page: int, total_pages: int) -> InlineKeyboardMarkup | None:
+    if total_pages <= 1:
+        return None
+    row = []
+    if page > 1:
+        row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"products_page:{page - 1}"))
+    row.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="products_page:noop"))
+    if page < total_pages:
+        row.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"products_page:{page + 1}"))
+    return InlineKeyboardMarkup(inline_keyboard=[row])
+
+
+async def _send_products_page(message: Message, page: int, edit: bool = False):
     try:
         rows = await db.list_products()
     except Exception as e:
@@ -3227,50 +3272,50 @@ async def list_products_handler(message: Message):
         await message.answer("Товары не найдены")
         return
 
-    warranty_label = await t(message, "warranty")
+    total = len(rows)
+    total_pages = max(1, (total + PRODUCTS_PAGE_SIZE - 1) // PRODUCTS_PAGE_SIZE)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * PRODUCTS_PAGE_SIZE
+    page_rows = rows[start:start + PRODUCTS_PAGE_SIZE]
 
-    def _row_text(row) -> str:
-        try:
-            category = (row["category"] or "").strip() or "-"
-            brand = (row["brand"] or "").strip() or "-"
-            model = (row["model"] or "").strip() or "-"
+    lines = [f"📦 Список товаров (стр. {page}/{total_pages}, всего {total}):", ""]
+    for row in page_rows:
+        lines.append(_format_product_line(row))
+    text = "\n".join(lines)
+    if len(text) > 3900:
+        text = text[:3900] + "\n…"
+
+    kb = _products_page_kb(page, total_pages)
+    try:
+        if edit:
             try:
-                price = float(row["price"] or 0)
-            except (TypeError, ValueError):
-                price = 0.0
-            sku = (row["sku"] or "").strip() or "-"
-            warranty_months = row["warranty_months"] or 0
-            return (
-                f"ID: {row['id']} | {brand} {model} | {category} | {price:.2f} грн\n"
-                f"Артикул: {sku}\n"
-                f"{warranty_label}: {warranty_months} мес\n"
-            )
-        except Exception as e:
-            print(f"[list_products] row failed: {e}")
-            try:
-                return f"ID: {row['id']} | (битые данные)\n"
+                await message.edit_text(text, reply_markup=kb)
+                return
             except Exception:
-                return "(пропущено)\n"
+                pass
+        await message.answer(text, reply_markup=kb)
+    except Exception as e:
+        print(f"[list_products] send failed: {e}")
 
-    header = "📦 Список товаров:\n"
-    MAX_LEN = 3800  # запас под лимит Telegram (4096)
-    buffer = header
-    for row in rows:
-        chunk = _row_text(row) + "\n"
-        if len(buffer) + len(chunk) > MAX_LEN:
-            try:
-                await message.answer(buffer)
-            except Exception as e:
-                print(f"[list_products] send failed: {e}")
-            buffer = chunk
-        else:
-            buffer += chunk
 
-    if buffer.strip():
-        try:
-            await message.answer(buffer)
-        except Exception as e:
-            print(f"[list_products] send failed: {e}")
+@router.message(lambda m: m.text == "📋 Список товаров")
+async def list_products_handler(message: Message):
+    await _send_products_page(message, page=1, edit=False)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("products_page:"))
+async def products_page_callback(callback: CallbackQuery):
+    raw = callback.data.split(":", 1)[1]
+    if raw == "noop":
+        await callback.answer()
+        return
+    try:
+        page = int(raw)
+    except ValueError:
+        await callback.answer()
+        return
+    await _send_products_page(callback.message, page=page, edit=True)
+    await callback.answer()
 
 
 @router.message(lambda m: m.text == "🧹 Очистить битые товары")
