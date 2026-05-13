@@ -5645,6 +5645,22 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
 
     brands = sorted(set([p["brand"] for p in products if p["brand"]]))
 
+    # Скрываем из фильтра те бренды, что выключены в справочнике site_brands
+    # (soft-hide). Сравнение case-insensitive. Если в справочнике записи нет —
+    # бренд остаётся видимым (бэк-совместимость).
+    try:
+        site_brand_rows = await db.list_site_brands()
+    except Exception as e:
+        print(f"[site] list_site_brands failed: {e}")
+        site_brand_rows = []
+    inactive_lower = {
+        (r["name"] or "").strip().lower()
+        for r in site_brand_rows
+        if not r["is_active"] and (r["name"] or "").strip()
+    }
+    if inactive_lower:
+        brands = [b for b in brands if b.strip().lower() not in inactive_lower]
+
     if category:
         # category aliases — let "Нагреватели" / "Нагрівачі" cover boiler-like
         heater_aliases = {"Нагреватели", "Нагрівачі", "Нагреватель", "Бойлер", "Бойлеры", "Бойлери", "Водонагреватель", "Водонагрівач"}
