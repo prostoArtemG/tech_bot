@@ -1182,17 +1182,14 @@ async def inline_brands_kb():
         rows = []
 
     keyboard: list[list[InlineKeyboardButton]] = []
-    pair: list[InlineKeyboardButton] = []
     for row in rows:
         name = (row["name"] or "").strip()
         if not name:
             continue
-        pair.append(InlineKeyboardButton(text=name, callback_data=f"add_brand:{name}"))
-        if len(pair) == 2:
-            keyboard.append(pair)
-            pair = []
-    if pair:
-        keyboard.append(pair)
+        # По одной кнопке в ряд — широкие кнопки.
+        keyboard.append([
+            InlineKeyboardButton(text=name, callback_data=f"add_brand:{name}")
+        ])
 
     # Кнопка добавления бренда всегда доступна — и при пустом списке тоже.
     keyboard.append([
