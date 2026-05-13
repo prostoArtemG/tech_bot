@@ -1463,9 +1463,9 @@ async def _send_brands_list(message: Message, mode: str, note: str | None = None
         name = r["name"]
         if mode == "active":
             lock = " 🔒" if (name or "").strip().lower() in used_lower else ""
-            label = f"{name}{lock} — 👁 Скрыть"
+            label = f"👁 Скрыть: {name}{lock}"
         else:
-            label = f"{name} — ✅ Активировать"
+            label = f"✅ Активировать: {name}"
         keyboard.append([
             InlineKeyboardButton(text=label, callback_data=f"brand_toggle:{r['id']}:{mode}"),
         ])
@@ -1558,12 +1558,9 @@ async def brand_toggle_callback(callback: CallbackQuery):
         await callback.answer("Ошибка", show_alert=False)
         return
 
-    # Возвращаемся в то же подменю, откуда пришли (если есть), иначе hub.
+    # После действия — обновляем то подменю, откуда пришли (иначе hub).
     if return_mode in ("active", "hidden"):
-        # Бренд, который был active и скрыли, теперь в hidden — и наоборот.
-        # Открываем подменю, в котором он окажется, чтобы видеть результат.
-        new_mode = "hidden" if return_mode == "active" else "active"
-        await _send_brands_list(callback.message, mode=new_mode)
+        await _send_brands_list(callback.message, mode=return_mode)
     else:
         await _send_brands_admin(callback.message, edit=True)
     await callback.answer("Готово")
