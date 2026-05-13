@@ -59,15 +59,16 @@
 
         <div class="product-image">
             <div class="product-gallery">
-                <img id="mainImage" src="{% if images and images|length > 0 %}{{ images[0].image_url }}{% else %}{{ product.photo_url }}{% endif %}" class="main-image" alt="{{ product.brand }} {{ product.model }}">
+                <img id="mainImage" src="{% if images and images|length > 0 %}{{ images[0].image_url }}{% else %}{{ product.photo_url }}{% endif %}" class="main-image lightbox-trigger" alt="{{ product.brand }} {{ product.model }}" data-lb-index="0">
 
                 {% if images and images|length > 1 %}
                 <div class="thumbs-row">
                     {% for img in images %}
                     <img
                         src="{{ img.image_url }}"
-                        onclick="changeImage(this, '{{ img.image_url }}')"
-                        class="thumb-img{% if loop.first %} active{% endif %}"
+                        onclick="changeImage(this, '{{ img.image_url }}', {{ loop.index0 }})"
+                        class="thumb-img lightbox-thumb{% if loop.first %} active{% endif %}"
+                        data-lb-index="{{ loop.index0 }}"
                     >
                     {% endfor %}
                 </div>
@@ -209,10 +210,13 @@
 </main>
 
 <script>
-    function changeImage(thumbEl, src) {
+    function changeImage(thumbEl, src, idx) {
         var main = document.getElementById('mainImage');
         if (main) {
             main.src = src;
+            if (typeof idx === 'number') {
+                main.setAttribute('data-lb-index', String(idx));
+            }
         }
         document.querySelectorAll('.thumb-img').forEach(function(el) {
             el.classList.remove('active');
@@ -221,6 +225,122 @@
             thumbEl.classList.add('active');
         }
     }
+</script>
+
+<!-- Image lightbox (product page) -->
+<div id="productLightbox" class="img-lightbox" aria-hidden="true" role="dialog">
+    <button type="button" class="img-lightbox-close" aria-label="Закрыть">×</button>
+    <button type="button" class="img-lightbox-nav img-lightbox-prev" aria-label="Предыдущее фото">‹</button>
+    <button type="button" class="img-lightbox-nav img-lightbox-next" aria-label="Следующее фото">›</button>
+    <img class="img-lightbox-img" alt="">
+    <div class="img-lightbox-counter"></div>
+</div>
+
+<script>
+(function() {
+    // Галерея: собираем URL фотографий из миниатюр (или 1 фото — main).
+    var thumbs = Array.prototype.slice.call(document.querySelectorAll('.thumbs-row .thumb-img'));
+    var gallery = thumbs.length ? thumbs.map(function(t) { return t.getAttribute('src'); }) : [];
+    if (!gallery.length) {
+        var main = document.getElementById('mainImage');
+        if (main && main.getAttribute('src')) {
+            gallery = [main.getAttribute('src')];
+        }
+    }
+
+    var lb = document.getElementById('productLightbox');
+    if (!lb) return;
+    var lbImg = lb.querySelector('.img-lightbox-img');
+    var lbClose = lb.querySelector('.img-lightbox-close');
+    var lbPrev = lb.querySelector('.img-lightbox-prev');
+    var lbNext = lb.querySelector('.img-lightbox-next');
+    var lbCounter = lb.querySelector('.img-lightbox-counter');
+    var current = 0;
+
+    function updateNavVisibility() {
+        var multi = gallery.length > 1;
+        if (lbPrev) lbPrev.style.display = multi ? '' : 'none';
+        if (lbNext) lbNext.style.display = multi ? '' : 'none';
+        if (lbCounter) {
+            lbCounter.style.display = multi ? '' : 'none';
+            lbCounter.textContent = (current + 1) + ' / ' + gallery.length;
+        }
+    }
+    function show(idx) {
+        if (!gallery.length) return;
+        current = (idx + gallery.length) % gallery.length;
+        lbImg.src = gallery[current];
+        updateNavVisibility();
+    }
+    function open(idx) {
+        show(idx || 0);
+        lb.classList.add('open');
+        lb.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+    function close() {
+        lb.classList.remove('open');
+        lb.setAttribute('aria-hidden', 'true');
+        lbImg.src = '';
+        document.body.style.overflow = '';
+    }
+    function next() { show(current + 1); }
+    function prev() { show(current - 1); }
+
+    // Открытие по клику на главное фото
+    var main = document.getElementById('mainImage');
+    if (main) {
+        main.style.cursor = 'zoom-in';
+        main.addEventListener('click', function(e) {
+            e.preventDefault();
+            var idx = parseInt(main.getAttribute('data-lb-index') || '0', 10) || 0;
+            open(idx);
+        });
+    }
+    // Открытие по клику на миниатюру (двойной клик по активной или прямой клик по уже выбранной).
+    // Чтобы не ломать changeImage() — открываем lightbox по клику по активной миниатюре.
+    document.querySelectorAll('.thumb-img').forEach(function(thumb) {
+        thumb.addEventListener('click', function(e) {
+            if (thumb.classList.contains('active')) {
+                e.preventDefault();
+                e.stopPropagation();
+                var idx = parseInt(thumb.getAttribute('data-lb-index') || '0', 10) || 0;
+                open(idx);
+            }
+            // иначе changeImage() сам сработает через inline onclick
+        });
+    });
+
+    if (lbClose) lbClose.addEventListener('click', close);
+    if (lbPrev) lbPrev.addEventListener('click', function(e) { e.stopPropagation(); prev(); });
+    if (lbNext) lbNext.addEventListener('click', function(e) { e.stopPropagation(); next(); });
+    lb.addEventListener('click', function(e) {
+        if (e.target === lb) close();
+    });
+    // Клик по самому фото внутри lightbox — не закрываем.
+    if (lbImg) lbImg.addEventListener('click', function(e) { e.stopPropagation(); });
+
+    document.addEventListener('keydown', function(e) {
+        if (!lb.classList.contains('open')) return;
+        if (e.key === 'Escape') close();
+        else if (e.key === 'ArrowLeft') prev();
+        else if (e.key === 'ArrowRight') next();
+    });
+
+    // Swipe на mobile
+    var touchX = null;
+    lb.addEventListener('touchstart', function(e) {
+        if (e.touches && e.touches[0]) touchX = e.touches[0].clientX;
+    }, { passive: true });
+    lb.addEventListener('touchend', function(e) {
+        if (touchX === null) return;
+        var endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : touchX;
+        var dx = endX - touchX;
+        touchX = null;
+        if (Math.abs(dx) < 40) return;
+        if (dx < 0) next(); else prev();
+    });
+})();
 </script>
 
 <script src="/static/cart.js"></script>
