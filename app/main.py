@@ -1181,6 +1181,18 @@ async def inline_brands_kb():
         print(f"[brands] load failed: {e}")
         names = []
 
+    # Гарантируем, что в основном списке нет скрытых брендов.
+    try:
+        all_rows = await db.list_site_brands()
+    except Exception:
+        all_rows = []
+    hidden_lower = {
+        (r["name"] or "").strip().lower()
+        for r in all_rows
+        if not r["is_active"]
+    }
+    names = [n for n in names if (n or "").strip().lower() not in hidden_lower]
+
     keyboard: list[list[InlineKeyboardButton]] = []
     for name in names:
         if not name:
@@ -1198,6 +1210,12 @@ async def inline_brands_kb():
     if names:
         keyboard.append([
             InlineKeyboardButton(text="🔍 Поиск бренда", callback_data="add_brand_search"),
+        ])
+    # Кнопка «Неактивные бренды» — если есть хоть один скрытый.
+    has_hidden = bool(hidden_lower)
+    if has_hidden:
+        keyboard.append([
+            InlineKeyboardButton(text="👁 Неактивные бренды", callback_data="add_brand_show_hidden"),
         ])
     keyboard.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -3204,6 +3222,110 @@ async def add_brand_new_callback(callback: CallbackQuery, state: FSMContext):
 async def add_brand_search_callback(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddProductState.searching_brand)
     await callback.message.answer("Введите часть названия бренда:")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "add_brand_show_hidden")
+async def add_brand_show_hidden_callback(callback: CallbackQuery, state: FSMContext):
+    """Показать скрытые бренды в flow добавления товара."""
+    try:
+        rows = await db.list_site_brands()
+    except Exception as e:
+        print(f"[brands] load hidden failed: {e}")
+        rows = []
+    hidden = [r for r in rows if not r["is_active"]]
+
+    keyboard: list[list[InlineKeyboardButton]] = []
+    for r in hidden:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=r["name"],
+                callback_data=f"add_brand_hidden:{r['id']}",
+            ),
+        ])
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="add_brand_back_to_active"),
+    ])
+    keyboard.append([
+        InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
+    ])
+
+    text = (
+        "👁 Неактивные бренды:" if hidden
+        else "👁 Неактивные бренды:\n\nСкрытых брендов нет."
+    )
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except Exception:
+        await callback.message.answer(text, reply_markup=markup)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "add_brand_back_to_active")
+async def add_brand_back_to_active_callback(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    category = data.get("category") or ""
+    text = f"Категория: {category}\n\nВыберите бренд:" if category else "Выберите бренд:"
+    try:
+        await callback.message.edit_text(text, reply_markup=await inline_brands_kb())
+    except Exception:
+        await callback.message.answer(text, reply_markup=await inline_brands_kb())
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("add_brand_hidden:"))
+async def add_brand_hidden_callback(callback: CallbackQuery, state: FSMContext):
+    """Клик на скрытый бренд — спросить подтверждение активации."""
+    try:
+        brand_id = int(callback.data.split(":", 1)[1])
+        row = await db.fetchrow(
+            "SELECT id, name, is_active FROM site_brands WHERE id = $1",
+            brand_id,
+        )
+    except Exception as e:
+        print(f"[brands] hidden pick failed: {e}")
+        await callback.answer("Ошибка", show_alert=False)
+        return
+    if row is None:
+        await callback.answer("Бренд не найден", show_alert=True)
+        return
+    if row["is_active"]:
+        # Уже активен — просто выбираем как обычный бренд.
+        await state.update_data(brand=row["name"])
+        await state.set_state(AddProductState.waiting_for_model)
+        try:
+            await callback.message.edit_text(
+                f"Бренд: {row['name']}\n\nВведите модель:"
+            )
+        except Exception:
+            await callback.message.answer(
+                f"Бренд: {row['name']}\n\nВведите модель:"
+            )
+        await callback.answer()
+        return
+
+    # Сохраняем в state, чтобы brand_activate_callback подхватил имя.
+    await state.update_data(
+        pending_hidden_brand_id=row["id"],
+        pending_hidden_brand_name=row["name"],
+    )
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✅ Активировать и выбрать",
+            callback_data=f"brand_activate:{row['id']}",
+        )],
+        [InlineKeyboardButton(
+            text="❌ Отмена",
+            callback_data="brand_activate_cancel",
+        )],
+    ])
+    text = f"Бренд «{row['name']}» скрыт. Активировать и выбрать его?"
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except Exception:
+        await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()
 
 
