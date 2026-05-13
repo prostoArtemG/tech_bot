@@ -1443,19 +1443,22 @@ class Database:
         )
 
     async def add_site_brand(self, name: str, sort_order: int = 100) -> dict | None:
-        """Создаёт бренд или возвращает существующий (case-insensitive)."""
+        """Создаёт бренд (case-insensitive).
+
+        Возвращает dict бренда. Поле ``_status``:
+        - ``"created"`` — бренд добавлен;
+        - ``"active"`` — уже существовал и был активен;
+        - ``"hidden"`` — существовал, но скрыт (is_active=FALSE). НЕ активируем
+          автоматически — это решает пользователь явной кнопкой.
+        """
         name = (name or "").strip()
         if not name:
             return None
         existing = await self.get_site_brand_by_name(name)
         if existing:
-            # Активируем, если был скрыт — пользователь явно "добавляет"
-            if not existing["is_active"]:
-                await self.execute(
-                    "UPDATE site_brands SET is_active = TRUE WHERE id = $1",
-                    existing["id"],
-                )
-            return await self.get_site_brand_by_name(name)
+            result = dict(existing)
+            result["_status"] = "active" if existing["is_active"] else "hidden"
+            return result
         await self.execute(
             """
             INSERT INTO site_brands (name, sort_order, is_active)
@@ -1464,7 +1467,40 @@ class Database:
             """,
             name, sort_order
         )
-        return await self.get_site_brand_by_name(name)
+        row = await self.get_site_brand_by_name(name)
+        if row:
+            result = dict(row)
+            result["_status"] = "created"
+            return result
+        return None
+
+    async def activate_site_brand(self, brand_id: int):
+        await self.execute(
+            "UPDATE site_brands SET is_active = TRUE WHERE id = $1",
+            brand_id,
+        )
+
+    async def hide_site_brands_by_names(self, names: list[str]) -> int:
+        """Soft-hide брендов по списку имён (case-insensitive)."""
+        if not names:
+            return 0
+        norm = [n.strip().lower() for n in names if n and n.strip()]
+        if not norm:
+            return 0
+        result = await self.execute(
+            """
+            UPDATE site_brands
+            SET is_active = FALSE
+            WHERE LOWER(TRIM(name)) = ANY($1::text[])
+              AND is_active = TRUE
+            """,
+            norm,
+        )
+        # asyncpg execute returns string like "UPDATE 3"
+        try:
+            return int((result or "UPDATE 0").split()[-1])
+        except Exception:
+            return 0
 
     async def toggle_site_brand(self, brand_id: int):
         await self.execute(

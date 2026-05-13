@@ -1403,16 +1403,14 @@ async def _send_brands_admin(message: Message, edit: bool = False):
                 text=f"{emoji} {r['name']}",
                 callback_data=f"brand_toggle:{r['id']}",
             ),
-            InlineKeyboardButton(
-                text="🗑",
-                callback_data=f"brand_delete:{r['id']}",
-            ),
         ])
 
     if rows:
         keyboard.append([
+            InlineKeyboardButton(text="🧹 Скрыть стандартные бренды", callback_data="brands_hide_defaults"),
+        ])
+        keyboard.append([
             InlineKeyboardButton(text="🚫 Скрыть все", callback_data="brands_hide_all"),
-            InlineKeyboardButton(text="🗑 Удалить все", callback_data="brands_wipe_all"),
         ])
 
     if not rows:
@@ -1423,7 +1421,8 @@ async def _send_brands_admin(message: Message, edit: bool = False):
     else:
         text = (
             "🏷 Бренды сайта\n"
-            "Нажмите на бренд, чтобы скрыть/показать. 🗑 — удалить."
+            "🟢 — активен, 👁️ — скрыт.\n"
+            "Нажмите на бренд, чтобы переключить."
         )
 
     try:
@@ -1464,17 +1463,19 @@ async def brand_toggle_callback(callback: CallbackQuery):
     await callback.answer("Готово")
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith("brand_delete:"))
-async def brand_delete_callback(callback: CallbackQuery):
+DEFAULT_BRANDS_TO_HIDE = ["Samsung", "LG", "Bosch", "Beko", "Philips", "Xiaomi"]
+
+
+@router.callback_query(lambda c: c.data == "brands_hide_defaults")
+async def brands_hide_defaults_callback(callback: CallbackQuery):
     try:
-        brand_id = int(callback.data.split(":", 1)[1])
-        await db.delete_site_brand(brand_id)
+        hidden = await db.hide_site_brands_by_names(DEFAULT_BRANDS_TO_HIDE)
     except Exception as e:
-        print(f"[brands] delete failed: {e}")
+        print(f"[brands] hide defaults failed: {e}")
         await callback.answer("Ошибка", show_alert=False)
         return
     await _send_brands_admin(callback.message, edit=True)
-    await callback.answer("Удалён")
+    await callback.answer(f"Скрыто: {hidden}")
 
 
 @router.callback_query(lambda c: c.data == "brands_hide_all")
@@ -1487,47 +1488,6 @@ async def brands_hide_all_callback(callback: CallbackQuery):
         return
     await _send_brands_admin(callback.message, edit=True)
     await callback.answer("Все бренды скрыты")
-
-
-@router.callback_query(lambda c: c.data == "brands_wipe_all")
-async def brands_wipe_all_callback(callback: CallbackQuery):
-    # Подтверждение через дополнительный шаг
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Да, удалить все", callback_data="brands_wipe_confirm"),
-            InlineKeyboardButton(text="❌ Отмена", callback_data="brands_wipe_cancel"),
-        ]
-    ])
-    try:
-        await callback.message.edit_text(
-            "⚠️ Удалить ВСЕ бренды из справочника?\n"
-            "Это не повлияет на уже созданные товары (бренд хранится строкой).",
-            reply_markup=kb,
-        )
-    except Exception:
-        await callback.message.answer(
-            "⚠️ Удалить ВСЕ бренды из справочника?",
-            reply_markup=kb,
-        )
-    await callback.answer()
-
-
-@router.callback_query(lambda c: c.data == "brands_wipe_confirm")
-async def brands_wipe_confirm_callback(callback: CallbackQuery):
-    try:
-        await db.delete_all_site_brands()
-    except Exception as e:
-        print(f"[brands] wipe all failed: {e}")
-        await callback.answer("Ошибка", show_alert=False)
-        return
-    await _send_brands_admin(callback.message, edit=True)
-    await callback.answer("Справочник очищен")
-
-
-@router.callback_query(lambda c: c.data == "brands_wipe_cancel")
-async def brands_wipe_cancel_callback(callback: CallbackQuery):
-    await _send_brands_admin(callback.message, edit=True)
-    await callback.answer("Отменено")
 
 
 @router.errors()
@@ -3154,6 +3114,58 @@ async def add_brand_search_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(lambda c: c.data and c.data.startswith("brand_activate:"))
+async def brand_activate_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        brand_id = int(callback.data.split(":", 1)[1])
+        await db.activate_site_brand(brand_id)
+    except Exception as e:
+        print(f"[brands] activate failed: {e}")
+        await callback.answer("Ошибка", show_alert=False)
+        return
+
+    data = await state.get_data()
+    brand_name = data.get("pending_hidden_brand_name") or ""
+    if not brand_name:
+        try:
+            row = await db.get_site_brand_by_name(str(brand_id))
+        except Exception:
+            row = None
+        brand_name = (row or {}).get("name") or ""
+
+    await state.update_data(brand=brand_name, pending_hidden_brand_id=None, pending_hidden_brand_name=None)
+    await state.set_state(AddProductState.waiting_for_model)
+
+    try:
+        await callback.message.edit_text(
+            f"✅ Бренд «{brand_name}» активирован.\n\nВведите модель:"
+        )
+    except Exception:
+        await callback.message.answer(
+            f"✅ Бренд «{brand_name}» активирован.\n\nВведите модель:"
+        )
+    await callback.answer("Активировано")
+
+
+@router.callback_query(lambda c: c.data == "brand_activate_cancel")
+async def brand_activate_cancel_callback(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    category = data.get("category") or ""
+    await state.update_data(pending_hidden_brand_id=None, pending_hidden_brand_name=None)
+    await state.set_state(AddProductState.waiting_for_brand)
+    try:
+        await callback.message.edit_text(
+            f"Категория: {category}\n\nВыберите бренд:" if category else "Выберите бренд:",
+            reply_markup=await inline_brands_kb(),
+        )
+    except Exception:
+        await callback.message.answer(
+            f"Категория: {category}\n\nВыберите бренд:" if category else "Выберите бренд:",
+            reply_markup=await inline_brands_kb(),
+        )
+    await callback.answer("Отменено")
+
+
 @router.message(AddProductState.searching_category)
 async def search_category_handler(message: Message, state: FSMContext):
     query = (message.text or "").strip().lower()
@@ -3214,22 +3226,50 @@ async def add_product_brand_manual_handler(message: Message, state: FSMContext):
         return
 
     # Сохраняем в справочник (без дублей, case-insensitive)
-    existing = None
+    saved = None
     try:
-        existing = await db.get_site_brand_by_name(brand)
         saved = await db.add_site_brand(brand)
-        if saved and saved.get("name"):
-            brand = saved["name"]
     except Exception as e:
         print(f"[brands] save '{brand}' failed: {e}")
+
+    if not saved:
+        # Не удалось ни найти, ни создать — продолжаем без БД, чтобы не блокировать.
+        await state.update_data(brand=brand)
+        await state.set_state(AddProductState.waiting_for_model)
+        await message.answer(f"➕ Бренд «{brand}» принят.\n\nВведите модель:")
+        return
+
+    status = saved.get("_status")
+    brand = saved["name"]  # каноническое имя из БД
+
+    if status == "hidden":
+        # Бренд уже существует, но скрыт — спрашиваем подтверждение активации.
+        await state.update_data(pending_hidden_brand_id=saved["id"], pending_hidden_brand_name=brand)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Активировать",
+                    callback_data=f"brand_activate:{saved['id']}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="brand_activate_cancel",
+                ),
+            ]
+        ])
+        await message.answer(
+            f"Бренд «{brand}» уже есть, но скрыт. Активировать?",
+            reply_markup=kb,
+        )
+        return
 
     await state.update_data(brand=brand)
     await state.set_state(AddProductState.waiting_for_model)
 
-    note = (
-        f"✅ Бренд «{brand}» уже был в справочнике.\n\n"
-        if existing else f"➕ Бренд «{brand}» добавлен.\n\n"
-    )
+    if status == "active":
+        note = f"✅ Бренд «{brand}» уже есть в справочнике.\n\n"
+    else:
+        note = f"➕ Бренд «{brand}» добавлен.\n\n"
     await message.answer(note + "Введите модель:")
 
 
