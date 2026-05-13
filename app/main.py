@@ -3238,8 +3238,25 @@ def _format_product_line(row) -> str:
         except (TypeError, ValueError):
             price = 0.0
         title = f"{brand} {model}".strip() or "-"
-        # компактная карточка: ID | Название | Цена
-        return f"#{pid} | {title} | {price:.0f} грн"
+        # Статус товара
+        try:
+            qty = int(row["stock_qty"] or 0)
+        except (TypeError, ValueError, KeyError):
+            qty = 0
+        avail = ""
+        try:
+            avail = (row["availability_status"] or "").lower()
+        except (KeyError, TypeError):
+            avail = ""
+        if avail == "hidden":
+            status = "🚫 скрыт"
+        elif avail == "out_of_stock" or qty <= 0:
+            status = "⛔️ нет"
+        elif avail in ("", "in_stock"):
+            status = f"✅ {qty} шт"
+        else:
+            status = f"✅ {qty} шт"
+        return f"#{pid} | {title} | {price:.0f} грн | {status}"
     except Exception as e:
         print(f"[list_products] row failed: {e}")
         try:
@@ -3249,15 +3266,17 @@ def _format_product_line(row) -> str:
 
 
 def _products_page_kb(page: int, total_pages: int) -> InlineKeyboardMarkup | None:
-    if total_pages <= 1:
-        return None
-    row = []
-    if page > 1:
-        row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"products_page:{page - 1}"))
-    row.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="products_page:noop"))
-    if page < total_pages:
-        row.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"products_page:{page + 1}"))
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    rows: list[list[InlineKeyboardButton]] = []
+    if total_pages > 1:
+        nav = []
+        if page > 1:
+            nav.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"products_page:{page - 1}"))
+        nav.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="products_page:noop"))
+        if page < total_pages:
+            nav.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"products_page:{page + 1}"))
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔍 Найти товар", callback_data="products_search")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def _send_products_page(message: Message, page: int, edit: bool = False):
@@ -3315,6 +3334,16 @@ async def products_page_callback(callback: CallbackQuery):
         await callback.answer()
         return
     await _send_products_page(callback.message, page=page, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "products_search")
+async def products_search_callback(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(EditProductState.waiting_for_query)
+    try:
+        await callback.message.answer(await t(callback.message, "enter_search"))
+    except Exception:
+        await callback.message.answer("Введите часть названия, модель или артикул:")
     await callback.answer()
 
 

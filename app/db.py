@@ -360,15 +360,17 @@ class Database:
                 id, category, brand, model, price, stock_qty,
                 purchase_price, purchase_currency, sku, warranty_months,
                 photo_url, description, specs,
-                current_price, old_price, is_sale, stock_status
+                current_price, old_price, is_sale, stock_status,
+                availability_status
             FROM products
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
+              AND COALESCE(availability_status, 'in_stock') != 'hidden'
               AND NOT (
                 LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
                 AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
               )
-            ORDER BY id DESC
+            ORDER BY id ASC
             """
         )
 
