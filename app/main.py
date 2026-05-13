@@ -1387,9 +1387,13 @@ async def reset_handler(message: Message, state: FSMContext):
     )
 
 
+DEFAULT_BRANDS_TO_HIDE = ["Samsung", "LG", "Bosch", "Beko", "Philips", "Xiaomi"]
+
+
 async def _send_brands_admin(message: Message, edit: bool = False, note: str | None = None):
-    # Подтягиваем в справочник бренды из реальных товаров (idempotent),
-    # а заодно авто-реактивируем скрытые, которые используются.
+    """Главное меню /brands (hub)."""
+    # Idempotent sync: подтягиваем недостающие бренды из товаров,
+    # авто-реактивируем скрытые-но-используемые.
     try:
         await db.sync_site_brands_from_products()
     except Exception as e:
@@ -1401,62 +1405,24 @@ async def _send_brands_admin(message: Message, edit: bool = False, note: str | N
         print(f"[brands] admin load failed: {e}")
         rows = []
 
-    try:
-        used = await db.list_brands_from_active_products()
-    except Exception:
-        used = []
-    used_lower = {(n or "").strip().lower() for n in used}
+    active_cnt = sum(1 for r in rows if r["is_active"])
+    hidden_cnt = sum(1 for r in rows if not r["is_active"])
 
-    active_rows = [r for r in rows if r["is_active"]]
-    hidden_rows = [r for r in rows if not r["is_active"]]
-
-    keyboard: list[list[InlineKeyboardButton]] = []
-
-    for r in active_rows:
-        name = r["name"]
-        lock = " 🔒" if (name or "").strip().lower() in used_lower else ""
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"🟢 {name}{lock} — 👁 Скрыть",
-                callback_data=f"brand_toggle:{r['id']}",
-            ),
-        ])
-
-    if hidden_rows:
-        keyboard.append([
-            InlineKeyboardButton(text="— Скрытые бренды —", callback_data="brands_noop"),
-        ])
-        for r in hidden_rows:
-            keyboard.append([
-                InlineKeyboardButton(
-                    text=f"👁️ {r['name']} — ✅ Активировать",
-                    callback_data=f"brand_toggle:{r['id']}",
-                ),
-            ])
-
-    if rows:
-        keyboard.append([
-            InlineKeyboardButton(text="🧹 Скрыть стандартные бренды", callback_data="brands_hide_defaults"),
-        ])
-    keyboard.append([
-        InlineKeyboardButton(text="🔄 Синхронизировать с товарами", callback_data="brands_sync"),
-    ])
-
-    if not rows:
-        text = (
-            "🏷 Справочник брендов пуст.\n"
-            "Используйте «➕ Добавить бренд» при добавлении товара."
-        )
-    else:
-        text = (
-            f"🏷 Бренды сайта (активных: {len(active_rows)}, скрытых: {len(hidden_rows)})\n"
-            "🔒 — бренд используется в активных товарах и не может быть скрыт.\n"
-            "Нажмите на строку, чтобы переключить."
-        )
+    keyboard = [
+        [InlineKeyboardButton(text=f"✅ Активные бренды ({active_cnt})", callback_data="brands_menu_active")],
+        [InlineKeyboardButton(text=f"👁 Скрытые бренды ({hidden_cnt})", callback_data="brands_menu_hidden")],
+        [InlineKeyboardButton(text="🧹 Синхронизировать с товарами", callback_data="brands_sync")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="brands_menu_close")],
+    ]
+    text = (
+        "📋 Бренды сайта\n"
+        f"Активных: {active_cnt}, скрытых: {hidden_cnt}.\n"
+        "Источник для бота и сайта общий: активные бренды + бренды активных товаров."
+    )
     if note:
         text = f"{note}\n\n{text}"
 
-    markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
     try:
         if edit:
             try:
@@ -1469,6 +1435,66 @@ async def _send_brands_admin(message: Message, edit: bool = False, note: str | N
         print(f"[brands] admin send failed: {e}")
 
 
+async def _send_brands_list(message: Message, mode: str, note: str | None = None):
+    """Подменю: 'active' или 'hidden'. Каждая запись — кнопка действия."""
+    try:
+        rows = await db.list_site_brands()
+    except Exception as e:
+        print(f"[brands] list failed: {e}")
+        rows = []
+
+    try:
+        used = await db.list_brands_from_active_products()
+    except Exception:
+        used = []
+    used_lower = {(n or "").strip().lower() for n in used}
+
+    if mode == "active":
+        items = [r for r in rows if r["is_active"]]
+        header = f"✅ Активные бренды ({len(items)})"
+        empty_text = "Активных брендов нет."
+    else:
+        items = [r for r in rows if not r["is_active"]]
+        header = f"👁 Скрытые бренды ({len(items)})"
+        empty_text = "Скрытых брендов нет."
+
+    keyboard: list[list[InlineKeyboardButton]] = []
+    for r in items:
+        name = r["name"]
+        if mode == "active":
+            lock = " 🔒" if (name or "").strip().lower() in used_lower else ""
+            label = f"{name}{lock} — 👁 Скрыть"
+        else:
+            label = f"{name} — ✅ Активировать"
+        keyboard.append([
+            InlineKeyboardButton(text=label, callback_data=f"brand_toggle:{r['id']}:{mode}"),
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="brands_menu_main"),
+    ])
+
+    text = header
+    if not items:
+        text = f"{header}\n\n{empty_text}"
+    elif mode == "active":
+        text = (
+            f"{header}\n"
+            "🔒 — используется активными товарами, скрыть нельзя."
+        )
+    if note:
+        text = f"{note}\n\n{text}"
+
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    try:
+        try:
+            await message.edit_text(text, reply_markup=markup)
+        except Exception:
+            await message.answer(text, reply_markup=markup)
+    except Exception as e:
+        print(f"[brands] list send failed: {e}")
+
+
 @router.message(Command("brands"))
 async def brands_admin_handler(message: Message):
     if not await require_admin(message):
@@ -1476,15 +1502,40 @@ async def brands_admin_handler(message: Message):
     await _send_brands_admin(message, edit=False)
 
 
-@router.callback_query(lambda c: c.data == "brands_noop")
-async def brands_noop_callback(callback: CallbackQuery):
+@router.callback_query(lambda c: c.data == "brands_menu_main")
+async def brands_menu_main_callback(callback: CallbackQuery):
+    await _send_brands_admin(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "brands_menu_active")
+async def brands_menu_active_callback(callback: CallbackQuery):
+    await _send_brands_list(callback.message, mode="active")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "brands_menu_hidden")
+async def brands_menu_hidden_callback(callback: CallbackQuery):
+    await _send_brands_list(callback.message, mode="hidden")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "brands_menu_close")
+async def brands_menu_close_callback(callback: CallbackQuery):
+    try:
+        await callback.message.edit_text("✅ Закрыто.")
+    except Exception:
+        pass
     await callback.answer()
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("brand_toggle:"))
 async def brand_toggle_callback(callback: CallbackQuery):
+    parts = (callback.data or "").split(":")
+    # формат: brand_toggle:<id>[:<return_mode>]
+    return_mode = parts[2] if len(parts) >= 3 else None
     try:
-        brand_id = int(callback.data.split(":", 1)[1])
+        brand_id = int(parts[1])
         row = await db.fetchrow(
             "SELECT id, name, is_active FROM site_brands WHERE id = $1",
             brand_id,
@@ -1497,7 +1548,7 @@ async def brand_toggle_callback(callback: CallbackQuery):
             cnt = await db.count_active_products_by_brand(row["name"])
             if cnt > 0:
                 await callback.answer(
-                    f"Нельзя скрыть «{row['name']}»: есть активные товары ({cnt}).",
+                    f"Нельзя скрыть бренд, пока есть активные товары этого бренда ({cnt}).",
                     show_alert=True,
                 )
                 return
@@ -1506,33 +1557,16 @@ async def brand_toggle_callback(callback: CallbackQuery):
         print(f"[brands] toggle failed: {e}")
         await callback.answer("Ошибка", show_alert=False)
         return
-    await _send_brands_admin(callback.message, edit=True)
+
+    # Возвращаемся в то же подменю, откуда пришли (если есть), иначе hub.
+    if return_mode in ("active", "hidden"):
+        # Бренд, который был active и скрыли, теперь в hidden — и наоборот.
+        # Открываем подменю, в котором он окажется, чтобы видеть результат.
+        new_mode = "hidden" if return_mode == "active" else "active"
+        await _send_brands_list(callback.message, mode=new_mode)
+    else:
+        await _send_brands_admin(callback.message, edit=True)
     await callback.answer("Готово")
-
-
-DEFAULT_BRANDS_TO_HIDE = ["Samsung", "LG", "Bosch", "Beko", "Philips", "Xiaomi"]
-
-
-@router.callback_query(lambda c: c.data == "brands_hide_defaults")
-async def brands_hide_defaults_callback(callback: CallbackQuery):
-    # Исключаем из списка те, что используются в активных товарах.
-    try:
-        used = await db.list_brands_from_active_products()
-        used_lower = {(n or "").strip().lower() for n in used}
-        to_hide = [b for b in DEFAULT_BRANDS_TO_HIDE if b.lower() not in used_lower]
-        protected = [b for b in DEFAULT_BRANDS_TO_HIDE if b.lower() in used_lower]
-        hidden = await db.hide_site_brands_by_names(to_hide) if to_hide else 0
-    except Exception as e:
-        print(f"[brands] hide defaults failed: {e}")
-        await callback.answer("Ошибка", show_alert=False)
-        return
-    note_parts = [f"🧹 Скрыто: {hidden}"]
-    if protected:
-        note_parts.append(
-            "⚠️ Не скрыты (есть активные товары): " + ", ".join(protected)
-        )
-    await _send_brands_admin(callback.message, edit=True, note="\n".join(note_parts))
-    await callback.answer(f"Скрыто: {hidden}")
 
 
 @router.callback_query(lambda c: c.data == "brands_sync")
@@ -1543,20 +1577,13 @@ async def brands_sync_callback(callback: CallbackQuery):
         print(f"[brands] sync failed: {e}")
         await callback.answer("Ошибка", show_alert=False)
         return
-    await _send_brands_admin(callback.message, edit=True)
-    await callback.answer(f"Добавлено: {stats.get('added', 0)}")
+    note = (
+        f"🧹 Синхронизация: добавлено {stats.get('added', 0)}, "
+        f"реактивировано {stats.get('reactivated', 0)}."
+    )
+    await _send_brands_admin(callback.message, edit=True, note=note)
+    await callback.answer("Готово")
 
-
-@router.callback_query(lambda c: c.data == "brands_hide_all")
-async def brands_hide_all_callback(callback: CallbackQuery):
-    try:
-        await db.deactivate_all_site_brands()
-    except Exception as e:
-        print(f"[brands] hide all failed: {e}")
-        await callback.answer("Ошибка", show_alert=False)
-        return
-    await _send_brands_admin(callback.message, edit=True)
-    await callback.answer("Все бренды скрыты")
 
 
 @router.errors()
@@ -5711,23 +5738,20 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     else:
         products = await db.list_site_products()
 
-    brands = sorted(set([p["brand"] for p in products if p["brand"]]))
-
-    # Скрываем из фильтра те бренды, что выключены в справочнике site_brands
-    # (soft-hide). Сравнение case-insensitive. Если в справочнике записи нет —
-    # бренд остаётся видимым (бэк-совместимость).
+    # Список брендов для фильтра берём из того же источника, что и бот:
+    # union (site_brands.is_active=TRUE) + (бренды, реально используемые в
+    # активных товарах) — даже если они помечены is_active=FALSE.
+    # Параллельно подтягиваем недостающие бренды в справочник и
+    # авто-реактивируем скрытые-но-используемые (idempotent).
     try:
-        site_brand_rows = await db.list_site_brands()
+        await db.sync_site_brands_from_products()
     except Exception as e:
-        print(f"[site] list_site_brands failed: {e}")
-        site_brand_rows = []
-    inactive_lower = {
-        (r["name"] or "").strip().lower()
-        for r in site_brand_rows
-        if not r["is_active"] and (r["name"] or "").strip()
-    }
-    if inactive_lower:
-        brands = [b for b in brands if b.strip().lower() not in inactive_lower]
+        print(f"[site] brands sync failed: {e}")
+    try:
+        brands = await db.list_brands_for_selection()
+    except Exception as e:
+        print(f"[site] list_brands_for_selection failed: {e}")
+        brands = sorted({(p["brand"] or "").strip() for p in products if p["brand"]})
 
     if category:
         # category aliases — let "Нагреватели" / "Нагрівачі" cover boiler-like
