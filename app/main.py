@@ -1361,6 +1361,50 @@ async def start_handler(message: Message, state: FSMContext):
     await message.answer(await t(message, "start"), reply_markup=menu)
 
 
+@router.message(Command("reset"), StateFilter("*"))
+async def reset_handler(message: Message, state: FSMContext):
+    await state.clear()
+    menu = await get_main_menu_for_user(message)
+    await message.answer(
+        "✅ Состояние сброшено. Главное меню:",
+        reply_markup=menu,
+    )
+
+
+@router.errors()
+async def global_error_handler(event):
+    import traceback
+    try:
+        exc = getattr(event, "exception", None)
+        upd = getattr(event, "update", None)
+        print(f"[bot-error] {type(exc).__name__}: {exc}")
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+    except Exception as log_err:
+        print(f"[bot-error] logging failed: {log_err}")
+
+    # Попытка ответить пользователю
+    try:
+        upd = getattr(event, "update", None)
+        target = None
+        if upd is not None:
+            if getattr(upd, "message", None) is not None:
+                target = upd.message
+            elif getattr(upd, "callback_query", None) is not None:
+                cq = upd.callback_query
+                try:
+                    await cq.answer("⚠️ Произошла ошибка", show_alert=False)
+                except Exception:
+                    pass
+                target = cq.message
+        if target is not None:
+            await target.answer(
+                "⚠️ Произошла ошибка. Нажмите /start и повторите действие."
+            )
+    except Exception as send_err:
+        print(f"[bot-error] reply failed: {send_err}")
+    return True
+
+
 
 
 @router.message(lambda m: m.text in {"🧾 Гарантии", "🧾 Гарантії"})
@@ -3066,13 +3110,13 @@ async def add_product_price_handler(message: Message, state: FSMContext):
         await state.clear()
         menu = await get_main_menu_for_user(message)
         await message.answer(
-            "❌ Категория не выбрана. Повторите добавление товара.",
+            "⚠️ Сессия устарела. Начните действие заново.",
             reply_markup=menu,
         )
         return
-    category = data["category"]
-    brand = data["brand"]
-    model = data["model"]
+    category = data.get("category")
+    brand = data.get("brand")
+    model = data.get("model")
 
     await state.update_data(price=price)
 
@@ -3138,16 +3182,16 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
         await state.clear()
         menu = await get_main_menu_for_user(message)
         await message.answer(
-            "❌ Категория не выбрана. Повторите добавление товара.",
+            "⚠️ Сессия устарела. Начните действие заново.",
             reply_markup=menu,
         )
         return
 
     await db.add_product(
-        category=data["category"],
-        brand=data["brand"],
-        model=data["model"],
-        price=data["price"],
+        category=data.get("category"),
+        brand=data.get("brand"),
+        model=data.get("model"),
+        price=data.get("price"),
         purchase_price=data.get("purchase_price", 0),
         purchase_currency=data.get("currency", "UAH"),
         sku=data.get("sku"),
@@ -3158,8 +3202,8 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
 
     await message.answer(
         f"✅ Товар добавлен\n\n"
-        f"{data['brand']} {data['model']}\n"
-        f"{await t(message, 'price')}: {data['price']} грн\n"
+        f"{data.get('brand', '')} {data.get('model', '')}\n"
+        f"{await t(message, 'price')}: {data.get('price', 0)} грн\n"
         f"Закупка: {data.get('purchase_price', 0)} {data.get('currency', 'UAH')}\n"
         f"{await t(message, 'warranty')}: {warranty} мес",
         reply_markup=products_kb
