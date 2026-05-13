@@ -564,13 +564,15 @@ class EditSpecsState(StatesGroup):
 # ——— Specifications (JSON-based) ———
 SPEC_FIELDS = [
     ("volume",                "Обʼєм"),
+    ("tank_shape",            "Форма баку"),
+    ("installation",          "Установка"),
     ("control",               "Керування"),
     ("ten_type",              "Тип ТЕНу"),
     ("power",                 "Потужність"),
     ("ten_count",             "Кількість ТЕНів"),
     ("brand_country",         "Країна реєстрації бренду"),
     ("manufacturer_country",  "Країна виробник"),
-    ("dimensions",            "Розміри"),
+    ("dimensions",            "Розміри В*Ш*Г мм"),
     ("warranty_manufacturer", "Гарантія від виробника"),
 ]
 SPEC_LABELS = dict(SPEC_FIELDS)
@@ -578,6 +580,8 @@ SPEC_OPTIONS = {
     "ten_type":              ["Сухий", "Мокрий"],
     "control":               ["Механічне", "Електронне", "Wi-Fi"],
     "ten_count":             ["1", "2"],
+    "tank_shape":            ["Циліндричний", "Плоский", "Кубічний"],
+    "installation":          ["Горизонтальна", "Вертикальна", "Універсальна"],
     "warranty_manufacturer": ["12 міс", "24 міс", "36 міс", "60 міс", "72 міс", "84 міс", "96 міс", "120 міс"],
 }
 
