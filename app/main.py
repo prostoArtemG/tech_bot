@@ -4191,25 +4191,34 @@ async def edit_product_start_handler(message: Message, state: FSMContext):
 async def edit_product_search_handler(message: Message, state: FSMContext):
     query = (message.text or "").strip()
 
-    rows = await db.search_products(query)
+    rows = await db.search_products(query, limit=11)
 
     if not rows:
-        await message.answer(await t(message, "no_products_found"))
+        await message.answer(
+            "Товар не найден. Попробуйте ввести часть названия, модель или артикул."
+        )
         return
+
+    has_more = len(rows) > 10
+    shown = rows[:10]
+
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"{row['brand'] or '-'} {row['model'] or '-'} | {float(row['price'] or 0):.0f} грн | {row['stock_qty'] or 0} шт",
+                    text=f"#{row['id']} | {row['brand'] or '-'} {row['model'] or '-'} | {float(row['price'] or 0):.0f} грн",
                     callback_data=f"edit_product:{row['id']}"
                 )
             ]
-            for row in rows
+            for row in shown
         ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
     )
 
     await state.set_state(EditProductState.waiting_for_product_id)
-    await message.answer(await t(message, "choose_product"), reply_markup=keyboard)
+    prompt = await t(message, "choose_product")
+    if has_more:
+        prompt = f"{prompt}\n\n⚠️ Найдено больше 10, уточните запрос."
+    await message.answer(prompt, reply_markup=keyboard)
 
 
 

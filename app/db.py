@@ -402,10 +402,34 @@ class Database:
             """
         )
 
-    async def search_products(self, query: str):
-        return await self.fetch(
-            """
-            SELECT id, category, brand, model, price, stock_qty
+    async def search_products(self, query: str, limit: int = 10):
+        q = (query or "").strip()
+        # Разбиваем запрос на слова — каждое слово должно встречаться
+        # в объединённом поле (brand + model + category + sku).
+        tokens = [t for t in q.split() if t]
+        if not tokens:
+            tokens = [q] if q else [""]
+
+        params = []
+        conds = []
+        haystack = (
+            "LOWER(CONCAT_WS(' ', "
+            "COALESCE(brand, ''), "
+            "COALESCE(model, ''), "
+            "COALESCE(category, ''), "
+            "COALESCE(sku, '')"
+            "))"
+        )
+        for tok in tokens:
+            params.append(f"%{tok.lower()}%")
+            conds.append(f"{haystack} LIKE ${len(params)}")
+
+        token_where = " AND ".join(conds) if conds else "TRUE"
+        params.append(limit)
+        limit_idx = len(params)
+
+        sql = f"""
+            SELECT id, category, brand, model, price, stock_qty, sku
             FROM products
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
@@ -413,16 +437,11 @@ class Database:
                 LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
                 AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
               )
-              AND (
-                LOWER(COALESCE(brand, '')) LIKE LOWER($1)
-                OR LOWER(COALESCE(model, '')) LIKE LOWER($1)
-                OR LOWER(COALESCE(category, '')) LIKE LOWER($1)
-              )
+              AND ({token_where})
             ORDER BY id DESC
-            LIMIT 10
-            """,
-            f"%{query}%"
-        )
+            LIMIT ${limit_idx}
+        """
+        return await self.fetch(sql, *params)
 
     async def search_site_products(self, query: str):
         return await self.fetch(
