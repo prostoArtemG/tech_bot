@@ -1387,8 +1387,9 @@ async def reset_handler(message: Message, state: FSMContext):
     )
 
 
-async def _send_brands_admin(message: Message, edit: bool = False):
-    # Подтягиваем в справочник бренды из реальных товаров (idempotent).
+async def _send_brands_admin(message: Message, edit: bool = False, note: str | None = None):
+    # Подтягиваем в справочник бренды из реальных товаров (idempotent),
+    # а заодно авто-реактивируем скрытые, которые используются.
     try:
         await db.sync_site_brands_from_products()
     except Exception as e:
@@ -1400,30 +1401,46 @@ async def _send_brands_admin(message: Message, edit: bool = False):
         print(f"[brands] admin load failed: {e}")
         rows = []
 
+    try:
+        used = await db.list_brands_from_active_products()
+    except Exception:
+        used = []
+    used_lower = {(n or "").strip().lower() for n in used}
+
+    active_rows = [r for r in rows if r["is_active"]]
+    hidden_rows = [r for r in rows if not r["is_active"]]
+
     keyboard: list[list[InlineKeyboardButton]] = []
-    for r in rows:
-        emoji = "🟢" if r["is_active"] else "👁️"
+
+    for r in active_rows:
+        name = r["name"]
+        lock = " 🔒" if (name or "").strip().lower() in used_lower else ""
         keyboard.append([
             InlineKeyboardButton(
-                text=f"{emoji} {r['name']}",
+                text=f"🟢 {name}{lock} — 👁 Скрыть",
                 callback_data=f"brand_toggle:{r['id']}",
             ),
         ])
+
+    if hidden_rows:
+        keyboard.append([
+            InlineKeyboardButton(text="— Скрытые бренды —", callback_data="brands_noop"),
+        ])
+        for r in hidden_rows:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"👁️ {r['name']} — ✅ Активировать",
+                    callback_data=f"brand_toggle:{r['id']}",
+                ),
+            ])
 
     if rows:
         keyboard.append([
             InlineKeyboardButton(text="🧹 Скрыть стандартные бренды", callback_data="brands_hide_defaults"),
         ])
-        keyboard.append([
-            InlineKeyboardButton(text="� Синхронизировать с товарами", callback_data="brands_sync"),
-        ])
-        keyboard.append([
-            InlineKeyboardButton(text="🚫 Скрыть все", callback_data="brands_hide_all"),
-        ])
-    else:
-        keyboard.append([
-            InlineKeyboardButton(text="🔄 Синхронизировать с товарами", callback_data="brands_sync"),
-        ])
+    keyboard.append([
+        InlineKeyboardButton(text="🔄 Синхронизировать с товарами", callback_data="brands_sync"),
+    ])
 
     if not rows:
         text = (
@@ -1432,25 +1449,22 @@ async def _send_brands_admin(message: Message, edit: bool = False):
         )
     else:
         text = (
-            "🏷 Бренды сайта\n"
-            "🟢 — активен, 👁️ — скрыт.\n"
-            "Нажмите на бренд, чтобы переключить."
+            f"🏷 Бренды сайта (активных: {len(active_rows)}, скрытых: {len(hidden_rows)})\n"
+            "🔒 — бренд используется в активных товарах и не может быть скрыт.\n"
+            "Нажмите на строку, чтобы переключить."
         )
+    if note:
+        text = f"{note}\n\n{text}"
 
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
     try:
         if edit:
             try:
-                await message.edit_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None,
-                )
+                await message.edit_text(text, reply_markup=markup)
                 return
             except Exception:
                 pass
-        await message.answer(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None,
-        )
+        await message.answer(text, reply_markup=markup)
     except Exception as e:
         print(f"[brands] admin send failed: {e}")
 
@@ -1462,10 +1476,31 @@ async def brands_admin_handler(message: Message):
     await _send_brands_admin(message, edit=False)
 
 
+@router.callback_query(lambda c: c.data == "brands_noop")
+async def brands_noop_callback(callback: CallbackQuery):
+    await callback.answer()
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith("brand_toggle:"))
 async def brand_toggle_callback(callback: CallbackQuery):
     try:
         brand_id = int(callback.data.split(":", 1)[1])
+        row = await db.fetchrow(
+            "SELECT id, name, is_active FROM site_brands WHERE id = $1",
+            brand_id,
+        )
+        if row is None:
+            await callback.answer("Бренд не найден", show_alert=False)
+            return
+        # Защита: нельзя скрывать бренд, если есть активные товары
+        if row["is_active"]:
+            cnt = await db.count_active_products_by_brand(row["name"])
+            if cnt > 0:
+                await callback.answer(
+                    f"Нельзя скрыть «{row['name']}»: есть активные товары ({cnt}).",
+                    show_alert=True,
+                )
+                return
         await db.toggle_site_brand(brand_id)
     except Exception as e:
         print(f"[brands] toggle failed: {e}")
@@ -1480,13 +1515,23 @@ DEFAULT_BRANDS_TO_HIDE = ["Samsung", "LG", "Bosch", "Beko", "Philips", "Xiaomi"]
 
 @router.callback_query(lambda c: c.data == "brands_hide_defaults")
 async def brands_hide_defaults_callback(callback: CallbackQuery):
+    # Исключаем из списка те, что используются в активных товарах.
     try:
-        hidden = await db.hide_site_brands_by_names(DEFAULT_BRANDS_TO_HIDE)
+        used = await db.list_brands_from_active_products()
+        used_lower = {(n or "").strip().lower() for n in used}
+        to_hide = [b for b in DEFAULT_BRANDS_TO_HIDE if b.lower() not in used_lower]
+        protected = [b for b in DEFAULT_BRANDS_TO_HIDE if b.lower() in used_lower]
+        hidden = await db.hide_site_brands_by_names(to_hide) if to_hide else 0
     except Exception as e:
         print(f"[brands] hide defaults failed: {e}")
         await callback.answer("Ошибка", show_alert=False)
         return
-    await _send_brands_admin(callback.message, edit=True)
+    note_parts = [f"🧹 Скрыто: {hidden}"]
+    if protected:
+        note_parts.append(
+            "⚠️ Не скрыты (есть активные товары): " + ", ".join(protected)
+        )
+    await _send_brands_admin(callback.message, edit=True, note="\n".join(note_parts))
     await callback.answer(f"Скрыто: {hidden}")
 
 
