@@ -3214,7 +3214,7 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
     )
 
 
-PRODUCTS_PAGE_SIZE = 10
+PRODUCTS_PAGE_SIZE = 8
 
 
 def _sanitize_plain(s: str) -> str:
@@ -3228,7 +3228,25 @@ def _sanitize_plain(s: str) -> str:
     return s.strip()
 
 
+def _product_status_emoji(row) -> str:
+    """🟢 / 🔴 / 👁️ — статус товара для кнопки."""
+    try:
+        avail = (row["availability_status"] or "").lower()
+    except (KeyError, TypeError):
+        avail = ""
+    try:
+        qty = int(row["stock_qty"] or 0)
+    except (TypeError, ValueError, KeyError):
+        qty = 0
+    if avail == "hidden":
+        return "👁️"
+    if avail == "out_of_stock" or qty <= 0:
+        return "🔴"
+    return "🟢"
+
+
 def _format_product_line(row) -> str:
+    """Текст одной кнопки: '🟢 #21 | Brand Model | 8500 грн'."""
     try:
         pid = row["id"]
         brand = _sanitize_plain(row["brand"]) or "-"
@@ -3238,25 +3256,12 @@ def _format_product_line(row) -> str:
         except (TypeError, ValueError):
             price = 0.0
         title = f"{brand} {model}".strip() or "-"
-        # Статус товара
-        try:
-            qty = int(row["stock_qty"] or 0)
-        except (TypeError, ValueError, KeyError):
-            qty = 0
-        avail = ""
-        try:
-            avail = (row["availability_status"] or "").lower()
-        except (KeyError, TypeError):
-            avail = ""
-        if avail == "hidden":
-            status = "🚫 скрыт"
-        elif avail == "out_of_stock" or qty <= 0:
-            status = "⛔️ нет"
-        elif avail in ("", "in_stock"):
-            status = f"✅ {qty} шт"
-        else:
-            status = f"✅ {qty} шт"
-        return f"#{pid} | {title} | {price:.0f} грн | {status}"
+        status = _product_status_emoji(row)
+        line = f"{status} #{pid} | {title} | {price:.0f} грн"
+        # Telegram-кнопка ограничена ~64 символами в тексте
+        if len(line) > 60:
+            line = line[:57] + "…"
+        return line
     except Exception as e:
         print(f"[list_products] row failed: {e}")
         try:
@@ -3265,18 +3270,29 @@ def _format_product_line(row) -> str:
             return "(пропущено)"
 
 
-def _products_page_kb(page: int, total_pages: int) -> InlineKeyboardMarkup | None:
-    rows: list[list[InlineKeyboardButton]] = []
+def _products_page_kb(rows, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    keyboard: list[list[InlineKeyboardButton]] = []
+    for row in rows:
+        try:
+            pid = row["id"]
+        except Exception:
+            continue
+        keyboard.append([
+            InlineKeyboardButton(
+                text=_format_product_line(row),
+                callback_data=f"edit_product:{pid}",
+            )
+        ])
     if total_pages > 1:
         nav = []
         if page > 1:
-            nav.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"products_page:{page - 1}"))
+            nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"products_page:{page - 1}"))
         nav.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="products_page:noop"))
         if page < total_pages:
-            nav.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"products_page:{page + 1}"))
-        rows.append(nav)
-    rows.append([InlineKeyboardButton(text="🔍 Найти товар", callback_data="products_search")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+            nav.append(InlineKeyboardButton(text="➡️", callback_data=f"products_page:{page + 1}"))
+        keyboard.append(nav)
+    keyboard.append([InlineKeyboardButton(text="🔍 Найти товар", callback_data="products_search")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 async def _send_products_page(message: Message, page: int, edit: bool = False):
@@ -3297,14 +3313,11 @@ async def _send_products_page(message: Message, page: int, edit: bool = False):
     start = (page - 1) * PRODUCTS_PAGE_SIZE
     page_rows = rows[start:start + PRODUCTS_PAGE_SIZE]
 
-    lines = [f"📦 Список товаров (стр. {page}/{total_pages}, всего {total}):", ""]
-    for row in page_rows:
-        lines.append(_format_product_line(row))
-    text = "\n".join(lines)
-    if len(text) > 3900:
-        text = text[:3900] + "\n…"
-
-    kb = _products_page_kb(page, total_pages)
+    text = (
+        f"📦 Список товаров (стр. {page}/{total_pages}, всего {total})\n"
+        "🟢 В наличии  🔴 Нет в наличии  👁️ Скрыт"
+    )
+    kb = _products_page_kb(page_rows, page, total_pages)
     try:
         if edit:
             try:

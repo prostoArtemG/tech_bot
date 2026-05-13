@@ -365,7 +365,6 @@ class Database:
             FROM products
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
-              AND COALESCE(availability_status, 'in_stock') != 'hidden'
               AND NOT (
                 LOWER(COALESCE(NULLIF(TRIM(brand), ''), '-')) IN ('-', 'none')
                 AND LOWER(COALESCE(NULLIF(TRIM(model), ''), '-')) IN ('-', 'none')
