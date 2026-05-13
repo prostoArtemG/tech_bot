@@ -1169,26 +1169,52 @@ def inline_categories_kb():
     )
 
 
-def inline_brands_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Samsung", callback_data="add_brand:Samsung"), InlineKeyboardButton(text="LG", callback_data="add_brand:LG"),
-            ],
-            [
-                InlineKeyboardButton(text="Bosch", callback_data="add_brand:Bosch"), InlineKeyboardButton(text="Beko", callback_data="add_brand:Beko"),
-            ],
-            [
-                InlineKeyboardButton(text="Philips", callback_data="add_brand:Philips"), InlineKeyboardButton(text="Xiaomi", callback_data="add_brand:Xiaomi"),
-            ],
-            [
-                InlineKeyboardButton(text="🔍 Поиск бренда", callback_data="add_brand_search"), InlineKeyboardButton(text="Другое", callback_data="add_brand_manual"),
-            ],
-            [
-                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
-            ],
-        ]
-    )
+DEFAULT_SITE_BRANDS = ["Samsung", "LG", "Bosch", "Beko", "Philips", "Xiaomi"]
+
+
+async def _ensure_default_brands():
+    """Сидим дефолтные бренды, если справочник пуст."""
+    try:
+        rows = await db.list_site_brands()
+        if rows:
+            return
+        for idx, name in enumerate(DEFAULT_SITE_BRANDS):
+            try:
+                await db.add_site_brand(name, sort_order=(idx + 1) * 10)
+            except Exception as e:
+                print(f"[brands] seed {name} failed: {e}")
+    except Exception as e:
+        print(f"[brands] ensure defaults failed: {e}")
+
+
+async def inline_brands_kb():
+    """Список активных брендов сайта + кнопки управления."""
+    try:
+        await _ensure_default_brands()
+        rows = await db.list_active_site_brands()
+    except Exception as e:
+        print(f"[brands] load failed: {e}")
+        rows = []
+
+    keyboard: list[list[InlineKeyboardButton]] = []
+    pair: list[InlineKeyboardButton] = []
+    for row in rows:
+        name = (row["name"] or "").strip()
+        if not name:
+            continue
+        pair.append(InlineKeyboardButton(text=name, callback_data=f"add_brand:{name}"))
+        if len(pair) == 2:
+            keyboard.append(pair)
+            pair = []
+    if pair:
+        keyboard.append(pair)
+
+    keyboard.append([
+        InlineKeyboardButton(text="➕ Добавить бренд", callback_data="add_brand_new"),
+        InlineKeyboardButton(text="🔍 Поиск бренда", callback_data="add_brand_search"),
+    ])
+    keyboard.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 TEXTS = {
     "ru": {
         "menu": "Главное меню:",
@@ -1373,6 +1399,60 @@ async def reset_handler(message: Message, state: FSMContext):
         "✅ Состояние сброшено. Главное меню:",
         reply_markup=menu,
     )
+
+
+async def _send_brands_admin(message: Message, edit: bool = False):
+    try:
+        await _ensure_default_brands()
+        rows = await db.list_site_brands()
+    except Exception as e:
+        print(f"[brands] admin load failed: {e}")
+        rows = []
+
+    if not rows:
+        await message.answer("Бренды пока не созданы. Используйте «➕ Добавить бренд» при добавлении товара.")
+        return
+
+    keyboard: list[list[InlineKeyboardButton]] = []
+    for r in rows:
+        emoji = "🟢" if r["is_active"] else "👁️"
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"{emoji} {r['name']}",
+                callback_data=f"brand_toggle:{r['id']}",
+            )
+        ])
+    text = "🏷 Бренды сайта (нажмите, чтобы скрыть/показать):"
+    try:
+        if edit:
+            try:
+                await message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+                return
+            except Exception:
+                pass
+        await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    except Exception as e:
+        print(f"[brands] admin send failed: {e}")
+
+
+@router.message(Command("brands"))
+async def brands_admin_handler(message: Message):
+    if not await require_admin(message):
+        return
+    await _send_brands_admin(message, edit=False)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("brand_toggle:"))
+async def brand_toggle_callback(callback: CallbackQuery):
+    try:
+        brand_id = int(callback.data.split(":", 1)[1])
+        await db.toggle_site_brand(brand_id)
+    except Exception as e:
+        print(f"[brands] toggle failed: {e}")
+        await callback.answer("Ошибка", show_alert=False)
+        return
+    await _send_brands_admin(callback.message, edit=True)
+    await callback.answer("Готово")
 
 
 @router.errors()
@@ -2938,7 +3018,7 @@ async def add_product_category_handler(message: Message, state: FSMContext):
 
     await message.answer(
         "Выберите бренд:",
-        reply_markup=brands_kb
+        reply_markup=await inline_brands_kb()
     )
 
 
@@ -2951,7 +3031,7 @@ async def add_category_callback(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.answer(
         f"Категория: {category}\n\nВыберите бренд:",
-        reply_markup=inline_brands_kb()
+        reply_markup=await inline_brands_kb()
     )
     await callback.answer()
 
@@ -2980,6 +3060,15 @@ async def add_brand_callback(callback: CallbackQuery, state: FSMContext):
 async def add_brand_manual_callback(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddProductState.waiting_for_brand_manual)
     await callback.message.answer("Введите бренд вручную:")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "add_brand_new")
+async def add_brand_new_callback(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AddProductState.waiting_for_brand_manual)
+    await callback.message.answer(
+        "Введите название нового бренда — он сразу появится в справочнике:"
+    )
     await callback.answer()
 
 
@@ -3049,21 +3138,36 @@ async def add_product_brand_manual_handler(message: Message, state: FSMContext):
         await message.answer("Бренд не может быть пустым. Введите ещё раз:")
         return
 
+    # Сохраняем в справочник (без дублей, case-insensitive)
+    existing = None
+    try:
+        existing = await db.get_site_brand_by_name(brand)
+        saved = await db.add_site_brand(brand)
+        if saved and saved.get("name"):
+            brand = saved["name"]
+    except Exception as e:
+        print(f"[brands] save '{brand}' failed: {e}")
+
     await state.update_data(brand=brand)
     await state.set_state(AddProductState.waiting_for_model)
 
-    await message.answer("Введите модель:")
+    note = (
+        f"✅ Бренд «{brand}» уже был в справочнике.\n\n"
+        if existing else f"➕ Бренд «{brand}» добавлен.\n\n"
+    )
+    await message.answer(note + "Введите модель:")
 
 
 @router.message(AddProductState.searching_brand)
 async def search_brand_handler(message: Message, state: FSMContext):
     query = (message.text or "").strip().lower()
 
-    brands = [
-        "Samsung", "LG", "Bosch", "Beko", "Gorenje",
-        "Electrolux", "Philips", "Tefal", "Xiaomi",
-        "Dyson", "Braun", "Rowenta", "Zelmer"
-    ]
+    try:
+        all_brands = await db.list_active_site_brands()
+        brands = [(r["name"] or "").strip() for r in all_brands if (r["name"] or "").strip()]
+    except Exception as e:
+        print(f"[brands] search failed: {e}")
+        brands = []
 
     found = [b for b in brands if query in b.lower()]
 

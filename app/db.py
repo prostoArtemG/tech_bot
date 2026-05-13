@@ -304,6 +304,20 @@ class Database:
         """)
 
         await self.execute("""
+        CREATE TABLE IF NOT EXISTS site_brands (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 100,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+        await self.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS site_brands_name_lower_uq
+        ON site_brands (LOWER(TRIM(name)));
+        """)
+
+        await self.execute("""
         CREATE TABLE IF NOT EXISTS product_images (
             id SERIAL PRIMARY KEY,
             product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
@@ -1395,6 +1409,71 @@ class Database:
             WHERE id = $1
             """,
             category_id
+        )
+
+
+    # ——— site brands ———
+    async def list_site_brands(self):
+        return await self.fetch(
+            """
+            SELECT id, name, sort_order, is_active
+            FROM site_brands
+            ORDER BY sort_order ASC, LOWER(name) ASC, id ASC
+            """
+        )
+
+    async def list_active_site_brands(self):
+        return await self.fetch(
+            """
+            SELECT id, name, sort_order
+            FROM site_brands
+            WHERE is_active = TRUE
+            ORDER BY sort_order ASC, LOWER(name) ASC, id ASC
+            """
+        )
+
+    async def get_site_brand_by_name(self, name: str):
+        return await self.fetchrow(
+            """
+            SELECT id, name, is_active
+            FROM site_brands
+            WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+            """,
+            name
+        )
+
+    async def add_site_brand(self, name: str, sort_order: int = 100) -> dict | None:
+        """Создаёт бренд или возвращает существующий (case-insensitive)."""
+        name = (name or "").strip()
+        if not name:
+            return None
+        existing = await self.get_site_brand_by_name(name)
+        if existing:
+            # Активируем, если был скрыт — пользователь явно "добавляет"
+            if not existing["is_active"]:
+                await self.execute(
+                    "UPDATE site_brands SET is_active = TRUE WHERE id = $1",
+                    existing["id"],
+                )
+            return await self.get_site_brand_by_name(name)
+        await self.execute(
+            """
+            INSERT INTO site_brands (name, sort_order, is_active)
+            VALUES ($1, $2, TRUE)
+            ON CONFLICT DO NOTHING
+            """,
+            name, sort_order
+        )
+        return await self.get_site_brand_by_name(name)
+
+    async def toggle_site_brand(self, brand_id: int):
+        await self.execute(
+            """
+            UPDATE site_brands
+            SET is_active = NOT is_active
+            WHERE id = $1
+            """,
+            brand_id
         )
 
 
