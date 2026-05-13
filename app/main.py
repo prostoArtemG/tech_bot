@@ -3216,28 +3216,61 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "📋 Список товаров")
 async def list_products_handler(message: Message):
-    rows = await db.list_products()
-
-    if not rows:
-        await message.answer("Список товаров пока пуст.")
+    try:
+        rows = await db.list_products()
+    except Exception as e:
+        print(f"[list_products] db failed: {e}")
+        await message.answer("⚠️ Не удалось загрузить список товаров.")
         return
 
-    lines = ["📦 Список товаров:\n"]
+    if not rows:
+        await message.answer("Товары не найдены")
+        return
+
+    warranty_label = await t(message, "warranty")
+
+    def _row_text(row) -> str:
+        try:
+            category = (row["category"] or "").strip() or "-"
+            brand = (row["brand"] or "").strip() or "-"
+            model = (row["model"] or "").strip() or "-"
+            try:
+                price = float(row["price"] or 0)
+            except (TypeError, ValueError):
+                price = 0.0
+            sku = (row["sku"] or "").strip() or "-"
+            warranty_months = row["warranty_months"] or 0
+            return (
+                f"ID: {row['id']} | {brand} {model} | {category} | {price:.2f} грн\n"
+                f"Артикул: {sku}\n"
+                f"{warranty_label}: {warranty_months} мес\n"
+            )
+        except Exception as e:
+            print(f"[list_products] row failed: {e}")
+            try:
+                return f"ID: {row['id']} | (битые данные)\n"
+            except Exception:
+                return "(пропущено)\n"
+
+    header = "📦 Список товаров:\n"
+    MAX_LEN = 3800  # запас под лимит Telegram (4096)
+    buffer = header
     for row in rows:
-        category = (row["category"] or "").strip() or "-"
-        brand = (row["brand"] or "").strip() or "-"
-        model = (row["model"] or "").strip() or "-"
-        price = float(row["price"] or 0)
-        sku = (row["sku"] or "").strip() or "-"
-        warranty_months = row["warranty_months"] or 0
+        chunk = _row_text(row) + "\n"
+        if len(buffer) + len(chunk) > MAX_LEN:
+            try:
+                await message.answer(buffer)
+            except Exception as e:
+                print(f"[list_products] send failed: {e}")
+            buffer = chunk
+        else:
+            buffer += chunk
 
-        lines.append(
-            f"ID: {row['id']} | {brand} {model} | {category} | {price:.2f} грн\n"
-            f"Артикул: {sku}\n"
-            f"{await t(message, 'warranty')}: {warranty_months} мес\n"
-        )
-
-    await message.answer("\n".join(lines))
+    if buffer.strip():
+        try:
+            await message.answer(buffer)
+        except Exception as e:
+            print(f"[list_products] send failed: {e}")
 
 
 @router.message(lambda m: m.text == "🧹 Очистить битые товары")
