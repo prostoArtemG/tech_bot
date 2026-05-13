@@ -155,13 +155,13 @@
         {% set _b = (product.brand or '')|trim %}
         {% set _m = (product.model or '')|trim %}
         {% if (_b and _b not in ['-', 'None']) or (_m and _m not in ['-', 'None']) %}
-        <div class="card">
+        <div class="card" data-href="/product/{{ product.id }}" tabindex="0" role="link" aria-label="{{ product.brand }} {{ product.model }}">
             <div class="card-image-wrap">
                 {% if product.is_sale %}
                 <div class="card-sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></div>
                 {% endif %}
                 {% if product.photo_url %}
-                <img src="{{ product.photo_url }}" class="product-img">
+                <img src="{{ product.photo_url }}" class="product-img card-img-zoom" data-zoom-src="{{ product.photo_url }}" alt="{{ product.brand }} {{ product.model }}">
                 {% else %}
                 <div class="no-photo">Нет фото</div>
                 {% endif %}
@@ -221,6 +221,79 @@
 </body>
 <script src="/static/cart.js"></script>
 <script src="/static/lang.js"></script>
+
+<!-- Image lightbox -->
+<div id="imgLightbox" class="img-lightbox" aria-hidden="true" role="dialog">
+    <button type="button" class="img-lightbox-close" aria-label="Закрыть">×</button>
+    <img class="img-lightbox-img" alt="">
+</div>
+
+<script>
+(function() {
+    // ——— Clickable cards ———
+    document.addEventListener('click', function(e) {
+        var card = e.target.closest('.card[data-href]');
+        if (!card) return;
+        // Игнорируем клики по кнопкам, ссылкам и фото (у них своя логика)
+        if (e.target.closest('.details-btn, .cart-btn, .card-img-zoom, a, button')) {
+            return;
+        }
+        window.location.href = card.getAttribute('data-href');
+    });
+    // Keyboard accessibility for cards
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        var card = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('card')
+            ? document.activeElement : null;
+        if (card && card.getAttribute('data-href')) {
+            window.location.href = card.getAttribute('data-href');
+        }
+    });
+
+    // ——— Image lightbox ———
+    var lb = document.getElementById('imgLightbox');
+    var lbImg = lb ? lb.querySelector('.img-lightbox-img') : null;
+    var lbClose = lb ? lb.querySelector('.img-lightbox-close') : null;
+
+    function openLightbox(src, alt) {
+        if (!lb || !lbImg) return;
+        lbImg.src = src;
+        lbImg.alt = alt || '';
+        lb.classList.add('open');
+        lb.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+        if (!lb || !lbImg) return;
+        lb.classList.remove('open');
+        lb.setAttribute('aria-hidden', 'true');
+        lbImg.src = '';
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('click', function(e) {
+        var img = e.target.closest('.card-img-zoom');
+        if (img) {
+            e.preventDefault();
+            e.stopPropagation();
+            var src = img.getAttribute('data-zoom-src') || img.src;
+            openLightbox(src, img.alt);
+        }
+    });
+    if (lb) {
+        lb.addEventListener('click', function(e) {
+            if (e.target === lb || e.target === lbClose) {
+                closeLightbox();
+            }
+        });
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lb && lb.classList.contains('open')) {
+            closeLightbox();
+        }
+    });
+})();
+</script>
 
 <footer class="site-footer" aria-label="Подвал сайта">
   <div class="footer-top">
