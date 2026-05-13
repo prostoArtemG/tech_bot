@@ -3062,6 +3062,14 @@ async def add_product_price_handler(message: Message, state: FSMContext):
         return
 
     data = await state.get_data()
+    if not data.get("category") or not data.get("brand") or not data.get("model"):
+        await state.clear()
+        menu = await get_main_menu_for_user(message)
+        await message.answer(
+            "❌ Категория не выбрана. Повторите добавление товара.",
+            reply_markup=menu,
+        )
+        return
     category = data["category"]
     brand = data["brand"]
     model = data["model"]
@@ -3125,6 +3133,15 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
     warranty = int(raw)
 
     data = await state.get_data()
+
+    if not data.get("category") or not data.get("brand") or not data.get("model") or data.get("price") is None:
+        await state.clear()
+        menu = await get_main_menu_for_user(message)
+        await message.answer(
+            "❌ Категория не выбрана. Повторите добавление товара.",
+            reply_markup=menu,
+        )
+        return
 
     await db.add_product(
         category=data["category"],
