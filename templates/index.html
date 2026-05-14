@@ -88,9 +88,14 @@
                     data-placeholder-uk="Пошук: Samsung, холодильник..."
                     placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
                 <button type="submit" data-ru="Найти" data-uk="Знайти">Найти</button>
+            </div>
+            <div class="filters-toggle-row">
                 <button type="button" id="filtersToggleBtn" class="filters-toggle-btn"
-                        aria-expanded="false" aria-controls="filtersPanel"
-                        data-ru="⚙️ Фільтри" data-uk="⚙️ Фільтри">⚙️ Фільтри</button>
+                        aria-expanded="false" aria-controls="filtersPanel">
+                    <svg class="filters-btn-icon" width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 5a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zm3 5a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm3 5a1 1 0 011-1h2a1 1 0 110 2h-2a1 1 0 01-1-1z"/></svg>
+                    <span data-ru="Фільтри" data-uk="Фільтри">Фільтри</span>
+                    <svg class="filters-btn-chevron" width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                </button>
             </div>
             <div id="filtersPanel" class="filters-panel" data-open="false" aria-hidden="true">
             <div class="filters-panel-header">
