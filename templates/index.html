@@ -67,42 +67,14 @@
             <div class="site-category-emoji">📦</div>
             <div class="site-category-title" data-ru="Все товары" data-uk="Всі товари">Все товары</div>
         </a>
-        {% set emoji_override = {'Нагреватели': '♨️', 'Вытяжки': '🌬️'} %}
-        {% set uk_names = {
-            'Холодильники': 'Холодильники',
-            'Стиральные машины': 'Пральні машини',
-            'Кондиционеры': 'Кондиціонери',
-            'Нагреватели': 'Нагрівачі',
-            'Вытяжки': 'Витяжки',
-            'Бойлеры': 'Бойлери',
-            'Посудомоечные машины': 'Посудомийні машини',
-            'Морозильники': 'Морозильники'
-        } %}
-        {% for cat in site_categories %}
-        {# map plural category names to the product.category values used for filtering #}
-        {% if cat.name_ru == 'Холодильники' %}
-            {% set filter_name = 'Холодильник' %}
-        {% elif cat.name_ru == 'Стиральные машины' %}
-            {% set filter_name = 'Стиральная машина' %}
-        {% elif cat.name_ru == 'Кондиционеры' %}
-            {% set filter_name = 'Кондиционер' %}
-        {% elif cat.name_ru == 'Нагреватели' %}
-            {% set filter_name = 'Нагреватель' %}
-        {% else %}
-            {% if cat.name_ru.endswith('и') %}
-                {% set filter_name = cat.name_ru[:-1] %}
+        {% for cat in category_cards %}
+        <a href="/?category={{ cat.filter_value }}" class="site-category-card {% if (current_category_key and current_category_key == cat.key) or (not current_category_key and current_category == cat.filter_value) %}active{% endif %}">
+            {% if cat.key == 'hoods' %}
+            <div class="site-category-emoji"><img src="/static/icons/hood.png" class="site-category-img" alt="{{ cat.name_ru }}"></div>
             {% else %}
-                {% set filter_name = cat.name_ru %}
+            <div class="site-category-emoji">{{ cat.emoji }}</div>
             {% endif %}
-        {% endif %}
-
-        <a href="/?category={{ filter_name }}" class="site-category-card {% if current_category == filter_name %}active{% endif %}">
-            {% if cat.name_ru == 'Вытяжки' %}
-            <div class="site-category-emoji"><img src="/static/icons/hood.png" class="site-category-img" alt="Вытяжки"></div>
-            {% else %}
-            <div class="site-category-emoji">{{ emoji_override[cat.name_ru] if cat.name_ru in emoji_override else cat.emoji }}</div>
-            {% endif %}
-            <div class="site-category-title" data-ru="{{ cat.name_ru }}" data-uk="{{ uk_names[cat.name_ru] if cat.name_ru in uk_names else cat.name_ru }}">{{ cat.name_ru }}</div>
+            <div class="site-category-title" data-ru="{{ cat.name_ru }}" data-uk="{{ cat.name_uk }}">{{ cat.name_ru }}</div>
         </a>
         {% endfor %}
     </section>

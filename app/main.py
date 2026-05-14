@@ -36,6 +36,16 @@ import uvicorn
 
 from app.db import db
 from app.i18n import TRANSLATIONS
+from app.categories import (
+    CATEGORY_KEYS,
+    CATEGORY_LABELS,
+    category_key,
+    category_label,
+    canonical_ru as category_canonical_ru,
+    category_emoji,
+    categories_for_lang,
+    same_category as same_category_key,
+)
 
 load_dotenv()
 
@@ -493,6 +503,11 @@ class SiteEventRequest(BaseModel):
     product_id: int | None = None
 
 templates = Jinja2Templates(directory="templates")
+# Jinja-фильтры локализации категорий.
+templates.env.filters["cat_ru"] = lambda v: category_label(v, "ru")
+templates.env.filters["cat_uk"] = lambda v: category_label(v, "uk")
+templates.env.filters["cat_key"] = lambda v: category_key(v) or ""
+templates.env.globals["category_canonical_ru"] = category_canonical_ru
 web_app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -1084,7 +1099,7 @@ def inline_edit_fields_kb(product=None):
     ]
 
     category = (product or {}).get("category") if product else None
-    if category and "Бойлер" in str(category):
+    if category and category_key(category) == "boilers":
         rows.append([
             InlineKeyboardButton(text="🚿 Объем бойлера", callback_data="edit_field:boiler_volume_liters"),
             InlineKeyboardButton(text="🔥 Тип тена", callback_data="edit_action:set_ten_type"),
@@ -1144,29 +1159,44 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(f"Введите новое значение для поля: {field_titles[field]}")
 
     await callback.answer()
-def inline_categories_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Стиральная машина", callback_data="add_category:Стиральная машина"),
-                InlineKeyboardButton(text="Холодильник", callback_data="add_category:Холодильник"),
-            ],
-            [
-                InlineKeyboardButton(text="Пылесос", callback_data="add_category:Пылесос"),
-                InlineKeyboardButton(text="Микроволновка", callback_data="add_category:Микроволновка"),
-            ],
-            [
-                InlineKeyboardButton(text="Телевизор", callback_data="add_category:Телевизор"),
-                InlineKeyboardButton(text="Бойлер", callback_data="add_category:Бойлер"),
-            ],
-            [
-                InlineKeyboardButton(text="🔍 Поиск категории", callback_data="add_category_search"), InlineKeyboardButton(text="Другая техника", callback_data="add_category:Другая техника"),
-            ],
-            [
-                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
-            ],
-        ]
-    )
+def inline_categories_kb(lang: str = "ru"):
+    """Клавиатура категорий, локализованная по языку пользователя.
+
+    Callback: add_category:<key> (стабильный ключ из app.categories).
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+    items = categories_for_lang(lang)
+    # Парами в ряд для компактности.
+    for i in range(0, len(items), 2):
+        pair = items[i:i + 2]
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{c['emoji']} {c['name']}",
+                callback_data=f"add_category:{c['key']}",
+            )
+            for c in pair
+        ])
+    rows.append([
+        InlineKeyboardButton(
+            text="🔍 Поиск категории" if lang == "ru" else "🔍 Пошук категорії",
+            callback_data="add_category_search",
+        ),
+    ])
+    rows.append([
+        InlineKeyboardButton(
+            text="❌ Отмена" if lang == "ru" else "❌ Скасувати",
+            callback_data="cancel_flow",
+        ),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _user_lang(telegram_id: int) -> str:
+    try:
+        u = await db.get_user_by_telegram_id(telegram_id)
+        return (u or {}).get("language") or "ru"
+    except Exception:
+        return "ru"
 
 
 async def inline_brands_kb():
@@ -2439,7 +2469,8 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
             return
         await state.clear()
         await state.set_state(AddProductState.waiting_for_category)
-        await message.answer(await t(message, "enter_search"), reply_markup=inline_categories_kb())
+        _lang = await _user_lang(message.from_user.id)
+        await message.answer(await t(message, "enter_search"), reply_markup=inline_categories_kb(_lang))
         return
 
     if text == "🌐 Сайт":
@@ -3138,9 +3169,10 @@ async def add_product_start_handler(message: Message, state: FSMContext):
         return
 
     await state.set_state(AddProductState.waiting_for_category)
+    _lang = await _user_lang(message.from_user.id)
     await message.answer(
-        "Выберите категорию:",
-        reply_markup=inline_categories_kb()
+        "Выберите категорию:" if _lang == "ru" else "Оберіть категорію:",
+        reply_markup=inline_categories_kb(_lang)
     )
 
 
@@ -3159,7 +3191,7 @@ async def add_product_category_handler(message: Message, state: FSMContext):
         await message.answer(await t(message, "main_menu"), reply_markup=menu)
         return
 
-    await state.update_data(category=category)
+    await state.update_data(category=category_canonical_ru(category) or category)
     await state.set_state(AddProductState.waiting_for_brand)
 
     await message.answer(
@@ -3170,13 +3202,18 @@ async def add_product_category_handler(message: Message, state: FSMContext):
 
 @router.callback_query(lambda c: c.data and c.data.startswith("add_category:"))
 async def add_category_callback(callback: CallbackQuery, state: FSMContext):
-    category = callback.data.split(":", 1)[1]
+    raw = callback.data.split(":", 1)[1]
+    # raw может быть и ключом (boilers), и легаси-текстом (Бойлер). Храним канон.
+    category = category_canonical_ru(raw) or raw
+    lang = await _user_lang(callback.from_user.id)
+    display = category_label(category, lang) or category
 
     await state.update_data(category=category)
     await state.set_state(AddProductState.waiting_for_brand)
 
     await callback.message.answer(
-        f"Категория: {category}\n\nВыберите бренд:",
+        (f"Категория: {display}\n\nВыберите бренд:" if lang == "ru"
+         else f"Категорія: {display}\n\nОберіть бренд:"),
         reply_markup=await inline_brands_kb()
     )
     await callback.answer()
@@ -3418,7 +3455,11 @@ async def add_product_brand_handler(message: Message, state: FSMContext):
 
     if brand == "⬅️ Назад":
         await state.set_state(AddProductState.waiting_for_category)
-        await message.answer("Выберите категорию:", reply_markup=inline_categories_kb())
+        _lang = await _user_lang(message.from_user.id)
+        await message.answer(
+            "Выберите категорию:" if _lang == "ru" else "Оберіть категорію:",
+            reply_markup=inline_categories_kb(_lang),
+        )
         return
 
     if brand == "Другое":
@@ -4818,18 +4859,19 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
         return
 
     if action == "change_category":
-        categories = await db.get_categories()
-        if not categories:
-            await callback.answer("Категории не найдены.")
-            return
+        lang = await _user_lang(callback.from_user.id)
+        items = categories_for_lang(lang)
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=cat, callback_data=f"set_category:{cat}")]
-                for cat in categories
+                [InlineKeyboardButton(
+                    text=f"{c['emoji']} {c['name']}",
+                    callback_data=f"set_category:{c['key']}",
+                )]
+                for c in items
             ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
         )
         await state.set_state(EditProductState.waiting_for_category)
-        await callback.message.answer("Выберите новую категорию:", reply_markup=keyboard)
+        await callback.message.answer("Выберите новую категорию:" if lang == "ru" else "Оберіть нову категорію:", reply_markup=keyboard)
         await callback.answer()
         return
 
@@ -5307,7 +5349,8 @@ async def set_ten_callback(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data and c.data.startswith("set_category:"))
 async def set_category_callback(callback: CallbackQuery, state: FSMContext):
-    category = callback.data.split(":", 1)[1]
+    raw = callback.data.split(":", 1)[1]
+    category = category_canonical_ru(raw) or raw
     data = await state.get_data()
     product_id = data.get("product_id")
 
@@ -5316,9 +5359,12 @@ async def set_category_callback(callback: CallbackQuery, state: FSMContext):
         return
 
     await db.update_product_category(product_id, category)
+    lang = await _user_lang(callback.from_user.id)
+    display = category_label(category, lang) or category
     await state.clear()
     await callback.message.answer(
-        f"✅ Категория обновлена: {category}",
+        (f"✅ Категория обновлена: {display}" if lang == "ru"
+         else f"✅ Категорію оновлено: {display}"),
         reply_markup=products_kb
     )
     await callback.answer()
@@ -5873,13 +5919,13 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
         brands = sorted({(p["brand"] or "").strip() for p in products if p["brand"]})
 
     if category:
-        # category aliases — let "Нагреватели" / "Нагрівачі" cover boiler-like
-        heater_aliases = {"Нагреватели", "Нагрівачі", "Нагреватель", "Бойлер", "Бойлеры", "Бойлери", "Водонагреватель", "Водонагрівач"}
-        if category in heater_aliases:
-            allowed = heater_aliases
-            products = [p for p in products if (p["category"] or "") in allowed]
+        # Сравниваем по стабильному ключу — покрывает все алиасы (RU/UA/legacy).
+        target_key = category_key(category)
+        if target_key:
+            products = [p for p in products if category_key(p.get("category")) == target_key]
         else:
-            products = [p for p in products if (p["category"] or "") == category]
+            # Неизвестная категория — fallback на текстовое сравнение.
+            products = [p for p in products if (p["category"] or "").strip().lower() == category.strip().lower()]
 
     if brand:
         products = [p for p in products if (p["brand"] or "") == brand]
@@ -5901,7 +5947,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
 
     # ── Boiler volume filter (only relevant when boiler/heater category is active) ──
     heater_aliases_set = {"Нагреватели", "Нагрівачі", "Нагреватель", "Бойлер", "Бойлеры", "Бойлери", "Водонагреватель", "Водонагрівач"}
-    show_volume_filter = (category in heater_aliases_set) if category else False
+    show_volume_filter = (category_key(category) == "boilers") if category else False
 
     def _product_volume(p):
         v = p.get("boiler_volume_liters") if isinstance(p, dict) else p["boiler_volume_liters"]
@@ -5951,6 +5997,34 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     categories = await db.get_categories()
     site_categories = await db.list_active_site_categories()
 
+    # Локализованные карточки категорий: сначала стабильный набор,
+    # дальше — кастомные категории сайта, которых нет в нашем словаре.
+    seen_keys = set()
+    category_cards = []
+    for c in categories_for_lang("ru"):
+        category_cards.append({
+            "key": c["key"],
+            "name_ru": c["name_ru"],
+            "name_uk": c["name_uk"],
+            "emoji": c["emoji"],
+            "filter_value": c["name_ru"],  # canonical RU → совпадёт по ключу
+        })
+        seen_keys.add(c["key"])
+    for sc in site_categories or []:
+        nm_ru = (sc.get("name_ru") or "").strip()
+        if not nm_ru:
+            continue
+        k = category_key(nm_ru)
+        if k and k in seen_keys:
+            continue
+        category_cards.append({
+            "key": k or nm_ru.lower(),
+            "name_ru": nm_ru,
+            "name_uk": (sc.get("name_uk") or nm_ru),
+            "emoji": sc.get("emoji") or "📦",
+            "filter_value": nm_ru,
+        })
+
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
         "phones": await get_phones_list(),
@@ -5974,8 +6048,10 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "products": products_page,
             "categories": categories,
             "site_categories": site_categories,
+            "category_cards": category_cards,
             "q": q,
             "current_category": category,
+            "current_category_key": category_key(category) or "",
             "page": page,
             "pages": pages,
             "brands": brands,

@@ -79,7 +79,7 @@
         <div class="product-info">
             <div class="product-card">
                 <div class="product-meta">
-                    <div class="category">{{ product.category }}</div>
+                    <div class="category" data-ru="{{ product.category | cat_ru }}" data-uk="{{ product.category | cat_uk }}">{{ product.category | cat_ru }}</div>
                     <div class="status">
                         {% set ss = product.stock_status or 'in_stock' %}
                         {% if ss == 'out_of_stock' %}
@@ -109,7 +109,7 @@
                     <div class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</div>
                 </div>
 
-                {% if product.category and 'Бойлер' in product.category and (product.boiler_volume_liters or product.boiler_ten_type) %}
+                {% if (product.category | cat_key) == 'boilers' and (product.boiler_volume_liters or product.boiler_ten_type) %}
                 <div class="specs-box">
                     <h3 data-ru="Характеристики бойлера" data-uk="Характеристики бойлера">Характеристики бойлера</h3>
                     {% if product.boiler_volume_liters %}
@@ -360,9 +360,9 @@
     <div class="footer-col">
       <h4 data-ru="Каталог" data-uk="Каталог">Каталог</h4>
       <ul>
-        <li><a href="/?category=Бойлер" data-ru="Бойлеры" data-uk="Бойлери">Бойлеры</a></li>
-        <li><a href="/?category=Холодильник" data-ru="Холодильники" data-uk="Холодильники">Холодильники</a></li>
-        <li><a href="/?category=Стиральная машина" data-ru="Стиральные машины" data-uk="Пральні машини">Стиральные машины</a></li>
+        <li><a href="/?category=Бойлеры" data-ru="Бойлеры" data-uk="Бойлери">Бойлеры</a></li>
+        <li><a href="/?category=Холодильники" data-ru="Холодильники" data-uk="Холодильники">Холодильники</a></li>
+        <li><a href="/?category=Стиральные машины" data-ru="Стиральные машины" data-uk="Пральні машини">Стиральные машины</a></li>
         <li><a href="/" data-ru="Все товары" data-uk="Всі товари">Все товары</a></li>
       </ul>
     </div>
