@@ -106,7 +106,7 @@
                 </div>
 
                 <div class="product-info-meta">
-                    <div class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</div>
+                    <div class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} <span data-ru="мес" data-uk="міс">мес</span></div>
                 </div>
 
                 {% if (product.category | cat_key) == 'boilers' and (product.boiler_volume_liters or product.boiler_ten_type) %}

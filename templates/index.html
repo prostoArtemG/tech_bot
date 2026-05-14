@@ -252,7 +252,7 @@
                 {% endif %}
             </div>
 
-            <p class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} мес</p>
+            <p class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} <span data-ru="мес" data-uk="міс">мес</span></p>
 
             <div class="card-actions">
                 <a href="/product/{{ product.id }}" class="details-btn" data-ru="Подробнее" data-uk="Детальніше">Подробнее</a>
@@ -367,10 +367,22 @@
     var filtersToggle = document.getElementById('filtersToggleBtn');
     var filtersClose = document.getElementById('filtersCloseBtn');
     var filtersBackdrop = document.getElementById('filtersBackdrop');
+    var searchForm = document.querySelector('.search-form');
     var MOBILE_BREAKPOINT = 768;
 
     function isMobileView() {
         return window.matchMedia('(max-width: ' + MOBILE_BREAKPOINT + 'px)').matches;
+    }
+    // On mobile bottom-sheet we defer onchange="this.form.submit()" calls
+    // by temporarily replacing form.submit with a no-op.
+    // type="submit" button clicks bypass this and work normally.
+    function patchMobileSubmit() {
+        if (!searchForm) return;
+        searchForm.submit = function() { /* deferred: apply via Застосувати button */ };
+    }
+    function unpatchMobileSubmit() {
+        if (!searchForm) return;
+        searchForm.submit = HTMLFormElement.prototype.submit;
     }
     function setFiltersOpen(open) {
         if (!filtersPanel) return;
@@ -383,9 +395,12 @@
                 else filtersBackdrop.setAttribute('hidden', '');
             }
             document.body.style.overflow = open ? 'hidden' : '';
+            if (open) patchMobileSubmit();
+            else unpatchMobileSubmit();
         } else {
             if (filtersBackdrop) filtersBackdrop.setAttribute('hidden', '');
             document.body.style.overflow = '';
+            unpatchMobileSubmit();
         }
     }
     function syncDefaultState() {
