@@ -6188,7 +6188,18 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             pass
 
     if in_stock:
-        products = [p for p in products if (p["stock_qty"] or 0) > 0]
+        # На сайте не используем количественный остаток (stock_qty) — он не
+        # отражает реальную доступность. Опираемся на stock_status, который
+        # ведётся вручную в боте: in_stock / preorder / out_of_stock.
+        # Если у старого товара stock_status пустой — считаем как in_stock.
+        def _is_in_stock(p):
+            try:
+                status = p["stock_status"]
+            except (KeyError, TypeError):
+                status = None
+            status = (status or "").strip().lower()
+            return status in ("", "in_stock")
+        products = [p for p in products if _is_in_stock(p)]
 
     # ── Dynamic category filters (etap 6) ──
     # Атрибуты — из таблицы category_attributes (is_filter=TRUE).
