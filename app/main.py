@@ -6230,17 +6230,23 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     if in_stock:
         products = [p for p in products if (p["stock_qty"] or 0) > 0]
 
-    # ── Dynamic category filters (etap 5: полный переход на category_attributes) ──
+    # ── Dynamic category filters (etap 6) ──
     # Атрибуты — из таблицы category_attributes (is_filter=TRUE).
     # Значения — из products.specifications_json + legacy-колонок (через _product_attr_value).
-    # Query-params:
-    #   select  → ?<key>=<value> (multi-select)
-    #   number  → ?<key>_min=&<key>_max=  (+ backward-compat ?<key>=N → оба бoundary = N)
+    # Виды рендера:
+    #   render_kind = "checkbox" — select-атрибуты И «дискретные» number-атрибуты
+    #                              (см. DISCRETE_NUMBER_KEYS). Multi-select через
+    #                              ?<key>=<value>.
+    #   render_kind = "range"    — number-атрибуты с реальным диапазоном
+    #                              (?<key>_min=, ?<key>_max=).
+    #
+    # volume — всегда чекбоксы (см. ТЗ). Остальные number — пока range.
+    DISCRETE_NUMBER_KEYS = {"volume"}
     dyn_attrs = []
-    dyn_options = {}   # attr_key → list[{value, label_ru, label_uk}] (select)
-    dyn_selected = {}  # attr_key → list[str] (select)
-    dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (number)
-    dyn_query_extras = []  # пары (key, value) для прокидывания в пагинацию
+    dyn_options = {}   # attr_key → list[{value, label_ru, label_uk}] (checkbox-режим)
+    dyn_selected = {}  # attr_key → list[str] (checkbox-режим)
+    dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
+    dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
     if target_key_dyn == "boilers":
         try:
@@ -6249,9 +6255,6 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             print(f"[site] get_category_attributes failed: {e}")
             dyn_attrs = []
 
-    # Снимок продуктов ДО применения dyn-фильтров — для расчёта диапазонов и
-    # доступных значений. Так пользователь видит все возможные опции, а не
-    # только совпадающие с уже выбранными.
     products_for_options = list(products) if dyn_attrs else []
 
     if dyn_attrs:
@@ -6259,62 +6262,111 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
         for attr in dyn_attrs:
             key = attr["attribute_key"]
             atype = (attr.get("type") or "").lower()
+            unit = (attr.get("unit") or "").strip()
 
+            # Определяем тип рендера и проставляем в attr для шаблона.
             if atype == "select":
+                render_kind = "checkbox"
+            elif atype == "number" and key in DISCRETE_NUMBER_KEYS:
+                render_kind = "checkbox"
+            elif atype == "number":
+                render_kind = "range"
+            else:
+                # text / unknown — UI не рендерим.
+                attr["render_kind"] = "none"
+                continue
+            attr["render_kind"] = render_kind
+
+            if render_kind == "checkbox":
                 raw_values = qp.getlist(key) if hasattr(qp, "getlist") else []
                 selected = [v.strip() for v in raw_values if v and v.strip()]
-                if selected:
-                    dyn_selected[key] = selected
-                    wanted = {s.lower() for s in selected}
 
-                    def _match_select(p, k=key, w=wanted):
-                        val = _product_attr_value(p, k)
-                        return val is not None and val.lower() in w
-
-                    products = [p for p in products if _match_select(p)]
+                if atype == "number":
+                    # Сравнение по числовому значению (50 ≡ "50" ≡ "50 л").
+                    wanted_nums = set()
                     for s in selected:
-                        dyn_query_extras.append((key, s))
+                        n = _extract_number(s)
+                        if n is not None:
+                            wanted_nums.add(n)
+                    if wanted_nums:
+                        dyn_selected[key] = selected
 
-                # Доступные опции — пересечение seed-options и реально присутствующих.
-                opts_def = attr.get("options") or []
-                present = set()
-                for p in products_for_options:
-                    val = _product_attr_value(p, key)
-                    if val:
-                        present.add(val.lower())
-                opts_render = []
-                for opt in opts_def:
-                    v = str(opt.get("value", "")).strip().lower()
-                    if not v or v not in present:
-                        continue
-                    opts_render.append({
-                        "value": opt.get("value"),
-                        "label_ru": opt.get("ru") or opt.get("value"),
-                        "label_uk": opt.get("uk") or opt.get("ru") or opt.get("value"),
-                    })
-                dyn_options[key] = opts_render
+                        def _match_num_eq(p, k=key, nums=wanted_nums):
+                            val = _product_attr_value(p, k)
+                            n = _extract_number(val)
+                            return n is not None and n in nums
 
-            elif atype == "number":
-                # Считаем bounds по всем товарам категории.
+                        products = [p for p in products if _match_num_eq(p)]
+                        for s in selected:
+                            dyn_query_extras.append((key, s))
+
+                    # Опции — все реально встречающиеся числовые значения, отсортированные.
+                    seen = set()
+                    for p in products_for_options:
+                        val = _product_attr_value(p, key)
+                        n = _extract_number(val)
+                        if n is not None:
+                            seen.add(int(n) if float(n).is_integer() else n)
+                    opts_render = []
+                    for n in sorted(seen):
+                        sv = str(n)
+                        label = f"{n} {unit}".strip() if unit else sv
+                        opts_render.append({
+                            "value": sv,
+                            "label_ru": label,
+                            "label_uk": label,
+                        })
+                    dyn_options[key] = opts_render
+
+                else:
+                    # select: case-insensitive equality по seed-options.
+                    if selected:
+                        dyn_selected[key] = selected
+                        wanted = {s.lower() for s in selected}
+
+                        def _match_sel(p, k=key, w=wanted):
+                            val = _product_attr_value(p, k)
+                            return val is not None and val.lower() in w
+
+                        products = [p for p in products if _match_sel(p)]
+                        for s in selected:
+                            dyn_query_extras.append((key, s))
+
+                    opts_def = attr.get("options") or []
+                    present = set()
+                    for p in products_for_options:
+                        val = _product_attr_value(p, key)
+                        if val:
+                            present.add(val.lower())
+                    opts_render = []
+                    for opt in opts_def:
+                        v = str(opt.get("value", "")).strip().lower()
+                        if not v or v not in present:
+                            continue
+                        opts_render.append({
+                            "value": opt.get("value"),
+                            "label_ru": opt.get("ru") or opt.get("value"),
+                            "label_uk": opt.get("uk") or opt.get("ru") or opt.get("value"),
+                        })
+                    dyn_options[key] = opts_render
+
+            else:
+                # render_kind == "range" (number с непрерывным диапазоном).
                 seen_nums = []
                 for p in products_for_options:
                     val = _product_attr_value(p, key)
                     n = _extract_number(val)
                     if n is not None:
                         seen_nums.append(n)
-
                 if not seen_nums:
-                    # Нет данных — фильтр пустой, не показываем.
                     dyn_range[key] = None
                     continue
 
                 lo_avail = min(seen_nums)
                 hi_avail = max(seen_nums)
 
-                # Параметры из URL.
                 raw_min = (qp.get(f"{key}_min") or "").strip()
                 raw_max = (qp.get(f"{key}_max") or "").strip()
-                # Backward-compat: ?volume=80 → volume_min=80&volume_max=80.
                 legacy_vals = qp.getlist(key) if hasattr(qp, "getlist") else []
                 legacy_first = next((v for v in legacy_vals if v and v.strip()), "").strip()
                 if legacy_first and not raw_min and not raw_max:
@@ -6347,9 +6399,8 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
                     "max": _fmt(hi_avail),
                     "current_min": raw_min,
                     "current_max": raw_max,
-                    "unit": (attr.get("unit") or "").strip(),
+                    "unit": unit,
                 }
-            # text / прочие типы — UI не рендерим (можно расширить позже).
 
     per_page = 12
     total = len(products)

@@ -110,19 +110,19 @@
                 </label>
             </div>
 
-            {# ── Динамические фильтры по категории (etap 5: select + number range) ── #}
+            {# ── Динамические фильтры по категории (etap 6) ── #}
             {% if dyn_attrs %}
             <div class="dynamic-filters">
                 {% for attr in dyn_attrs %}
-                    {% set atype = attr.type %}
-                    {% if atype == 'select' %}
+                    {% set rk = attr.render_kind %}
+                    {% if rk == 'checkbox' %}
                         {% set opts = dyn_options.get(attr.attribute_key) or [] %}
                         {% if opts %}
                         {% set selected_vals = dyn_selected.get(attr.attribute_key) or [] %}
                         <fieldset class="dyn-filter dyn-filter-select" data-attr="{{ attr.attribute_key }}">
                             <legend>
                                 <span data-ru="{{ attr.name_ru }}" data-uk="{{ attr.name_ua }}">{{ attr.name_ru }}</span>
-                                {% if attr.unit %}<span class="dyn-unit">, {{ attr.unit }}</span>{% endif %}
+                                {% if attr.unit and attr.type != 'number' %}<span class="dyn-unit">, {{ attr.unit }}</span>{% endif %}
                             </legend>
                             <div class="dyn-options">
                                 {% for opt in opts %}
@@ -138,7 +138,7 @@
                             </div>
                         </fieldset>
                         {% endif %}
-                    {% elif atype == 'number' %}
+                    {% elif rk == 'range' %}
                         {% set rng = dyn_range.get(attr.attribute_key) %}
                         {% if rng %}
                         <fieldset class="dyn-filter dyn-filter-number" data-attr="{{ attr.attribute_key }}">
