@@ -96,14 +96,6 @@
                   <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
                   {% endfor %}
                 </select>
-                {% if show_volume_filter and available_volumes %}
-                <select name="volume" class="brand-select volume-select" onchange="this.form.submit()">
-                    <option value="" data-ru="Все объёмы" data-uk="Усі обʼєми">Все объёмы</option>
-                    {% for v in available_volumes %}
-                    <option value="{{ v }}" {% if current_volume == v|string %}selected{% endif %}>{{ v }} л</option>
-                    {% endfor %}
-                </select>
-                {% endif %}
                 <input type="number" name="price_min" class="price-input"
                     data-placeholder-ru="Цена от"
                     data-placeholder-uk="Ціна від"
@@ -118,31 +110,68 @@
                 </label>
             </div>
 
-            {# ── Динамические фильтры по категории (etap 3: только boilers) ── #}
+            {# ── Динамические фильтры по категории (etap 5: select + number range) ── #}
             {% if dyn_attrs %}
             <div class="dynamic-filters">
                 {% for attr in dyn_attrs %}
-                    {% set opts = dyn_options.get(attr.attribute_key) or [] %}
-                    {% if opts %}
-                    {% set selected_vals = dyn_selected.get(attr.attribute_key) or [] %}
-                    <fieldset class="dyn-filter dyn-filter-{{ attr.type }}" data-attr="{{ attr.attribute_key }}">
-                        <legend>
-                            <span data-ru="{{ attr.name_ru }}" data-uk="{{ attr.name_ua }}">{{ attr.name_ru }}</span>
-                            {% if attr.unit %}<span class="dyn-unit">, {{ attr.unit }}</span>{% endif %}
-                        </legend>
-                        <div class="dyn-options">
-                            {% for opt in opts %}
-                            <label class="dyn-option">
-                                <input type="checkbox"
-                                       name="{{ attr.attribute_key }}"
-                                       value="{{ opt.value }}"
-                                       {% if opt.value|string in selected_vals %}checked{% endif %}
-                                       onchange="this.form.submit()">
-                                <span data-ru="{{ opt.label_ru }}" data-uk="{{ opt.label_uk }}">{{ opt.label_ru }}</span>
-                            </label>
-                            {% endfor %}
-                        </div>
-                    </fieldset>
+                    {% set atype = attr.type %}
+                    {% if atype == 'select' %}
+                        {% set opts = dyn_options.get(attr.attribute_key) or [] %}
+                        {% if opts %}
+                        {% set selected_vals = dyn_selected.get(attr.attribute_key) or [] %}
+                        <fieldset class="dyn-filter dyn-filter-select" data-attr="{{ attr.attribute_key }}">
+                            <legend>
+                                <span data-ru="{{ attr.name_ru }}" data-uk="{{ attr.name_ua }}">{{ attr.name_ru }}</span>
+                                {% if attr.unit %}<span class="dyn-unit">, {{ attr.unit }}</span>{% endif %}
+                            </legend>
+                            <div class="dyn-options">
+                                {% for opt in opts %}
+                                <label class="dyn-option">
+                                    <input type="checkbox"
+                                           name="{{ attr.attribute_key }}"
+                                           value="{{ opt.value }}"
+                                           {% if opt.value|string in selected_vals %}checked{% endif %}
+                                           onchange="this.form.submit()">
+                                    <span data-ru="{{ opt.label_ru }}" data-uk="{{ opt.label_uk }}">{{ opt.label_ru }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </fieldset>
+                        {% endif %}
+                    {% elif atype == 'number' %}
+                        {% set rng = dyn_range.get(attr.attribute_key) %}
+                        {% if rng %}
+                        <fieldset class="dyn-filter dyn-filter-number" data-attr="{{ attr.attribute_key }}">
+                            <legend>
+                                <span data-ru="{{ attr.name_ru }}" data-uk="{{ attr.name_ua }}">{{ attr.name_ru }}</span>
+                                {% if attr.unit %}<span class="dyn-unit">, {{ attr.unit }}</span>{% endif %}
+                            </legend>
+                            <div class="dyn-range">
+                                <input type="number"
+                                       name="{{ attr.attribute_key }}_min"
+                                       class="dyn-range-input"
+                                       value="{{ rng.current_min }}"
+                                       placeholder="{{ rng.min }}"
+                                       min="{{ rng.min }}"
+                                       max="{{ rng.max }}"
+                                       step="any"
+                                       data-placeholder-ru="от {{ rng.min }}"
+                                       data-placeholder-uk="від {{ rng.min }}">
+                                <span class="dyn-range-sep">—</span>
+                                <input type="number"
+                                       name="{{ attr.attribute_key }}_max"
+                                       class="dyn-range-input"
+                                       value="{{ rng.current_max }}"
+                                       placeholder="{{ rng.max }}"
+                                       min="{{ rng.min }}"
+                                       max="{{ rng.max }}"
+                                       step="any"
+                                       data-placeholder-ru="до {{ rng.max }}"
+                                       data-placeholder-uk="до {{ rng.max }}">
+                                <button type="submit" class="dyn-range-apply" data-ru="OK" data-uk="OK">OK</button>
+                            </div>
+                        </fieldset>
+                        {% endif %}
                     {% endif %}
                 {% endfor %}
             </div>
@@ -204,13 +233,11 @@
     </main>
 
     {% if pages > 1 %}
-    {% set _qs_ns = namespace(s=(('&q=' ~ q) if q else '') ~ (('&category=' ~ current_category) if current_category else '') ~ (('&brand=' ~ current_brand) if current_brand else '') ~ (('&price_min=' ~ price_min) if price_min else '') ~ (('&price_max=' ~ price_max) if price_max else '') ~ ('&in_stock=1' if in_stock else '') ~ (('&volume=' ~ current_volume) if current_volume else '')) %}
-    {# Dynamic-filter params (multi-checkbox) добавляем в QS пагинации. #}
-    {% if dyn_selected %}
-        {% for _key, _vals in dyn_selected.items() %}
-            {% for _v in _vals %}
-                {% set _qs_ns.s = _qs_ns.s ~ '&' ~ _key ~ '=' ~ _v %}
-            {% endfor %}
+    {% set _qs_ns = namespace(s=(('&q=' ~ q) if q else '') ~ (('&category=' ~ current_category) if current_category else '') ~ (('&brand=' ~ current_brand) if current_brand else '') ~ (('&price_min=' ~ price_min) if price_min else '') ~ (('&price_max=' ~ price_max) if price_max else '') ~ ('&in_stock=1' if in_stock else '')) %}
+    {# Dynamic-filter params (multi-checkbox + number range). #}
+    {% if dyn_query_extras %}
+        {% for _pair in dyn_query_extras %}
+            {% set _qs_ns.s = _qs_ns.s ~ '&' ~ _pair[0] ~ '=' ~ _pair[1] %}
         {% endfor %}
     {% endif %}
     {% set _qs = _qs_ns.s %}

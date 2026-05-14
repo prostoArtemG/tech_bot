@@ -6230,55 +6230,17 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     if in_stock:
         products = [p for p in products if (p["stock_qty"] or 0) > 0]
 
-    # ── Boiler volume filter (only relevant when boiler/heater category is active) ──
-    heater_aliases_set = {"Нагреватели", "Нагрівачі", "Нагреватель", "Бойлер", "Бойлеры", "Бойлери", "Водонагреватель", "Водонагрівач"}
-    show_volume_filter = (category_key(category) == "boilers") if category else False
-
-    def _product_volume(p):
-        v = p.get("boiler_volume_liters") if isinstance(p, dict) else p["boiler_volume_liters"]
-        if v:
-            try:
-                return int(float(v))
-            except (TypeError, ValueError):
-                pass
-        # Fallback to specifications_json["volume"]
-        try:
-            spec_raw = p["specifications_json"]
-            if isinstance(spec_raw, str):
-                spec = json.loads(spec_raw)
-            else:
-                spec = spec_raw or {}
-            raw = (spec.get("volume") or "").strip() if isinstance(spec, dict) else ""
-            if raw:
-                # Extract digits
-                digits = "".join(ch for ch in raw if ch.isdigit())
-                if digits:
-                    return int(digits)
-        except (KeyError, ValueError, TypeError):
-            pass
-        return None
-
-    if show_volume_filter and volume:
-        try:
-            wanted = int(volume)
-            products = [p for p in products if _product_volume(p) == wanted]
-        except ValueError:
-            pass
-
-    available_volumes = []
-    if show_volume_filter:
-        vols = {v for v in (_product_volume(p) for p in products) if v}
-        # Standard ladder, only those actually present
-        standard = [5, 10, 15, 30, 50, 80, 100, 120, 150]
-        available_volumes = [v for v in standard if v in vols]
-
-    # ── Dynamic filters (etap 3, foundation: пока только boilers) ──
-    # Атрибуты берутся из таблицы category_attributes (is_filter=TRUE).
-    # Значения — из products.specifications_json + legacy-колонок.
-    # Query-params: ?<attr_key>=<value> (multi для checkbox-листов).
+    # ── Dynamic category filters (etap 5: полный переход на category_attributes) ──
+    # Атрибуты — из таблицы category_attributes (is_filter=TRUE).
+    # Значения — из products.specifications_json + legacy-колонок (через _product_attr_value).
+    # Query-params:
+    #   select  → ?<key>=<value> (multi-select)
+    #   number  → ?<key>_min=&<key>_max=  (+ backward-compat ?<key>=N → оба бoundary = N)
     dyn_attrs = []
-    dyn_options = {}   # attr_key → [{value, label_ru, label_uk}, ...]
-    dyn_selected = {}  # attr_key → list[str]
+    dyn_options = {}   # attr_key → list[{value, label_ru, label_uk}] (select)
+    dyn_selected = {}  # attr_key → list[str] (select)
+    dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (number)
+    dyn_query_extras = []  # пары (key, value) для прокидывания в пагинацию
     target_key_dyn = category_key(category) if category else ""
     if target_key_dyn == "boilers":
         try:
@@ -6287,9 +6249,9 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             print(f"[site] get_category_attributes failed: {e}")
             dyn_attrs = []
 
-    # Снимок продуктов ДО применения dyn-фильтров — для расчёта доступных
-    # значений. Так пользователь видит все возможные опции, а не только
-    # совпадающие с уже выбранными.
+    # Снимок продуктов ДО применения dyn-фильтров — для расчёта диапазонов и
+    # доступных значений. Так пользователь видит все возможные опции, а не
+    # только совпадающие с уже выбранными.
     products_for_options = list(products) if dyn_attrs else []
 
     if dyn_attrs:
@@ -6297,36 +6259,23 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
         for attr in dyn_attrs:
             key = attr["attribute_key"]
             atype = (attr.get("type") or "").lower()
-            # Собираем выбранные значения (multi-select из query).
-            raw_values = qp.getlist(key) if hasattr(qp, "getlist") else []
-            # Бэкап для одиночного volume=80 уже покрывается getlist.
-            selected = [v.strip() for v in raw_values if v and v.strip()]
-            if selected:
-                dyn_selected[key] = selected
-                wanted = {s.lower() for s in selected}
-                if atype == "number":
-                    # Сравниваем как числа (50 ≡ "50" ≡ "50 л").
-                    wanted_nums = set()
-                    for s in selected:
-                        n = _extract_number(s)
-                        if n is not None:
-                            wanted_nums.add(n)
 
-                    def _match_number(p, k=key, nums=wanted_nums):
-                        val = _product_attr_value(p, k)
-                        n = _extract_number(val)
-                        return n is not None and n in nums
+            if atype == "select":
+                raw_values = qp.getlist(key) if hasattr(qp, "getlist") else []
+                selected = [v.strip() for v in raw_values if v and v.strip()]
+                if selected:
+                    dyn_selected[key] = selected
+                    wanted = {s.lower() for s in selected}
 
-                    products = [p for p in products if _match_number(p)]
-                else:
                     def _match_select(p, k=key, w=wanted):
                         val = _product_attr_value(p, k)
                         return val is not None and val.lower() in w
 
                     products = [p for p in products if _match_select(p)]
+                    for s in selected:
+                        dyn_query_extras.append((key, s))
 
-            # Доступные значения для UI — из снимка products_for_options.
-            if atype == "select":
+                # Доступные опции — пересечение seed-options и реально присутствующих.
                 opts_def = attr.get("options") or []
                 present = set()
                 for p in products_for_options:
@@ -6344,29 +6293,63 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
                         "label_uk": opt.get("uk") or opt.get("ru") or opt.get("value"),
                     })
                 dyn_options[key] = opts_render
+
             elif atype == "number":
-                seen_nums = set()
+                # Считаем bounds по всем товарам категории.
+                seen_nums = []
                 for p in products_for_options:
                     val = _product_attr_value(p, key)
                     n = _extract_number(val)
                     if n is not None:
-                        # Целочисленные показываем как int.
-                        seen_nums.add(int(n) if n.is_integer() else n)
-                sorted_nums = sorted(seen_nums)
-                unit = (attr.get("unit") or "").strip()
-                dyn_options[key] = [{
-                    "value": str(n),
-                    "label_ru": (f"{n} {unit}" if unit else str(n)),
-                    "label_uk": (f"{n} {unit}" if unit else str(n)),
-                } for n in sorted_nums]
-            else:
-                # text / другие типы — пока без UI, query-фильтр уже применился выше.
-                dyn_options[key] = []
+                        seen_nums.append(n)
 
-        # Чтобы не дублировать UI: для boilers старый volume-селект скрываем,
-        # его роль выполняет dyn-фильтр (атрибут volume присутствует в seed).
-        if any(a["attribute_key"] == "volume" for a in dyn_attrs):
-            show_volume_filter = False
+                if not seen_nums:
+                    # Нет данных — фильтр пустой, не показываем.
+                    dyn_range[key] = None
+                    continue
+
+                lo_avail = min(seen_nums)
+                hi_avail = max(seen_nums)
+
+                # Параметры из URL.
+                raw_min = (qp.get(f"{key}_min") or "").strip()
+                raw_max = (qp.get(f"{key}_max") or "").strip()
+                # Backward-compat: ?volume=80 → volume_min=80&volume_max=80.
+                legacy_vals = qp.getlist(key) if hasattr(qp, "getlist") else []
+                legacy_first = next((v for v in legacy_vals if v and v.strip()), "").strip()
+                if legacy_first and not raw_min and not raw_max:
+                    raw_min = legacy_first
+                    raw_max = legacy_first
+
+                cur_min = _extract_number(raw_min)
+                cur_max = _extract_number(raw_max)
+
+                if cur_min is not None or cur_max is not None:
+                    lo = cur_min if cur_min is not None else lo_avail
+                    hi = cur_max if cur_max is not None else hi_avail
+
+                    def _match_range(p, k=key, a=lo, b=hi):
+                        val = _product_attr_value(p, k)
+                        n = _extract_number(val)
+                        return n is not None and a <= n <= b
+
+                    products = [p for p in products if _match_range(p)]
+                    if cur_min is not None:
+                        dyn_query_extras.append((f"{key}_min", raw_min))
+                    if cur_max is not None:
+                        dyn_query_extras.append((f"{key}_max", raw_max))
+
+                def _fmt(n):
+                    return str(int(n)) if float(n).is_integer() else str(n)
+
+                dyn_range[key] = {
+                    "min": _fmt(lo_avail),
+                    "max": _fmt(hi_avail),
+                    "current_min": raw_min,
+                    "current_max": raw_max,
+                    "unit": (attr.get("unit") or "").strip(),
+                }
+            # text / прочие типы — UI не рендерим (можно расширить позже).
 
     per_page = 12
     total = len(products)
@@ -6440,12 +6423,14 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "price_min": price_min,
             "price_max": price_max,
             "in_stock": in_stock,
-            "show_volume_filter": show_volume_filter,
-            "available_volumes": available_volumes,
-            "current_volume": volume,
+            "show_volume_filter": False,
+            "available_volumes": [],
+            "current_volume": "",
             "dyn_attrs": dyn_attrs,
             "dyn_options": dyn_options,
             "dyn_selected": dyn_selected,
+            "dyn_range": dyn_range,
+            "dyn_query_extras": dyn_query_extras,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,

@@ -1543,9 +1543,40 @@ button:hover {
   cursor: pointer;
   accent-color: #16a34a;
 }
+.dyn-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.dyn-range-input {
+  width: 90px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+}
+.dyn-range-sep {
+  color: #6b7280;
+  font-weight: 600;
+}
+.dyn-range-apply {
+  padding: 6px 10px;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dyn-range-apply:hover { background: #15803d; }
 @media (max-width: 768px) {
   .dynamic-filters { gap: 8px; }
   .dyn-filter { min-width: 100%; }
+  .dyn-range-input { flex: 1; min-width: 0; }
 }
 
 @media (max-width: 768px) {
