@@ -602,12 +602,104 @@ SPEC_OPTIONS = {
     "warranty_manufacturer": ["12 міс", "24 міс", "36 міс", "60 міс", "72 міс", "84 міс", "96 міс", "120 міс"],
 }
 
+# ── Canonical value mapping (mirrors db.DEFAULT_CATEGORY_ATTRIBUTES.options_json) ──
+# Любой ключ — приведённый к нижнему регистру (label UA/RU, или сам canonical) →
+# canonical key, который и кладём в products.specifications_json.
+SPEC_VALUE_MAP = {
+    "tank_shape": {
+        "циліндричний": "cylindrical",
+        "цилиндрический": "cylindrical",
+        "cylindrical": "cylindrical",
+        "плоский": "flat",
+        "flat": "flat",
+        "кубічний": "cubic",
+        "кубический": "cubic",
+        "cubic": "cubic",
+    },
+    "installation": {
+        "вертикальна": "vertical",
+        "вертикальная": "vertical",
+        "vertical": "vertical",
+        "горизонтальна": "horizontal",
+        "горизонтальная": "horizontal",
+        "horizontal": "horizontal",
+        "універсальна": "universal",
+        "универсальная": "universal",
+        "universal": "universal",
+    },
+    "ten_type": {
+        "сухий": "dry",
+        "сухой": "dry",
+        "dry": "dry",
+        "мокрий": "wet",
+        "мокрый": "wet",
+        "wet": "wet",
+    },
+}
+
+# canonical → UA label (для отображения в боте и на сайте).
+SPEC_CANON_LABEL_UK = {
+    "tank_shape":   {"cylindrical": "Циліндричний", "flat": "Плоский", "cubic": "Кубічний"},
+    "installation": {"vertical": "Вертикальна", "horizontal": "Горизонтальна", "universal": "Універсальна"},
+    "ten_type":     {"dry": "Сухий", "wet": "Мокрий"},
+}
+
+
+def _normalize_spec_value(key: str, value) -> str:
+    """Сохраняемое значение → canonical (где применимо).
+
+    - volume: возвращаем только число ('80' из '80 л').
+    - tank_shape/installation/ten_type: label → canonical key (через SPEC_VALUE_MAP).
+    - остальное: возвращаем .strip() без изменений.
+    """
+    if value is None:
+        return value
+    v = str(value).strip()
+    if not v:
+        return v
+    if key == "volume":
+        n = _extract_number(v)
+        if n is not None:
+            return str(int(n) if float(n).is_integer() else n)
+        return v
+    mp = SPEC_VALUE_MAP.get(key)
+    if mp:
+        canon = mp.get(v.lower())
+        if canon:
+            return canon
+    return v
+
+
+def _label_for_spec_value(key: str, value) -> str:
+    """canonical (или legacy label) → UA label для отображения.
+
+    - volume: '80' → '80 л'.
+    - tank_shape/installation/ten_type: canonical → UA label.
+    - legacy labels возвращаем как есть.
+    """
+    if value is None or value == "":
+        return value
+    v = str(value).strip()
+    if not v:
+        return v
+    if key == "volume":
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return f"{num} л"
+        return v
+    canon_map = SPEC_CANON_LABEL_UK.get(key)
+    if canon_map and v in canon_map:
+        return canon_map[v]
+    return v
+
 
 def inline_specs_kb(product_id: int, current: dict, mode: str = "edit") -> InlineKeyboardMarkup:
     rows = []
     for key, label in SPEC_FIELDS:
-        value = (current or {}).get(key)
-        text = f"{label}: {value}" if value else label
+        raw_val = (current or {}).get(key)
+        display = _label_for_spec_value(key, raw_val) if raw_val else None
+        text = f"{label}: {display}" if display else label
         if len(text) > 60:
             text = text[:57] + "…"
         rows.append([InlineKeyboardButton(text=text, callback_data=f"specs_field:{product_id}:{key}")])
@@ -3703,7 +3795,7 @@ async def _finalize_add_product_summary(target_message: Message, state: FSMConte
         lines = []
         for k, v in specs.items():
             label = SPEC_LABELS.get(k, k)
-            lines.append(f"• {label}: {v}")
+            lines.append(f"• {label}: {_label_for_spec_value(k, v)}")
         specs_summary = "\n\n📋 Характеристики:\n" + "\n".join(lines)
 
     warranty = int(data.get("warranty") or 0)
@@ -5109,7 +5201,8 @@ async def specs_opt_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Опция не найдена")
         return
     value = options[idx]
-    await db.set_product_specification(product_id, key, value)
+    stored = _normalize_spec_value(key, value)
+    await db.set_product_specification(product_id, key, stored)
     current = await db.get_product_specifications(product_id)
     cur_state = await state.get_state()
     mode = "add" if cur_state == AddProductState.editing_specs.state else "edit"
@@ -5212,8 +5305,9 @@ async def edit_specs_value_handler(message: Message, state: FSMContext):
         await db.clear_product_specification(int(product_id), key)
         await message.answer(f"🗑 Поле «{label}» очищено.")
     else:
-        await db.set_product_specification(int(product_id), key, value)
-        await message.answer(f"✅ {label}: {value}")
+        stored = _normalize_spec_value(key, value)
+        await db.set_product_specification(int(product_id), key, stored)
+        await message.answer(f"✅ {label}: {_label_for_spec_value(key, stored)}")
 
     current = await db.get_product_specifications(int(product_id))
 
@@ -6185,46 +6279,66 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
                     dyn_options[key] = opts_render
 
                 else:
-                    # select: case-insensitive equality по seed-options.
-                    if selected:
-                        dyn_selected[key] = selected
-                        wanted = {s.lower() for s in selected}
-
-                        def _match_sel(p, k=key, w=wanted):
-                            val = _product_attr_value(p, k)
-                            return val is not None and val.lower() in w
-
-                        products = [p for p in products if _match_sel(p)]
-                        for s in selected:
-                            dyn_query_extras.append((key, s))
-
+                    # select: используем canonical мапинг (value/ru/uk → canonical)
+                    # из category_attributes.options_json. Это даёт:
+                    #   • поддержку legacy-меток в БД ('Плоский' и 'flat'),
+                    #   • правильную дедупликацию в UI,
+                    #   • стабильный URL-параметр (canonical value).
                     opts_def = attr.get("options") or []
-                    # Map lower(stored value) → original-case form,
-                    # т.к. бот сохраняет лейблы как UA-строки
-                    # ("Плоский", "Сухий"), а в seed value="flat"/"dry" и т.п.
-                    present = {}
+                    canon_map = {}  # lower(any: value/ru/uk) → canonical_lower
+                    canon_to_opt = {}  # canonical_lower → opt
+                    for opt in opts_def:
+                        canon = str(opt.get("value", "")).strip()
+                        if not canon:
+                            continue
+                        cl = canon.lower()
+                        canon_to_opt[cl] = opt
+                        canon_map[cl] = cl
+                        for lab in (opt.get("ru"), opt.get("uk")):
+                            if lab:
+                                canon_map[str(lab).strip().lower()] = cl
+
+                    def _to_canon(val, m=canon_map):
+                        if not val:
+                            return None
+                        s = str(val).strip().lower()
+                        return m.get(s, s) if s else None
+
+                    if selected:
+                        wanted_canon = set()
+                        for s in selected:
+                            c = _to_canon(s)
+                            if c:
+                                wanted_canon.add(c)
+                        # Шаблон сверяет opt.value|string с selected_vals,
+                        # поэтому пишем туда канонические значения,
+                        # чтобы чекбокс оставался отмечен после сабмита.
+                        dyn_selected[key] = sorted(wanted_canon) if wanted_canon else selected
+
+                        def _match_sel(p, k=key, w=wanted_canon, tc=_to_canon):
+                            c = tc(_product_attr_value(p, k))
+                            return c is not None and c in w
+
+                        if wanted_canon:
+                            products = [p for p in products if _match_sel(p)]
+                        # URL-параметры: канонические значения.
+                        for c in (dyn_selected[key] or selected):
+                            dyn_query_extras.append((key, c))
+
+                    # Канонически встречающиеся варианты у активных товаров.
+                    present_canon = set()
                     for p in products_for_options:
-                        val = _product_attr_value(p, key)
-                        if val:
-                            present.setdefault(val.strip().lower(), val.strip())
+                        c = _to_canon(_product_attr_value(p, key))
+                        if c:
+                            present_canon.add(c)
+
                     opts_render = []
                     for opt in opts_def:
-                        # Сопоставляем по value / ru / uk — берём первое, что
-                        # реально встречается среди активных товаров.
-                        matched_key = None
-                        for c in (opt.get("value"), opt.get("ru"), opt.get("uk")):
-                            if c is None:
-                                continue
-                            cl = str(c).strip().lower()
-                            if cl and cl in present:
-                                matched_key = cl
-                                break
-                        if matched_key is None:
+                        canon = str(opt.get("value", "")).strip().lower()
+                        if not canon or canon not in present_canon:
                             continue
                         opts_render.append({
-                            # value = то, что реально лежит в товаре,
-                            # чтобы фильтр по сабмиту совпадал.
-                            "value": present[matched_key],
+                            "value": canon,  # URL/checkbox value = canonical
                             "label_ru": opt.get("ru") or opt.get("value"),
                             "label_uk": opt.get("uk") or opt.get("ru") or opt.get("value"),
                         })
@@ -6437,7 +6551,10 @@ async def product_page(request: Request, product_id: int):
         context={
             "product": product,
             "images": images,
-            "specifications": specifications,
+            "specifications": {
+                k: _label_for_spec_value(k, v)
+                for k, v in (specifications or {}).items()
+            },
             "spec_labels": SPEC_LABELS,
             "spec_field_order": [k for k, _ in SPEC_FIELDS],
             "site_contacts": site_contacts,
