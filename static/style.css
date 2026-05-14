@@ -1496,6 +1496,58 @@ button:hover {
   accent-color: #16a34a;
 }
 
+/* ── Dynamic category filters (etap 3) ── */
+.dynamic-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+.dyn-filter {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 12px 10px;
+  background: #fafafa;
+  min-width: 160px;
+  margin: 0;
+}
+.dyn-filter legend {
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  padding: 0 6px;
+}
+.dyn-filter .dyn-unit {
+  font-weight: 500;
+  color: #6b7280;
+}
+.dyn-filter .dyn-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 6px;
+}
+.dyn-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #1f2937;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dyn-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #16a34a;
+}
+@media (max-width: 768px) {
+  .dynamic-filters { gap: 8px; }
+  .dyn-filter { min-width: 100%; }
+}
+
 @media (max-width: 768px) {
   .search-main-row {
     flex-wrap: wrap;

@@ -5886,6 +5886,71 @@ async def api_site_event(data: SiteEventRequest):
     return {"ok": True}
 
 
+def _extract_number(raw):
+    """Достаём первое число из произвольной строки/значения."""
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    s = str(raw).replace(",", ".").strip()
+    if not s:
+        return None
+    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    if not m:
+        return None
+    try:
+        return float(m.group(0))
+    except ValueError:
+        return None
+
+
+def _product_specs(p):
+    """Безопасно достать specifications_json как dict (или {})."""
+    try:
+        raw = p["specifications_json"]
+    except (KeyError, TypeError):
+        return {}
+    if not raw:
+        return {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _product_attr_value(p, key):
+    """Универсальный getter значения атрибута товара.
+
+    Приоритет: specifications_json[key] → legacy-колонки (для volume/heater_type).
+    Возвращает строку (нормализованную) или None.
+    """
+    specs = _product_specs(p)
+    val = specs.get(key) if isinstance(specs, dict) else None
+    if val is None or val == "":
+        # legacy fallback
+        if key == "volume":
+            try:
+                v = p["boiler_volume_liters"]
+            except (KeyError, TypeError):
+                v = None
+            if v:
+                return str(int(float(v)))
+            return None
+        if key == "heater_type":
+            try:
+                v = p["boiler_ten_type"]
+            except (KeyError, TypeError):
+                v = None
+            return (str(v).strip().lower() or None) if v else None
+        return None
+    return str(val).strip()
+
+
 @web_app.get("/", response_class=HTMLResponse)
 async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = "", price_min: str = "", price_max: str = "", in_stock: str = "", volume: str = ""):
     q = (q or "").strip()
@@ -5988,6 +6053,102 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
         standard = [5, 10, 15, 30, 50, 80, 100, 120, 150]
         available_volumes = [v for v in standard if v in vols]
 
+    # ── Dynamic filters (etap 3, foundation: пока только boilers) ──
+    # Атрибуты берутся из таблицы category_attributes (is_filter=TRUE).
+    # Значения — из products.specifications_json + legacy-колонок.
+    # Query-params: ?<attr_key>=<value> (multi для checkbox-листов).
+    dyn_attrs = []
+    dyn_options = {}   # attr_key → [{value, label_ru, label_uk}, ...]
+    dyn_selected = {}  # attr_key → list[str]
+    target_key_dyn = category_key(category) if category else ""
+    if target_key_dyn == "boilers":
+        try:
+            dyn_attrs = await db.get_category_attributes(target_key_dyn, only_filterable=True)
+        except Exception as e:
+            print(f"[site] get_category_attributes failed: {e}")
+            dyn_attrs = []
+
+    # Снимок продуктов ДО применения dyn-фильтров — для расчёта доступных
+    # значений. Так пользователь видит все возможные опции, а не только
+    # совпадающие с уже выбранными.
+    products_for_options = list(products) if dyn_attrs else []
+
+    if dyn_attrs:
+        qp = request.query_params
+        for attr in dyn_attrs:
+            key = attr["attribute_key"]
+            atype = (attr.get("type") or "").lower()
+            # Собираем выбранные значения (multi-select из query).
+            raw_values = qp.getlist(key) if hasattr(qp, "getlist") else []
+            # Бэкап для одиночного volume=80 уже покрывается getlist.
+            selected = [v.strip() for v in raw_values if v and v.strip()]
+            if selected:
+                dyn_selected[key] = selected
+                wanted = {s.lower() for s in selected}
+                if atype == "number":
+                    # Сравниваем как числа (50 ≡ "50" ≡ "50 л").
+                    wanted_nums = set()
+                    for s in selected:
+                        n = _extract_number(s)
+                        if n is not None:
+                            wanted_nums.add(n)
+
+                    def _match_number(p, k=key, nums=wanted_nums):
+                        val = _product_attr_value(p, k)
+                        n = _extract_number(val)
+                        return n is not None and n in nums
+
+                    products = [p for p in products if _match_number(p)]
+                else:
+                    def _match_select(p, k=key, w=wanted):
+                        val = _product_attr_value(p, k)
+                        return val is not None and val.lower() in w
+
+                    products = [p for p in products if _match_select(p)]
+
+            # Доступные значения для UI — из снимка products_for_options.
+            if atype == "select":
+                opts_def = attr.get("options") or []
+                present = set()
+                for p in products_for_options:
+                    val = _product_attr_value(p, key)
+                    if val:
+                        present.add(val.lower())
+                opts_render = []
+                for opt in opts_def:
+                    v = str(opt.get("value", "")).strip().lower()
+                    if not v or v not in present:
+                        continue
+                    opts_render.append({
+                        "value": opt.get("value"),
+                        "label_ru": opt.get("ru") or opt.get("value"),
+                        "label_uk": opt.get("uk") or opt.get("ru") or opt.get("value"),
+                    })
+                dyn_options[key] = opts_render
+            elif atype == "number":
+                seen_nums = set()
+                for p in products_for_options:
+                    val = _product_attr_value(p, key)
+                    n = _extract_number(val)
+                    if n is not None:
+                        # Целочисленные показываем как int.
+                        seen_nums.add(int(n) if n.is_integer() else n)
+                sorted_nums = sorted(seen_nums)
+                unit = (attr.get("unit") or "").strip()
+                dyn_options[key] = [{
+                    "value": str(n),
+                    "label_ru": (f"{n} {unit}" if unit else str(n)),
+                    "label_uk": (f"{n} {unit}" if unit else str(n)),
+                } for n in sorted_nums]
+            else:
+                # text / другие типы — пока без UI, query-фильтр уже применился выше.
+                dyn_options[key] = []
+
+        # Чтобы не дублировать UI: для boilers старый volume-селект скрываем,
+        # его роль выполняет dyn-фильтр (атрибут volume присутствует в seed).
+        if any(a["attribute_key"] == "volume" for a in dyn_attrs):
+            show_volume_filter = False
+
     per_page = 12
     total = len(products)
     pages = math.ceil(total / per_page) if total else 1
@@ -6063,6 +6224,9 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "show_volume_filter": show_volume_filter,
             "available_volumes": available_volumes,
             "current_volume": volume,
+            "dyn_attrs": dyn_attrs,
+            "dyn_options": dyn_options,
+            "dyn_selected": dyn_selected,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
