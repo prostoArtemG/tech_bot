@@ -405,6 +405,7 @@ class Database:
         purchase_currency: str = "UAH",
         sku: str | None = None,
         warranty_months: int = 0,
+        specifications: dict | None = None,
     ):
         name = f"{brand} {model}".strip()
 
@@ -415,13 +416,18 @@ class Database:
         except Exception:
             cat_key = None
 
-        await self.execute(
+        import json
+        specs_json = json.dumps(specifications or {})
+
+        row = await self.fetchrow(
             """
             INSERT INTO products (
                 name, category, category_key, brand, model, price,
-                purchase_price, purchase_currency, sku, warranty_months, stock_qty
+                purchase_price, purchase_currency, sku, warranty_months, stock_qty,
+                specifications_json
             )
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11::jsonb)
+            RETURNING id
             """,
             name,
             category,
@@ -433,7 +439,9 @@ class Database:
             purchase_currency,
             sku,
             warranty_months,
+            specs_json,
         )
+        return int(row["id"]) if row else None
 
     async def list_products(self):
         return await self.fetch(

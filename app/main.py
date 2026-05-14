@@ -523,6 +523,9 @@ class AddProductState(StatesGroup):
     waiting_for_currency = State()
     waiting_for_sku = State()
     waiting_for_warranty = State()
+    # Dynamic specifications collection (etap 4).
+    collecting_specs = State()
+    waiting_for_spec_value = State()
 
 
 class EditStockState(StatesGroup):
@@ -3662,25 +3665,241 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
         )
         return
 
-    await db.add_product(
-        category=data.get("category"),
-        brand=data.get("brand"),
-        model=data.get("model"),
-        price=data.get("price"),
-        purchase_price=data.get("purchase_price", 0),
-        purchase_currency=data.get("currency", "UAH"),
-        sku=data.get("sku"),
-        warranty_months=warranty,
-    )
+    await state.update_data(warranty=warranty, specs={})
+
+    # ── Dynamic specs (etap 4): на основе category_attributes ──
+    cat_key = category_key(data.get("category")) or ""
+    attrs = []
+    if cat_key:
+        try:
+            attrs = await db.get_category_attributes(cat_key, only_filterable=False)
+        except Exception as e:
+            print(f"[add_product] get_category_attributes failed: {e}")
+            attrs = []
+
+    if not attrs:
+        # Категория без атрибутов — сохраняем как раньше, поведение прежнее.
+        await _finalize_add_product(message, state)
+        return
+
+    await state.update_data(spec_attrs=attrs, spec_idx=0)
+    await state.set_state(AddProductState.collecting_specs)
+    await _ask_next_spec(message, state)
+
+
+def _spec_skip_kb() -> InlineKeyboardMarkup:
+    """Кнопка ‘пропустить’ для number/text шагов."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="⏭ Пропустить", callback_data="addspec_skip"),
+    ]])
+
+
+def _spec_select_kb(idx: int, attr: dict) -> InlineKeyboardMarkup:
+    """Inline-клавиатура для select-атрибута: одна кнопка на option + skip."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for opt in attr.get("options") or []:
+        value = str(opt.get("value", "")).strip()
+        if not value:
+            continue
+        label = opt.get("ru") or opt.get("value") or value
+        rows.append([InlineKeyboardButton(
+            text=str(label),
+            # Используем индекс, чтобы уложиться в 64 байта callback_data.
+            callback_data=f"addspec_set:{idx}:{value}",
+        )])
+    rows.append([InlineKeyboardButton(text="⏭ Пропустить", callback_data="addspec_skip")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _ask_next_spec(message_or_cb, state: FSMContext):
+    """Задаёт вопрос по очередному атрибуту или финализирует товар."""
+    data = await state.get_data()
+    attrs = data.get("spec_attrs") or []
+    idx = int(data.get("spec_idx") or 0)
+
+    # Универсальный source чата (Message или CallbackQuery).
+    target_message = message_or_cb.message if isinstance(message_or_cb, CallbackQuery) else message_or_cb
+
+    if idx >= len(attrs):
+        await _finalize_add_product(target_message, state)
+        return
+
+    attr = attrs[idx]
+    name_ru = attr.get("name_ru") or attr.get("attribute_key")
+    unit = (attr.get("unit") or "").strip()
+    atype = (attr.get("type") or "").lower()
+    suffix = f", {unit}" if unit else ""
+    progress = f"({idx + 1}/{len(attrs)})"
+
+    if atype == "select":
+        await state.set_state(AddProductState.collecting_specs)
+        await target_message.answer(
+            f"📋 {progress} Выберите: <b>{name_ru}</b>{suffix}",
+            parse_mode="HTML",
+            reply_markup=_spec_select_kb(idx, attr),
+        )
+    elif atype == "number":
+        await state.set_state(AddProductState.waiting_for_spec_value)
+        await target_message.answer(
+            f"🔢 {progress} Введите число: <b>{name_ru}</b>{suffix}\nИли нажмите «Пропустить».",
+            parse_mode="HTML",
+            reply_markup=_spec_skip_kb(),
+        )
+    else:
+        # text + любые иные → запрашиваем текст.
+        await state.set_state(AddProductState.waiting_for_spec_value)
+        await target_message.answer(
+            f"✏️ {progress} Введите: <b>{name_ru}</b>{suffix}\nИли нажмите «Пропустить».",
+            parse_mode="HTML",
+            reply_markup=_spec_skip_kb(),
+        )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("addspec_set:"))
+async def add_product_spec_select_callback(callback: CallbackQuery, state: FSMContext):
+    cur = await state.get_state()
+    if cur != AddProductState.collecting_specs.state:
+        await callback.answer()
+        return
+    try:
+        _, idx_raw, value = callback.data.split(":", 2)
+        idx = int(idx_raw)
+    except (ValueError, AttributeError):
+        await callback.answer("Ошибка")
+        return
+
+    data = await state.get_data()
+    attrs = data.get("spec_attrs") or []
+    if idx >= len(attrs):
+        await callback.answer()
+        return
+    attr = attrs[idx]
+    key = attr.get("attribute_key")
+    specs = dict(data.get("specs") or {})
+    if key:
+        specs[key] = value
+    await state.update_data(specs=specs, spec_idx=idx + 1)
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.answer("Сохранено")
+    await _ask_next_spec(callback, state)
+
+
+@router.callback_query(lambda c: c.data == "addspec_skip")
+async def add_product_spec_skip_callback(callback: CallbackQuery, state: FSMContext):
+    cur = await state.get_state()
+    if cur not in {
+        AddProductState.collecting_specs.state,
+        AddProductState.waiting_for_spec_value.state,
+    }:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    idx = int(data.get("spec_idx") or 0)
+    await state.update_data(spec_idx=idx + 1)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.answer("Пропущено")
+    await _ask_next_spec(callback, state)
+
+
+@router.message(AddProductState.waiting_for_spec_value)
+async def add_product_spec_value_handler(message: Message, state: FSMContext):
+    raw = (message.text or "").strip()
+    if not raw or raw == "-" or raw.lower() in {"/skip", "пропустить", "skip"}:
+        data = await state.get_data()
+        idx = int(data.get("spec_idx") or 0)
+        await state.update_data(spec_idx=idx + 1)
+        await _ask_next_spec(message, state)
+        return
+
+    data = await state.get_data()
+    attrs = data.get("spec_attrs") or []
+    idx = int(data.get("spec_idx") or 0)
+    if idx >= len(attrs):
+        await _finalize_add_product(message, state)
+        return
+    attr = attrs[idx]
+    atype = (attr.get("type") or "").lower()
+    key = attr.get("attribute_key")
+
+    value: str
+    if atype == "number":
+        s = raw.replace(",", ".")
+        try:
+            num = float(s)
+        except ValueError:
+            await message.answer("Введите число (или «Пропустить»).", reply_markup=_spec_skip_kb())
+            return
+        # Целые числа сохраняем без «.0», чтобы потом фильтры работали аккуратно.
+        value = str(int(num)) if num.is_integer() else str(num)
+    else:
+        value = raw
+
+    specs = dict(data.get("specs") or {})
+    if key:
+        specs[key] = value
+    await state.update_data(specs=specs, spec_idx=idx + 1)
+    await _ask_next_spec(message, state)
+
+
+async def _finalize_add_product(message: Message, state: FSMContext):
+    """Сохраняет товар в БД с собранными specs и завершает сценарий."""
+    data = await state.get_data()
+    if not data.get("category") or not data.get("brand") or not data.get("model") or data.get("price") is None:
+        await state.clear()
+        menu = await get_main_menu_for_user(message)
+        await message.answer(
+            "⚠️ Сессия устарела. Начните действие заново.",
+            reply_markup=menu,
+        )
+        return
+
+    specs = data.get("specs") or {}
+    warranty = int(data.get("warranty") or 0)
+
+    try:
+        await db.add_product(
+            category=data.get("category"),
+            brand=data.get("brand"),
+            model=data.get("model"),
+            price=data.get("price"),
+            purchase_price=data.get("purchase_price", 0),
+            purchase_currency=data.get("currency", "UAH"),
+            sku=data.get("sku"),
+            warranty_months=warranty,
+            specifications=specs or None,
+        )
+    except Exception as e:
+        print(f"[add_product] save failed: {e}")
+        await state.clear()
+        await message.answer(
+            f"❌ Не удалось сохранить товар: {e}",
+            reply_markup=products_kb,
+        )
+        return
 
     await state.clear()
+
+    specs_summary = ""
+    if specs:
+        lines = []
+        for k, v in specs.items():
+            lines.append(f"• {k}: {v}")
+        specs_summary = "\n\n📋 Характеристики:\n" + "\n".join(lines)
 
     await message.answer(
         f"✅ Товар добавлен\n\n"
         f"{data.get('brand', '')} {data.get('model', '')}\n"
         f"{await t(message, 'price')}: {data.get('price', 0)} грн\n"
         f"Закупка: {data.get('purchase_price', 0)} {data.get('currency', 'UAH')}\n"
-        f"{await t(message, 'warranty')}: {warranty} мес",
+        f"{await t(message, 'warranty')}: {warranty} мес"
+        f"{specs_summary}",
         reply_markup=products_kb
     )
 
