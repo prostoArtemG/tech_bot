@@ -523,9 +523,8 @@ class AddProductState(StatesGroup):
     waiting_for_currency = State()
     waiting_for_sku = State()
     waiting_for_warranty = State()
-    # Dynamic specifications collection (etap 4).
-    collecting_specs = State()
-    waiting_for_spec_value = State()
+    # Specifications menu (etap 6.1): reuses edit-specs UI in "add" mode.
+    editing_specs = State()
 
 
 class EditStockState(StatesGroup):
@@ -604,7 +603,7 @@ SPEC_OPTIONS = {
 }
 
 
-def inline_specs_kb(product_id: int, current: dict) -> InlineKeyboardMarkup:
+def inline_specs_kb(product_id: int, current: dict, mode: str = "edit") -> InlineKeyboardMarkup:
     rows = []
     for key, label in SPEC_FIELDS:
         value = (current or {}).get(key)
@@ -612,8 +611,20 @@ def inline_specs_kb(product_id: int, current: dict) -> InlineKeyboardMarkup:
         if len(text) > 60:
             text = text[:57] + "…"
         rows.append([InlineKeyboardButton(text=text, callback_data=f"specs_field:{product_id}:{key}")])
-    rows.append([InlineKeyboardButton(text="📝 Описание", callback_data=f"specs_desc:{product_id}")])
-    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"specs_back:{product_id}")])
+    if mode == "add":
+        # Финальные кнопки сценария добавления товара.
+        rows.append([InlineKeyboardButton(text="📝 Описание", callback_data=f"specs_desc:{product_id}")])
+        rows.append([InlineKeyboardButton(
+            text="✅ Завершить добавление",
+            callback_data=f"addspec_done:{product_id}",
+        )])
+        rows.append([InlineKeyboardButton(
+            text="⏭ Пропустить характеристики",
+            callback_data=f"addspec_done:{product_id}",
+        )])
+    else:
+        rows.append([InlineKeyboardButton(text="📝 Описание", callback_data=f"specs_desc:{product_id}")])
+        rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"specs_back:{product_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -3665,206 +3676,9 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(warranty=warranty, specs={})
-
-    # ── Dynamic specs (etap 4): на основе category_attributes ──
-    cat_key = category_key(data.get("category")) or ""
-    attrs = []
-    if cat_key:
-        try:
-            attrs = await db.get_category_attributes(cat_key, only_filterable=False)
-        except Exception as e:
-            print(f"[add_product] get_category_attributes failed: {e}")
-            attrs = []
-
-    if not attrs:
-        # Категория без атрибутов — сохраняем как раньше, поведение прежнее.
-        await _finalize_add_product(message, state)
-        return
-
-    await state.update_data(spec_attrs=attrs, spec_idx=0)
-    await state.set_state(AddProductState.collecting_specs)
-    await _ask_next_spec(message, state)
-
-
-def _spec_skip_kb() -> InlineKeyboardMarkup:
-    """Кнопка ‘пропустить’ для number/text шагов."""
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="⏭ Пропустить", callback_data="addspec_skip"),
-    ]])
-
-
-def _spec_select_kb(idx: int, attr: dict) -> InlineKeyboardMarkup:
-    """Inline-клавиатура для select-атрибута: одна кнопка на option + skip."""
-    rows: list[list[InlineKeyboardButton]] = []
-    for opt in attr.get("options") or []:
-        value = str(opt.get("value", "")).strip()
-        if not value:
-            continue
-        label = opt.get("ru") or opt.get("value") or value
-        rows.append([InlineKeyboardButton(
-            text=str(label),
-            # Используем индекс, чтобы уложиться в 64 байта callback_data.
-            callback_data=f"addspec_set:{idx}:{value}",
-        )])
-    rows.append([InlineKeyboardButton(text="⏭ Пропустить", callback_data="addspec_skip")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-async def _ask_next_spec(message_or_cb, state: FSMContext):
-    """Задаёт вопрос по очередному атрибуту или финализирует товар."""
-    data = await state.get_data()
-    attrs = data.get("spec_attrs") or []
-    idx = int(data.get("spec_idx") or 0)
-
-    # Универсальный source чата (Message или CallbackQuery).
-    target_message = message_or_cb.message if isinstance(message_or_cb, CallbackQuery) else message_or_cb
-
-    if idx >= len(attrs):
-        await _finalize_add_product(target_message, state)
-        return
-
-    attr = attrs[idx]
-    name_ru = attr.get("name_ru") or attr.get("attribute_key")
-    unit = (attr.get("unit") or "").strip()
-    atype = (attr.get("type") or "").lower()
-    suffix = f", {unit}" if unit else ""
-    progress = f"({idx + 1}/{len(attrs)})"
-
-    if atype == "select":
-        await state.set_state(AddProductState.collecting_specs)
-        await target_message.answer(
-            f"📋 {progress} Выберите: <b>{name_ru}</b>{suffix}",
-            parse_mode="HTML",
-            reply_markup=_spec_select_kb(idx, attr),
-        )
-    elif atype == "number":
-        await state.set_state(AddProductState.waiting_for_spec_value)
-        await target_message.answer(
-            f"🔢 {progress} Введите число: <b>{name_ru}</b>{suffix}\nИли нажмите «Пропустить».",
-            parse_mode="HTML",
-            reply_markup=_spec_skip_kb(),
-        )
-    else:
-        # text + любые иные → запрашиваем текст.
-        await state.set_state(AddProductState.waiting_for_spec_value)
-        await target_message.answer(
-            f"✏️ {progress} Введите: <b>{name_ru}</b>{suffix}\nИли нажмите «Пропустить».",
-            parse_mode="HTML",
-            reply_markup=_spec_skip_kb(),
-        )
-
-
-@router.callback_query(lambda c: c.data and c.data.startswith("addspec_set:"))
-async def add_product_spec_select_callback(callback: CallbackQuery, state: FSMContext):
-    cur = await state.get_state()
-    if cur != AddProductState.collecting_specs.state:
-        await callback.answer()
-        return
+    # 1) Сохраняем товар сразу с пустыми specs — получаем id для меню.
     try:
-        _, idx_raw, value = callback.data.split(":", 2)
-        idx = int(idx_raw)
-    except (ValueError, AttributeError):
-        await callback.answer("Ошибка")
-        return
-
-    data = await state.get_data()
-    attrs = data.get("spec_attrs") or []
-    if idx >= len(attrs):
-        await callback.answer()
-        return
-    attr = attrs[idx]
-    key = attr.get("attribute_key")
-    specs = dict(data.get("specs") or {})
-    if key:
-        specs[key] = value
-    await state.update_data(specs=specs, spec_idx=idx + 1)
-
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.answer("Сохранено")
-    await _ask_next_spec(callback, state)
-
-
-@router.callback_query(lambda c: c.data == "addspec_skip")
-async def add_product_spec_skip_callback(callback: CallbackQuery, state: FSMContext):
-    cur = await state.get_state()
-    if cur not in {
-        AddProductState.collecting_specs.state,
-        AddProductState.waiting_for_spec_value.state,
-    }:
-        await callback.answer()
-        return
-    data = await state.get_data()
-    idx = int(data.get("spec_idx") or 0)
-    await state.update_data(spec_idx=idx + 1)
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.answer("Пропущено")
-    await _ask_next_spec(callback, state)
-
-
-@router.message(AddProductState.waiting_for_spec_value)
-async def add_product_spec_value_handler(message: Message, state: FSMContext):
-    raw = (message.text or "").strip()
-    if not raw or raw == "-" or raw.lower() in {"/skip", "пропустить", "skip"}:
-        data = await state.get_data()
-        idx = int(data.get("spec_idx") or 0)
-        await state.update_data(spec_idx=idx + 1)
-        await _ask_next_spec(message, state)
-        return
-
-    data = await state.get_data()
-    attrs = data.get("spec_attrs") or []
-    idx = int(data.get("spec_idx") or 0)
-    if idx >= len(attrs):
-        await _finalize_add_product(message, state)
-        return
-    attr = attrs[idx]
-    atype = (attr.get("type") or "").lower()
-    key = attr.get("attribute_key")
-
-    value: str
-    if atype == "number":
-        s = raw.replace(",", ".")
-        try:
-            num = float(s)
-        except ValueError:
-            await message.answer("Введите число (или «Пропустить»).", reply_markup=_spec_skip_kb())
-            return
-        # Целые числа сохраняем без «.0», чтобы потом фильтры работали аккуратно.
-        value = str(int(num)) if num.is_integer() else str(num)
-    else:
-        value = raw
-
-    specs = dict(data.get("specs") or {})
-    if key:
-        specs[key] = value
-    await state.update_data(specs=specs, spec_idx=idx + 1)
-    await _ask_next_spec(message, state)
-
-
-async def _finalize_add_product(message: Message, state: FSMContext):
-    """Сохраняет товар в БД с собранными specs и завершает сценарий."""
-    data = await state.get_data()
-    if not data.get("category") or not data.get("brand") or not data.get("model") or data.get("price") is None:
-        await state.clear()
-        menu = await get_main_menu_for_user(message)
-        await message.answer(
-            "⚠️ Сессия устарела. Начните действие заново.",
-            reply_markup=menu,
-        )
-        return
-
-    specs = data.get("specs") or {}
-    warranty = int(data.get("warranty") or 0)
-
-    try:
-        await db.add_product(
+        product_id = await db.add_product(
             category=data.get("category"),
             brand=data.get("brand"),
             model=data.get("model"),
@@ -3873,7 +3687,7 @@ async def _finalize_add_product(message: Message, state: FSMContext):
             purchase_currency=data.get("currency", "UAH"),
             sku=data.get("sku"),
             warranty_months=warranty,
-            specifications=specs or None,
+            specifications=None,
         )
     except Exception as e:
         print(f"[add_product] save failed: {e}")
@@ -3884,24 +3698,61 @@ async def _finalize_add_product(message: Message, state: FSMContext):
         )
         return
 
-    await state.clear()
+    # 2) Переходим в меню характеристик (то же, что и при редактировании,
+    #    но с финальными кнопками «Завершить» / «Пропустить»).
+    await state.set_state(AddProductState.editing_specs)
+    await state.update_data(warranty=warranty, add_product_id=product_id)
+
+    current = await db.get_product_specifications(product_id)
+    await message.answer(
+        "📋 Характеристики товара\nВыберите поле для заполнения "
+        "или нажмите «Завершить добавление».",
+        reply_markup=inline_specs_kb(product_id, current, mode="add"),
+    )
+
+
+async def _finalize_add_product_summary(target_message: Message, state: FSMContext):
+    """Показывает итог добавления товара и очищает state."""
+    data = await state.get_data()
+    product_id = data.get("add_product_id")
+    if not product_id:
+        await state.clear()
+        await target_message.answer("Готово.", reply_markup=products_kb)
+        return
+    try:
+        specs = await db.get_product_specifications(int(product_id))
+    except Exception:
+        specs = {}
 
     specs_summary = ""
     if specs:
         lines = []
         for k, v in specs.items():
-            lines.append(f"• {k}: {v}")
+            label = SPEC_LABELS.get(k, k)
+            lines.append(f"• {label}: {v}")
         specs_summary = "\n\n📋 Характеристики:\n" + "\n".join(lines)
 
-    await message.answer(
-        f"✅ Товар добавлен\n\n"
+    warranty = int(data.get("warranty") or 0)
+    await state.clear()
+    await target_message.answer(
+        f"✅ Товар добавлен (#{product_id})\n\n"
         f"{data.get('brand', '')} {data.get('model', '')}\n"
-        f"{await t(message, 'price')}: {data.get('price', 0)} грн\n"
+        f"{await t(target_message, 'price')}: {data.get('price', 0)} грн\n"
         f"Закупка: {data.get('purchase_price', 0)} {data.get('currency', 'UAH')}\n"
-        f"{await t(message, 'warranty')}: {warranty} мес"
+        f"{await t(target_message, 'warranty')}: {warranty} мес"
         f"{specs_summary}",
-        reply_markup=products_kb
+        reply_markup=products_kb,
     )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("addspec_done:"))
+async def add_product_specs_done_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.answer("Готово")
+    await _finalize_add_product_summary(callback.message, state)
 
 
 PRODUCTS_PAGE_SIZE = 8
@@ -5200,15 +5051,17 @@ async def specs_open_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Ошибка")
         return
     current = await db.get_product_specifications(product_id)
+    cur_state = await state.get_state()
+    mode = "add" if cur_state == AddProductState.editing_specs.state else "edit"
     try:
         await callback.message.edit_text(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode),
         )
     except Exception:
         await callback.message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode),
         )
     await callback.answer()
 
@@ -5230,6 +5083,10 @@ async def specs_field_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Неизвестное поле")
         return
 
+    # Запоминаем, идём ли мы из add-flow, чтобы вернуться в add-меню после ввода.
+    cur_state = await state.get_state()
+    add_mode = (cur_state == AddProductState.editing_specs.state)
+
     if key in SPEC_OPTIONS:
         await callback.message.answer(
             f"Выберите значение для поля «{label}»:",
@@ -5239,8 +5096,21 @@ async def specs_field_callback(callback: CallbackQuery, state: FSMContext):
         return
 
     # Free-text field
+    if add_mode:
+        # Сохраняем все add-данные, добавляем флаг и ключи.
+        await state.update_data(
+            specs_product_id=product_id,
+            specs_key=key,
+            specs_label=label,
+            specs_add_mode=True,
+        )
+    else:
+        await state.update_data(
+            specs_product_id=product_id,
+            specs_key=key,
+            specs_label=label,
+        )
     await state.set_state(EditSpecsState.waiting_for_value)
-    await state.update_data(specs_product_id=product_id, specs_key=key, specs_label=label)
     await callback.message.answer(
         f"Введите значение для поля «{label}». Отправьте «-» чтобы очистить."
     )
@@ -5267,15 +5137,17 @@ async def specs_opt_callback(callback: CallbackQuery, state: FSMContext):
     value = options[idx]
     await db.set_product_specification(product_id, key, value)
     current = await db.get_product_specifications(product_id)
+    cur_state = await state.get_state()
+    mode = "add" if cur_state == AddProductState.editing_specs.state else "edit"
     try:
         await callback.message.edit_text(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode),
         )
     except Exception:
         await callback.message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode),
         )
     await callback.answer(f"✅ {SPEC_LABELS.get(key, key)}: {value}")
 
@@ -5294,15 +5166,17 @@ async def specs_clear_callback(callback: CallbackQuery, state: FSMContext):
     key = parts[2]
     await db.clear_product_specification(product_id, key)
     current = await db.get_product_specifications(product_id)
+    cur_state = await state.get_state()
+    mode = "add" if cur_state == AddProductState.editing_specs.state else "edit"
     try:
         await callback.message.edit_text(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode),
         )
     except Exception:
         await callback.message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode),
         )
     await callback.answer("🗑 Очищено")
 
@@ -5353,6 +5227,7 @@ async def edit_specs_value_handler(message: Message, state: FSMContext):
     product_id = data.get("specs_product_id")
     key = data.get("specs_key")
     label = data.get("specs_label", "")
+    add_mode = bool(data.get("specs_add_mode"))
 
     if not product_id or not key:
         await state.clear()
@@ -5367,11 +5242,28 @@ async def edit_specs_value_handler(message: Message, state: FSMContext):
         await message.answer(f"✅ {label}: {value}")
 
     current = await db.get_product_specifications(int(product_id))
-    await state.clear()
-    await message.answer(
-        "📋 Характеристики товара. Выберите поле для редактирования:",
-        reply_markup=inline_specs_kb(int(product_id), current),
-    )
+
+    if add_mode:
+        # Возвращаемся в меню добавления: чистим только spec-ключи, не теряем
+        # данные add-flow (category, brand, model, price, warranty, add_product_id).
+        await state.update_data(
+            specs_product_id=None,
+            specs_key=None,
+            specs_label=None,
+            specs_add_mode=False,
+        )
+        await state.set_state(AddProductState.editing_specs)
+        await message.answer(
+            "📋 Характеристики товара\nВыберите поле для заполнения "
+            "или нажмите «Завершить добавление».",
+            reply_markup=inline_specs_kb(int(product_id), current, mode="add"),
+        )
+    else:
+        await state.clear()
+        await message.answer(
+            "📋 Характеристики товара. Выберите поле для редактирования:",
+            reply_markup=inline_specs_kb(int(product_id), current),
+        )
 
 
 async def show_product_photos_manager(message: Message, product_id: int):
