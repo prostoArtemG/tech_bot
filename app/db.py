@@ -195,6 +195,12 @@ class Database:
         );
         """)
 
+        # Seed дефолтных атрибутов (idempotent — ON CONFLICT DO NOTHING).
+        try:
+            await self._seed_default_category_attributes()
+        except Exception as e:
+            print(f"[migrate] seed category_attributes failed: {e}")
+
         # Backfill category_key из existing category (idempotent).
         try:
             from app.categories import CATEGORY_LABELS, _ALIASES
@@ -1478,6 +1484,146 @@ class Database:
             """,
             category_id
         )
+
+
+    # ——— category attributes (foundation для auto-filters) ———
+    # Дефолтные атрибуты по категориям. Колонки в БД: attr_key, label_ru,
+    # label_uk, attr_type, unit, options_json, is_filter, sort_order.
+    # options_json для select-атрибутов — массив {"value": ..., "ru": ..., "uk": ...}.
+    DEFAULT_CATEGORY_ATTRIBUTES = {
+        "boilers": [
+            {
+                "attr_key": "volume",
+                "label_ru": "Объём", "label_uk": "Об'єм",
+                "attr_type": "number", "unit": "л",
+                "options_json": [],
+                "is_filter": True, "sort_order": 10,
+            },
+            {
+                "attr_key": "heater_type",
+                "label_ru": "Тип ТЭНа", "label_uk": "Тип ТЕНу",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "dry", "ru": "Сухой", "uk": "Сухий"},
+                    {"value": "wet", "ru": "Мокрый", "uk": "Мокрий"},
+                ],
+                "is_filter": True, "sort_order": 20,
+            },
+            {
+                "attr_key": "tank_shape",
+                "label_ru": "Форма бака", "label_uk": "Форма баку",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "cylindrical", "ru": "Цилиндрический", "uk": "Циліндричний"},
+                    {"value": "flat",        "ru": "Плоский",       "uk": "Плоский"},
+                    {"value": "cubic",       "ru": "Кубический",    "uk": "Кубічний"},
+                ],
+                "is_filter": True, "sort_order": 30,
+            },
+            {
+                "attr_key": "installation",
+                "label_ru": "Установка", "label_uk": "Установка",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "vertical",   "ru": "Вертикальная",   "uk": "Вертикальна"},
+                    {"value": "horizontal", "ru": "Горизонтальная", "uk": "Горизонтальна"},
+                    {"value": "universal",  "ru": "Универсальная",  "uk": "Універсальна"},
+                ],
+                "is_filter": True, "sort_order": 40,
+            },
+            {
+                "attr_key": "power",
+                "label_ru": "Мощность", "label_uk": "Потужність",
+                "attr_type": "number", "unit": "Вт",
+                "options_json": [],
+                "is_filter": False, "sort_order": 50,
+            },
+        ],
+    }
+
+    async def _seed_default_category_attributes(self):
+        """Идемпотентный сидер. Вставляет только отсутствующие записи."""
+        import json
+        for cat_key, attrs in self.DEFAULT_CATEGORY_ATTRIBUTES.items():
+            for a in attrs:
+                await self.execute(
+                    """
+                    INSERT INTO category_attributes
+                        (category_key, attr_key, label_ru, label_uk,
+                         attr_type, unit, options_json, is_filter, sort_order)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+                    ON CONFLICT (category_key, attr_key) DO NOTHING
+                    """,
+                    cat_key,
+                    a["attr_key"],
+                    a["label_ru"],
+                    a.get("label_uk"),
+                    a["attr_type"],
+                    a.get("unit"),
+                    json.dumps(a.get("options_json") or []),
+                    bool(a.get("is_filter", False)),
+                    int(a.get("sort_order", 0)),
+                )
+
+    async def get_category_attributes(self, category_key: str, only_filterable: bool = False):
+        """Возвращает список атрибутов категории, отсортированный по sort_order.
+
+        Каждая запись — dict с ключами:
+            attribute_key, name_ru, name_ua, type, unit,
+            options (распарсенный options_json), is_filterable, sort_order.
+
+        Имена ключей возвращаемого dict совместимы со спецификацией
+        этапа 2 (name_ua/attribute_key/type/is_filterable), независимо
+        от внутренних имён колонок.
+        """
+        import json
+        k = (category_key or "").strip().lower()
+        if not k:
+            return []
+        if only_filterable:
+            rows = await self.fetch(
+                """
+                SELECT attr_key, label_ru, label_uk, attr_type, unit,
+                       options_json, is_filter, sort_order
+                FROM category_attributes
+                WHERE category_key = $1 AND is_filter = TRUE
+                ORDER BY sort_order ASC, id ASC
+                """,
+                k,
+            )
+        else:
+            rows = await self.fetch(
+                """
+                SELECT attr_key, label_ru, label_uk, attr_type, unit,
+                       options_json, is_filter, sort_order
+                FROM category_attributes
+                WHERE category_key = $1
+                ORDER BY sort_order ASC, id ASC
+                """,
+                k,
+            )
+
+        result = []
+        for r in rows:
+            raw = r["options_json"]
+            if isinstance(raw, str):
+                try:
+                    opts = json.loads(raw)
+                except Exception:
+                    opts = []
+            else:
+                opts = raw or []
+            result.append({
+                "attribute_key": r["attr_key"],
+                "name_ru": r["label_ru"],
+                "name_ua": r["label_uk"] or r["label_ru"],
+                "type": r["attr_type"],
+                "unit": r["unit"],
+                "options": opts,
+                "is_filterable": bool(r["is_filter"]),
+                "sort_order": int(r["sort_order"]),
+            })
+        return result
 
 
     # ——— site brands ———
