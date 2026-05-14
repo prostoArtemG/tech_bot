@@ -1238,17 +1238,13 @@ async def inline_brands_kb():
     names = [n for n in names if (n or "").strip().lower() not in hidden_lower]
 
     keyboard: list[list[InlineKeyboardButton]] = []
-    # Бренды — по 2 в ряд, чтобы экран не растягивался.
-    row: list[InlineKeyboardButton] = []
+    # Бренды — по одной кнопке в строку.
     for name in names:
         if not name:
             continue
-        row.append(InlineKeyboardButton(text=name, callback_data=f"add_brand:{name}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
+        keyboard.append([
+            InlineKeyboardButton(text=name, callback_data=f"add_brand:{name}")
+        ])
 
     # Кнопка добавления бренда всегда доступна — и при пустом списке тоже.
     keyboard.append([
@@ -3291,17 +3287,13 @@ async def add_brand_show_hidden_callback(callback: CallbackQuery, state: FSMCont
     hidden = [r for r in rows if not r["is_active"]]
 
     keyboard: list[list[InlineKeyboardButton]] = []
-    row: list[InlineKeyboardButton] = []
     for r in hidden:
-        row.append(InlineKeyboardButton(
-            text=r["name"],
-            callback_data=f"add_brand_hidden:{r['id']}",
-        ))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
+        keyboard.append([
+            InlineKeyboardButton(
+                text=r["name"],
+                callback_data=f"add_brand_hidden:{r['id']}",
+            ),
+        ])
     keyboard.append([
         InlineKeyboardButton(text="⬅️ Назад", callback_data="add_brand_back_to_active"),
     ])
@@ -3564,18 +3556,12 @@ async def search_brand_handler(message: Message, state: FSMContext):
         await message.answer(await t(message, "no_products_found"))
         return
 
-    # Бренды по 2 в ряд.
-    kb_rows: list[list[InlineKeyboardButton]] = []
-    row: list[InlineKeyboardButton] = []
-    for b in found:
-        row.append(InlineKeyboardButton(text=b, callback_data=f"add_brand:{b}"))
-        if len(row) == 2:
-            kb_rows.append(row)
-            row = []
-    if row:
-        kb_rows.append(row)
-    kb_rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")])
-    keyboard = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=b, callback_data=f"add_brand:{b}")]
+            for b in found
+        ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
+    )
 
     await state.set_state(AddProductState.waiting_for_brand)
     await message.answer("Выбери бренд:", reply_markup=keyboard)
