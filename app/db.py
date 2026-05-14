@@ -164,6 +164,60 @@ class Database:
         ADD COLUMN IF NOT EXISTS boiler_ten_type TEXT;
         """)
 
+        # --- Foundation: stable category_key (этап 1) ----------------------
+        # Хранится параллельно с человеко-читаемым `category` для обратной
+        # совместимости. Заполняется автоматически при INSERT/UPDATE и
+        # бэкфиллится по существующим товарам ниже.
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS category_key TEXT;
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS idx_products_category_key
+        ON products (category_key);
+        """)
+
+        # Foundation для будущих auto-filters: справочник атрибутов категории.
+        # Пока никем не читается — только создаём схему.
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS category_attributes (
+            id SERIAL PRIMARY KEY,
+            category_key TEXT NOT NULL,
+            attr_key TEXT NOT NULL,
+            label_ru TEXT NOT NULL,
+            label_uk TEXT,
+            attr_type TEXT NOT NULL DEFAULT 'string',
+            unit TEXT,
+            options_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            is_filter BOOLEAN NOT NULL DEFAULT FALSE,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (category_key, attr_key)
+        );
+        """)
+
+        # Backfill category_key из existing category (idempotent).
+        try:
+            from app.categories import CATEGORY_LABELS, _ALIASES
+            # Сопоставление "имя→ключ" собираем из словаря.
+            pairs = []
+            for key, labels in CATEGORY_LABELS.items():
+                pairs.append((labels["ru"], key))
+                pairs.append((labels["uk"], key))
+            for alias, key in _ALIASES.items():
+                pairs.append((alias, key))
+            for name, key in pairs:
+                await self.execute(
+                    """
+                    UPDATE products
+                    SET category_key = $2
+                    WHERE category_key IS NULL
+                      AND LOWER(TRIM(category)) = LOWER(TRIM($1))
+                    """,
+                    name, key,
+                )
+        except Exception as e:
+            print(f"[migrate] category_key backfill failed: {e}")
+
         await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
@@ -348,16 +402,24 @@ class Database:
     ):
         name = f"{brand} {model}".strip()
 
+        # Foundation: параллельно проставляем стабильный category_key.
+        try:
+            from app.categories import category_key as _cat_key
+            cat_key = _cat_key(category)
+        except Exception:
+            cat_key = None
+
         await self.execute(
             """
             INSERT INTO products (
-                name, category, brand, model, price,
+                name, category, category_key, brand, model, price,
                 purchase_price, purchase_currency, sku, warranty_months, stock_qty
             )
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0)
             """,
             name,
             category,
+            cat_key,
             brand,
             model,
             price,
@@ -401,7 +463,7 @@ class Database:
         return await self.fetch(
             """
             SELECT
-                id, category, brand, model, price, stock_qty,
+                id, category, category_key, brand, model, price, stock_qty,
                 warranty_months, photo_url, description, availability_status,
                 current_price, old_price, is_sale, stock_status,
                 boiler_volume_liters, specifications_json
@@ -462,7 +524,7 @@ class Database:
         return await self.fetch(
             """
             SELECT
-                id, category, brand, model, price, stock_qty,
+                id, category, category_key, brand, model, price, stock_qty,
                 warranty_months, photo_url, description, availability_status,
                 current_price, old_price, is_sale, stock_status,
                 boiler_volume_liters, specifications_json
@@ -679,10 +741,16 @@ class Database:
         )
 
     async def update_product_category(self, product_id: int, category: str):
+        try:
+            from app.categories import category_key as _cat_key
+            cat_key = _cat_key(category)
+        except Exception:
+            cat_key = None
         await self.execute(
-            "UPDATE products SET category = $2 WHERE id = $1",
+            "UPDATE products SET category = $2, category_key = $3 WHERE id = $1",
             product_id,
-            category
+            category,
+            cat_key,
         )
 
     async def remove_product_photo(self, product_id: int):

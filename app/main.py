@@ -5919,7 +5919,11 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
         # Сравниваем по стабильному ключу — покрывает все алиасы (RU/UA/legacy).
         target_key = category_key(category)
         if target_key:
-            products = [p for p in products if category_key(p.get("category")) == target_key]
+            def _row_key(p):
+                # Если у товара уже есть колонка category_key — используем её,
+                # иначе вычисляем из текста для совместимости со старыми.
+                return p.get("category_key") or category_key(p.get("category"))
+            products = [p for p in products if _row_key(p) == target_key]
         else:
             # Неизвестная категория — fallback на текстовое сравнение.
             products = [p for p in products if (p["category"] or "").strip().lower() == category.strip().lower()]
