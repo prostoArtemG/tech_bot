@@ -1238,13 +1238,17 @@ async def inline_brands_kb():
     names = [n for n in names if (n or "").strip().lower() not in hidden_lower]
 
     keyboard: list[list[InlineKeyboardButton]] = []
+    # Бренды — по 2 в ряд, чтобы экран не растягивался.
+    row: list[InlineKeyboardButton] = []
     for name in names:
         if not name:
             continue
-        # По одной кнопке в ряд — широкие кнопки.
-        keyboard.append([
-            InlineKeyboardButton(text=name, callback_data=f"add_brand:{name}")
-        ])
+        row.append(InlineKeyboardButton(text=name, callback_data=f"add_brand:{name}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
 
     # Кнопка добавления бренда всегда доступна — и при пустом списке тоже.
     keyboard.append([
@@ -3287,13 +3291,17 @@ async def add_brand_show_hidden_callback(callback: CallbackQuery, state: FSMCont
     hidden = [r for r in rows if not r["is_active"]]
 
     keyboard: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
     for r in hidden:
-        keyboard.append([
-            InlineKeyboardButton(
-                text=r["name"],
-                callback_data=f"add_brand_hidden:{r['id']}",
-            ),
-        ])
+        row.append(InlineKeyboardButton(
+            text=r["name"],
+            callback_data=f"add_brand_hidden:{r['id']}",
+        ))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
     keyboard.append([
         InlineKeyboardButton(text="⬅️ Назад", callback_data="add_brand_back_to_active"),
     ])
@@ -3556,12 +3564,18 @@ async def search_brand_handler(message: Message, state: FSMContext):
         await message.answer(await t(message, "no_products_found"))
         return
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=b, callback_data=f"add_brand:{b}")]
-            for b in found
-        ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
-    )
+    # Бренды по 2 в ряд.
+    kb_rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for b in found:
+        row.append(InlineKeyboardButton(text=b, callback_data=f"add_brand:{b}"))
+        if len(row) == 2:
+            kb_rows.append(row)
+            row = []
+    if row:
+        kb_rows.append(row)
+    kb_rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
     await state.set_state(AddProductState.waiting_for_brand)
     await message.answer("Выбери бренд:", reply_markup=keyboard)
@@ -3609,35 +3623,9 @@ async def add_product_price_handler(message: Message, state: FSMContext):
 
     await state.update_data(price=price)
 
-    await state.set_state(AddProductState.waiting_for_purchase_price)
-    await message.answer("Введите закупочную цену (или 0):")
-
-
-@router.message(AddProductState.waiting_for_purchase_price)
-async def add_product_purchase_handler(message: Message, state: FSMContext):
-    raw = (message.text or "").replace(",", ".")
-
-    try:
-        purchase_price = float(raw)
-    except:
-        await message.answer(await t(message, "enter_number"))
-        return
-
-    await state.update_data(purchase_price=purchase_price)
-
-    await state.set_state(AddProductState.waiting_for_currency)
-    await message.answer("Выберите валюту закупки:", reply_markup=currency_kb)
-
-
-@router.message(AddProductState.waiting_for_currency)
-async def add_product_currency_handler(message: Message, state: FSMContext):
-    currency = message.text
-
-    if currency not in ["UAH", "USD", "EUR"]:
-        await message.answer("Выберите валюту кнопкой")
-        return
-
-    await state.update_data(currency=currency)
+    # Закупочная цена и валюта при добавлении не запрашиваются —
+    # ставятся дефолты (0 / UAH). Их можно поправить позже в редактировании.
+    await state.update_data(purchase_price=0, currency="UAH")
 
     await state.set_state(AddProductState.waiting_for_sku)
     await message.answer("Введите артикул (или -):")
