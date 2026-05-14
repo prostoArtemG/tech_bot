@@ -88,7 +88,16 @@
                     data-placeholder-uk="Пошук: Samsung, холодильник..."
                     placeholder="Поиск: Samsung, холодильник..." value="{{ q }}">
                 <button type="submit" data-ru="Найти" data-uk="Знайти">Найти</button>
+                <button type="button" id="filtersToggleBtn" class="filters-toggle-btn"
+                        aria-expanded="false" aria-controls="filtersPanel"
+                        data-ru="⚙️ Фільтри" data-uk="⚙️ Фільтри">⚙️ Фільтри</button>
             </div>
+            <div id="filtersPanel" class="filters-panel" data-open="false" aria-hidden="true">
+            <div class="filters-panel-header">
+                <span class="filters-panel-title" data-ru="Фильтры" data-uk="Фільтри">Фильтры</span>
+                <button type="button" class="filters-close-btn" id="filtersCloseBtn" aria-label="Закрыть">✕</button>
+            </div>
+            <div class="filters-panel-body">
             <div class="search-filters-row">
                 <select name="brand" class="brand-select" onchange="this.form.submit()">
                   <option value="" data-ru="Все бренды" data-uk="Усі бренди">Все бренды</option>
@@ -176,8 +185,25 @@
                 {% endfor %}
             </div>
             {% endif %}
+            </div>
+            <div class="filters-panel-footer">
+                <button type="submit" class="filters-apply-btn" data-ru="Застосувати" data-uk="Застосувати">Застосувати</button>
+            </div>
+            </div>
         </form>
     </section>
+    <div id="filtersBackdrop" class="filters-backdrop" hidden></div>
+    <script>
+      (function() {
+        var p = document.getElementById('filtersPanel');
+        if (!p) return;
+        var open = !window.matchMedia('(max-width: 768px)').matches;
+        p.setAttribute('data-open', open ? 'true' : 'false');
+        p.setAttribute('aria-hidden', open ? 'false' : 'true');
+        var b = document.getElementById('filtersToggleBtn');
+        if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      })();
+    </script>
 
 
 
@@ -330,6 +356,72 @@
             closeLightbox();
         }
     });
+
+    // ——— Filters panel (desktop collapse / mobile bottom sheet) ———
+    var filtersPanel = document.getElementById('filtersPanel');
+    var filtersToggle = document.getElementById('filtersToggleBtn');
+    var filtersClose = document.getElementById('filtersCloseBtn');
+    var filtersBackdrop = document.getElementById('filtersBackdrop');
+    var MOBILE_BREAKPOINT = 768;
+
+    function isMobileView() {
+        return window.matchMedia('(max-width: ' + MOBILE_BREAKPOINT + 'px)').matches;
+    }
+    function setFiltersOpen(open) {
+        if (!filtersPanel) return;
+        filtersPanel.setAttribute('data-open', open ? 'true' : 'false');
+        filtersPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
+        if (filtersToggle) filtersToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (isMobileView()) {
+            if (filtersBackdrop) {
+                if (open) filtersBackdrop.removeAttribute('hidden');
+                else filtersBackdrop.setAttribute('hidden', '');
+            }
+            document.body.style.overflow = open ? 'hidden' : '';
+        } else {
+            if (filtersBackdrop) filtersBackdrop.setAttribute('hidden', '');
+            document.body.style.overflow = '';
+        }
+    }
+    function syncDefaultState() {
+        // Desktop default: open. Mobile default: closed.
+        setFiltersOpen(!isMobileView());
+    }
+    if (filtersPanel && filtersToggle) {
+        // Initial state set inline before paint; here we only ensure
+        // backdrop / body-scroll consistency with that state.
+        var _initOpen = filtersPanel.getAttribute('data-open') === 'true';
+        if (isMobileView()) {
+            if (_initOpen && filtersBackdrop) filtersBackdrop.removeAttribute('hidden');
+            document.body.style.overflow = _initOpen ? 'hidden' : '';
+        }
+        filtersToggle.addEventListener('click', function() {
+            var open = filtersPanel.getAttribute('data-open') === 'true';
+            setFiltersOpen(!open);
+        });
+        if (filtersClose) {
+            filtersClose.addEventListener('click', function() {
+                setFiltersOpen(false);
+            });
+        }
+        if (filtersBackdrop) {
+            filtersBackdrop.addEventListener('click', function() {
+                setFiltersOpen(false);
+            });
+        }
+        var _resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(syncDefaultState, 150);
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape'
+                && isMobileView()
+                && filtersPanel.getAttribute('data-open') === 'true') {
+                setFiltersOpen(false);
+            }
+        });
+    }
 })();
 </script>
 
