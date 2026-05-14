@@ -584,7 +584,7 @@ SPEC_FIELDS = [
     ("tank_shape",            "Форма баку"),
     ("installation",          "Установка"),
     ("control",               "Керування"),
-    ("ten_type",              "Тип ТЕНу"),
+    ("heater_type",           "Тип ТЕНу"),
     ("power",                 "Потужність"),
     ("ten_count",             "Кількість ТЕНів"),
     ("brand_country",         "Країна реєстрації бренду"),
@@ -594,7 +594,7 @@ SPEC_FIELDS = [
 ]
 SPEC_LABELS = dict(SPEC_FIELDS)
 SPEC_OPTIONS = {
-    "ten_type":              ["Сухий", "Мокрий"],
+    "heater_type":           ["Сухий", "Мокрий"],
     "control":               ["Механічне", "Електронне", "Wi-Fi"],
     "ten_count":             ["1", "2"],
     "tank_shape":            ["Циліндричний", "Плоский", "Кубічний"],
@@ -627,7 +627,7 @@ SPEC_VALUE_MAP = {
         "универсальная": "universal",
         "universal": "universal",
     },
-    "ten_type": {
+    "heater_type": {
         "сухий": "dry",
         "сухой": "dry",
         "dry": "dry",
@@ -641,7 +641,7 @@ SPEC_VALUE_MAP = {
 SPEC_CANON_LABEL_UK = {
     "tank_shape":   {"cylindrical": "Циліндричний", "flat": "Плоский", "cubic": "Кубічний"},
     "installation": {"vertical": "Вертикальна", "horizontal": "Горизонтальна", "universal": "Універсальна"},
-    "ten_type":     {"dry": "Сухий", "wet": "Мокрий"},
+    "heater_type":  {"dry": "Сухий", "wet": "Мокрий"},
 }
 
 
@@ -6110,6 +6110,10 @@ def _product_attr_value(p, key):
     """
     specs = _product_specs(p)
     val = specs.get(key) if isinstance(specs, dict) else None
+    # Back-compat: до миграции часть товаров хранит тип ТЭНа под старым
+    # ключом "ten_type" в specifications_json.
+    if (val is None or val == "") and key == "heater_type" and isinstance(specs, dict):
+        val = specs.get("ten_type")
     if val is None or val == "":
         # legacy fallback
         if key == "volume":
@@ -6125,7 +6129,10 @@ def _product_attr_value(p, key):
                 v = p["boiler_ten_type"]
             except (KeyError, TypeError):
                 v = None
-            return (str(v).strip().lower() or None) if v else None
+            if not v:
+                return None
+            # legacy-колонка может содержать UA/RU label — приводим к canonical
+            return _normalize_spec_value("heater_type", v)
         return None
     return str(val).strip()
 

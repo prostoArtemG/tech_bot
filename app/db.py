@@ -1580,6 +1580,12 @@ class Database:
             "мокрий": "wet",
             "мокрый": "wet",
         },
+        "heater_type": {
+            "сухий": "dry",
+            "сухой": "dry",
+            "мокрий": "wet",
+            "мокрый": "wet",
+        },
     }
     _SPEC_NUMBER_KEYS = {"volume", "power"}
 
@@ -1616,10 +1622,14 @@ class Database:
         """
         import json
 
-        flag_key = "migration_normalize_specs_v1"
+        # v2: + переименование ключа ten_type → heater_type
+        flag_key = "migration_normalize_specs_v2"
         done = await self.get_setting(flag_key)
         if done == "1":
             return
+
+        # Алиасы ключей: legacy_key → canonical_key
+        spec_key_aliases = {"ten_type": "heater_type"}
 
         rows = await self.fetch(
             """
@@ -1645,14 +1655,22 @@ class Database:
             changed = False
             new_specs = {}
             for k, v in specs.items():
-                nv = self._normalize_spec_value(k, v)
+                # Переименование ключа (ten_type → heater_type) с приоритетом
+                # уже существующего нового ключа.
+                canon_key = spec_key_aliases.get(k, k)
+                if canon_key != k:
+                    changed = True
+                if canon_key in new_specs and new_specs[canon_key]:
+                    # уже есть значение под новым ключом — не перетираем
+                    continue
+                nv = self._normalize_spec_value(canon_key, v)
                 if nv is None:
                     if v not in (None, "", "-"):
                         changed = True
                     continue
                 if nv != v:
                     changed = True
-                new_specs[k] = nv
+                new_specs[canon_key] = nv
 
             if changed:
                 await self.execute(
@@ -1662,7 +1680,7 @@ class Database:
                 updated += 1
 
         await self.set_setting(flag_key, "1")
-        print(f"[migrate] normalize specifications: scanned={len(rows)} updated={updated}")
+        print(f"[migrate] normalize specifications v2: scanned={len(rows)} updated={updated}")
 
     async def _seed_default_category_attributes(self):
         """Идемпотентный сидер. Вставляет только отсутствующие записи."""
