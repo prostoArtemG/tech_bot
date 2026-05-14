@@ -6199,18 +6199,32 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
                             dyn_query_extras.append((key, s))
 
                     opts_def = attr.get("options") or []
-                    present = set()
+                    # Map lower(stored value) → original-case form,
+                    # т.к. бот сохраняет лейблы как UA-строки
+                    # ("Плоский", "Сухий"), а в seed value="flat"/"dry" и т.п.
+                    present = {}
                     for p in products_for_options:
                         val = _product_attr_value(p, key)
                         if val:
-                            present.add(val.lower())
+                            present.setdefault(val.strip().lower(), val.strip())
                     opts_render = []
                     for opt in opts_def:
-                        v = str(opt.get("value", "")).strip().lower()
-                        if not v or v not in present:
+                        # Сопоставляем по value / ru / uk — берём первое, что
+                        # реально встречается среди активных товаров.
+                        matched_key = None
+                        for c in (opt.get("value"), opt.get("ru"), opt.get("uk")):
+                            if c is None:
+                                continue
+                            cl = str(c).strip().lower()
+                            if cl and cl in present:
+                                matched_key = cl
+                                break
+                        if matched_key is None:
                             continue
                         opts_render.append({
-                            "value": opt.get("value"),
+                            # value = то, что реально лежит в товаре,
+                            # чтобы фильтр по сабмиту совпадал.
+                            "value": present[matched_key],
                             "label_ru": opt.get("ru") or opt.get("value"),
                             "label_uk": opt.get("uk") or opt.get("ru") or opt.get("value"),
                         })
