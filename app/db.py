@@ -224,6 +224,12 @@ class Database:
         except Exception as e:
             print(f"[migrate] category_key backfill failed: {e}")
 
+        # ── One-shot: normalize legacy spec labels to canonical keys ──
+        try:
+            await self._migrate_normalize_specifications()
+        except Exception as e:
+            print(f"[migrate] normalize specifications failed: {e}")
+
         await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
@@ -1548,6 +1554,115 @@ class Database:
             },
         ],
     }
+
+    # ── Legacy → canonical mapping для specifications_json (для миграции) ──
+    # Маленькая копия SPEC_VALUE_MAP из app/main.py — чтобы не было
+    # circular-import. Если добавляешь новое поле в main.py — продублируй сюда.
+    _SPEC_LEGACY_TO_CANONICAL = {
+        "tank_shape": {
+            "циліндричний": "cylindrical",
+            "цилиндрический": "cylindrical",
+            "плоский": "flat",
+            "кубічний": "cubic",
+            "кубический": "cubic",
+        },
+        "installation": {
+            "вертикальна": "vertical",
+            "вертикальная": "vertical",
+            "горизонтальна": "horizontal",
+            "горизонтальная": "horizontal",
+            "універсальна": "universal",
+            "универсальная": "universal",
+        },
+        "ten_type": {
+            "сухий": "dry",
+            "сухой": "dry",
+            "мокрий": "wet",
+            "мокрый": "wet",
+        },
+    }
+    _SPEC_NUMBER_KEYS = {"volume", "power"}
+
+    @classmethod
+    def _normalize_spec_value(cls, key: str, value):
+        """Привести значение к каноническому виду (для миграции)."""
+        if value is None:
+            return None
+        s = str(value).strip()
+        if not s:
+            return None
+        if key in cls._SPEC_NUMBER_KEYS:
+            import re
+            m = re.search(r"-?\d+(?:[.,]\d+)?", s)
+            if not m:
+                return s
+            num = m.group(0).replace(",", ".")
+            try:
+                f = float(num)
+                return str(int(f) if f.is_integer() else f)
+            except ValueError:
+                return s
+        mp = cls._SPEC_LEGACY_TO_CANONICAL.get(key)
+        if mp:
+            canon = mp.get(s.lower())
+            if canon:
+                return canon
+        return s
+
+    async def _migrate_normalize_specifications(self):
+        """Одноразовая нормализация specifications_json у всех товаров.
+
+        Идемпотентна: помечает завершение через app_settings.
+        """
+        import json
+
+        flag_key = "migration_normalize_specs_v1"
+        done = await self.get_setting(flag_key)
+        if done == "1":
+            return
+
+        rows = await self.fetch(
+            """
+            SELECT id, specifications_json
+            FROM products
+            WHERE specifications_json IS NOT NULL
+              AND specifications_json::text <> '{}'
+            """
+        )
+        updated = 0
+        for r in rows:
+            raw = r["specifications_json"]
+            if isinstance(raw, str):
+                try:
+                    specs = json.loads(raw)
+                except (ValueError, TypeError):
+                    continue
+            else:
+                specs = raw
+            if not isinstance(specs, dict) or not specs:
+                continue
+
+            changed = False
+            new_specs = {}
+            for k, v in specs.items():
+                nv = self._normalize_spec_value(k, v)
+                if nv is None:
+                    if v not in (None, "", "-"):
+                        changed = True
+                    continue
+                if nv != v:
+                    changed = True
+                new_specs[k] = nv
+
+            if changed:
+                await self.execute(
+                    "UPDATE products SET specifications_json = $2::jsonb WHERE id = $1",
+                    r["id"], json.dumps(new_specs, ensure_ascii=False),
+                )
+                updated += 1
+
+        await self.set_setting(flag_key, "1")
+        print(f"[migrate] normalize specifications: scanned={len(rows)} updated={updated}")
 
     async def _seed_default_category_attributes(self):
         """Идемпотентный сидер. Вставляет только отсутствующие записи."""
