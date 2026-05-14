@@ -3422,12 +3422,9 @@ async def brand_activate_cancel_callback(callback: CallbackQuery, state: FSMCont
 async def search_category_handler(message: Message, state: FSMContext):
     query = (message.text or "").strip().lower()
 
-    categories = [
-        "Телевизоры", "Холодильники", "Стиральные машины", "Смартфоны", "Ноутбуки",
-        "Пылесосы", "Микроволновки", "Плиты", "Утюги", "Кофемашины"
-    ]
-
-    found = [c for c in categories if query in c.lower()]
+    lang = await _user_lang(message.from_user.id)
+    items = categories_for_lang(lang)
+    found = [c for c in items if query in c["name"].lower() or query in c["name_ru"].lower() or query in c["name_uk"].lower()]
 
     if not found:
         await message.answer(await t(message, "no_products_found"))
@@ -3435,13 +3432,13 @@ async def search_category_handler(message: Message, state: FSMContext):
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=c, callback_data=f"add_category:{c}")]
+            [InlineKeyboardButton(text=f"{c['emoji']} {c['name']}", callback_data=f"add_category:{c['key']}")]
             for c in found
         ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow")]]
     )
 
     await state.set_state(AddProductState.waiting_for_category)
-    await message.answer("Выберите категорию:", reply_markup=keyboard)
+    await message.answer("Выберите категорию:" if lang == "ru" else "Оберіть категорію:", reply_markup=keyboard)
 
 
 @router.message(AddProductState.waiting_for_brand)
