@@ -332,7 +332,9 @@
                 {% endif %}
             </div>
 
-            <div class="category">{{ product.category }}</div>
+            <div class="category"
+                 data-ru="{{ product.category | cat_ru }}"
+                 data-uk="{{ product.category | cat_uk }}">{{ product.category | cat_ru }}</div>
 
             <h2>{{ product.brand }} {{ product.model }}</h2>
 
