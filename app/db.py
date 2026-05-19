@@ -1553,6 +1553,74 @@ class Database:
                 "is_filter": False, "sort_order": 50,
             },
         ],
+        "air_conditioners": [
+            {
+                "attr_key": "room_area",
+                "label_ru": "Площадь помещения", "label_uk": "Площа приміщення",
+                "attr_type": "number", "unit": "м²",
+                "options_json": [],
+                "is_filter": True, "sort_order": 10,
+            },
+            {
+                "attr_key": "inverter",
+                "label_ru": "Инвертор", "label_uk": "Інвертор",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "yes", "ru": "Да", "uk": "Так"},
+                    {"value": "no",  "ru": "Нет", "uk": "Ні"},
+                ],
+                "is_filter": True, "sort_order": 20,
+            },
+            {
+                "attr_key": "wifi",
+                "label_ru": "Wi-Fi", "label_uk": "Wi-Fi",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "yes", "ru": "Да", "uk": "Так"},
+                    {"value": "no",  "ru": "Нет", "uk": "Ні"},
+                ],
+                "is_filter": True, "sort_order": 30,
+            },
+            {
+                "attr_key": "compressor_type",
+                "label_ru": "Тип компрессора", "label_uk": "Тип компресора",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "inverter",     "ru": "Инверторный",   "uk": "Інверторний"},
+                    {"value": "non_inverter", "ru": "Неинверторный", "uk": "Неінверторний"},
+                ],
+                "is_filter": True, "sort_order": 40,
+            },
+            {
+                "attr_key": "freon",
+                "label_ru": "Хладагент", "label_uk": "Холодоагент",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "r32",   "ru": "R32",   "uk": "R32"},
+                    {"value": "r410a", "ru": "R410A", "uk": "R410A"},
+                ],
+                "is_filter": True, "sort_order": 50,
+            },
+            {
+                "attr_key": "power",
+                "label_ru": "Мощность", "label_uk": "Потужність",
+                "attr_type": "number", "unit": "кВт",
+                "options_json": [],
+                "is_filter": True, "sort_order": 60,
+            },
+            {
+                "attr_key": "energy_class",
+                "label_ru": "Класс энергоэффективности", "label_uk": "Клас енергоефективності",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "a",              "ru": "A",    "uk": "A"},
+                    {"value": "a_plus",         "ru": "A+",   "uk": "A+"},
+                    {"value": "a_plus_plus",    "ru": "A++",  "uk": "A++"},
+                    {"value": "a_plus_plus_plus","ru": "A+++","uk": "A+++"},
+                ],
+                "is_filter": True, "sort_order": 70,
+            },
+        ],
     }
 
     # ── Legacy → canonical mapping для specifications_json (для миграции) ──

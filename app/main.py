@@ -579,6 +579,7 @@ class EditSpecsState(StatesGroup):
 
 
 # ——— Specifications (JSON-based) ———
+# Базовый набор полей (используется по умолчанию и для категории boilers).
 SPEC_FIELDS = [
     ("volume",                "Обʼєм"),
     ("tank_shape",            "Форма баку"),
@@ -601,6 +602,67 @@ SPEC_OPTIONS = {
     "installation":          ["Горизонтальна", "Вертикальна", "Універсальна"],
     "warranty_manufacturer": ["12 міс", "24 міс", "36 міс", "60 міс", "72 міс", "84 міс", "96 міс", "120 міс"],
 }
+
+# ── Per-category overrides ──
+# Для категорий, у которых форма характеристик отличается от boilers.
+# Архитектура та же: список (key, label) + опции-кнопки для select-полей.
+_AC_SPEC_FIELDS = [
+    ("room_area",       "Площа приміщення, м²"),
+    ("inverter",        "Інвертор"),
+    ("wifi",            "Wi-Fi"),
+    ("compressor_type", "Тип компресора"),
+    ("freon",           "Холодоагент"),
+    ("power",           "Потужність, кВт"),
+    ("energy_class",    "Клас енергоефективності"),
+]
+_AC_SPEC_OPTIONS = {
+    "inverter":        ["Так", "Ні"],
+    "wifi":            ["Так", "Ні"],
+    "compressor_type": ["Інверторний", "Неінверторний"],
+    "freon":           ["R32", "R410A"],
+    "energy_class":    ["A", "A+", "A++", "A+++"],
+}
+
+SPEC_FIELDS_BY_CATEGORY = {
+    "boilers":          SPEC_FIELDS,
+    "air_conditioners": _AC_SPEC_FIELDS,
+}
+SPEC_OPTIONS_BY_CATEGORY = {
+    "boilers":          SPEC_OPTIONS,
+    "air_conditioners": _AC_SPEC_OPTIONS,
+}
+
+
+def spec_fields_for(cat_key: str | None):
+    """Список (key, label) для категории. Fallback — глобальный SPEC_FIELDS."""
+    if cat_key and cat_key in SPEC_FIELDS_BY_CATEGORY:
+        return SPEC_FIELDS_BY_CATEGORY[cat_key]
+    return SPEC_FIELDS
+
+
+def spec_labels_for(cat_key: str | None):
+    return dict(spec_fields_for(cat_key))
+
+
+def spec_options_for(cat_key: str | None):
+    if cat_key and cat_key in SPEC_OPTIONS_BY_CATEGORY:
+        return SPEC_OPTIONS_BY_CATEGORY[cat_key]
+    return SPEC_OPTIONS
+
+
+async def _get_product_cat_key(product_id) -> str | None:
+    """Достаёт canonical category key товара (для category-aware spec UI)."""
+    try:
+        p = await db.get_product_by_id(int(product_id))
+    except Exception:
+        return None
+    if not p:
+        return None
+    try:
+        cat = p["category"]
+    except (KeyError, TypeError):
+        cat = None
+    return category_key(cat) if cat else None
 
 # ── Canonical value mapping (mirrors db.DEFAULT_CATEGORY_ATTRIBUTES.options_json) ──
 # Любой ключ — приведённый к нижнему регистру (label UA/RU, или сам canonical) →
@@ -635,6 +697,40 @@ SPEC_VALUE_MAP = {
         "мокрый": "wet",
         "wet": "wet",
     },
+    # ── air_conditioners ──
+    "inverter": {
+        "так": "yes", "да": "yes", "yes": "yes", "+": "yes", "true": "yes", "1": "yes",
+        "ні": "no",  "нет": "no", "no": "no",  "-": "no",  "false": "no", "0": "no",
+    },
+    "wifi": {
+        "так": "yes", "да": "yes", "yes": "yes",
+        "ні": "no",  "нет": "no", "no": "no",
+    },
+    "compressor_type": {
+        "інверторний": "inverter",
+        "инверторный":  "inverter",
+        "inverter":     "inverter",
+        "неінверторний": "non_inverter",
+        "неинверторный": "non_inverter",
+        "non_inverter":  "non_inverter",
+        "non-inverter":  "non_inverter",
+    },
+    "freon": {
+        "r32":   "r32",
+        "r-32":  "r32",
+        "r410a": "r410a",
+        "r-410a": "r410a",
+        "r 410a": "r410a",
+    },
+    "energy_class": {
+        "a":    "a",
+        "a+":   "a_plus",
+        "a++":  "a_plus_plus",
+        "a+++": "a_plus_plus_plus",
+        "a_plus":            "a_plus",
+        "a_plus_plus":       "a_plus_plus",
+        "a_plus_plus_plus":  "a_plus_plus_plus",
+    },
 }
 
 # canonical → UA label (для отображения в боте и на сайте).
@@ -642,14 +738,19 @@ SPEC_CANON_LABEL_UK = {
     "tank_shape":   {"cylindrical": "Циліндричний", "flat": "Плоский", "cubic": "Кубічний"},
     "installation": {"vertical": "Вертикальна", "horizontal": "Горизонтальна", "universal": "Універсальна"},
     "heater_type":  {"dry": "Сухий", "wet": "Мокрий"},
+    "inverter":     {"yes": "Так", "no": "Ні"},
+    "wifi":         {"yes": "Так", "no": "Ні"},
+    "compressor_type": {"inverter": "Інверторний", "non_inverter": "Неінверторний"},
+    "freon":        {"r32": "R32", "r410a": "R410A"},
+    "energy_class": {"a": "A", "a_plus": "A+", "a_plus_plus": "A++", "a_plus_plus_plus": "A+++"},
 }
 
 
 def _normalize_spec_value(key: str, value) -> str:
     """Сохраняемое значение → canonical (где применимо).
 
-    - volume: возвращаем только число ('80' из '80 л').
-    - tank_shape/installation/ten_type: label → canonical key (через SPEC_VALUE_MAP).
+    - volume / room_area / power: возвращаем только число ('80' из '80 л').
+    - select-поля: label → canonical key (через SPEC_VALUE_MAP).
     - остальное: возвращаем .strip() без изменений.
     """
     if value is None:
@@ -657,7 +758,7 @@ def _normalize_spec_value(key: str, value) -> str:
     v = str(value).strip()
     if not v:
         return v
-    if key == "volume":
+    if key in ("volume", "room_area", "power"):
         n = _extract_number(v)
         if n is not None:
             return str(int(n) if float(n).is_integer() else n)
@@ -688,15 +789,28 @@ def _label_for_spec_value(key: str, value) -> str:
             num = int(n) if float(n).is_integer() else n
             return f"{num} л"
         return v
+    if key == "room_area":
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return f"{num} м²"
+        return v
+    if key == "power":
+        # Единица зависит от категории — выводим без неё, чтобы не врать.
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return str(num)
+        return v
     canon_map = SPEC_CANON_LABEL_UK.get(key)
     if canon_map and v in canon_map:
         return canon_map[v]
     return v
 
 
-def inline_specs_kb(product_id: int, current: dict, mode: str = "edit") -> InlineKeyboardMarkup:
+def inline_specs_kb(product_id: int, current: dict, mode: str = "edit", cat_key: str | None = None) -> InlineKeyboardMarkup:
     rows = []
-    for key, label in SPEC_FIELDS:
+    for key, label in spec_fields_for(cat_key):
         raw_val = (current or {}).get(key)
         display = _label_for_spec_value(key, raw_val) if raw_val else None
         text = f"{label}: {display}" if display else label
@@ -720,8 +834,8 @@ def inline_specs_kb(product_id: int, current: dict, mode: str = "edit") -> Inlin
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def inline_specs_options_kb(product_id: int, key: str) -> InlineKeyboardMarkup:
-    options = SPEC_OPTIONS.get(key, [])
+def inline_specs_options_kb(product_id: int, key: str, cat_key: str | None = None) -> InlineKeyboardMarkup:
+    options = spec_options_for(cat_key).get(key, [])
     rows = []
     for idx, opt in enumerate(options):
         rows.append([InlineKeyboardButton(text=opt, callback_data=f"specs_opt:{product_id}:{key}:{idx}")])
@@ -3770,10 +3884,11 @@ async def add_product_warranty_handler(message: Message, state: FSMContext):
     await state.update_data(warranty=warranty, add_product_id=product_id)
 
     current = await db.get_product_specifications(product_id)
+    cat = category_key(data.get("category") or "")
     await message.answer(
         "📋 Характеристики товара\nВыберите поле для заполнения "
         "или нажмите «Завершить добавление».",
-        reply_markup=inline_specs_kb(product_id, current, mode="add"),
+        reply_markup=inline_specs_kb(product_id, current, mode="add", cat_key=cat),
     )
 
 
@@ -3792,9 +3907,11 @@ async def _finalize_add_product_summary(target_message: Message, state: FSMConte
 
     specs_summary = ""
     if specs:
+        cat_for_labels = category_key(data.get("category") or "")
+        labels_map = spec_labels_for(cat_for_labels)
         lines = []
         for k, v in specs.items():
-            label = SPEC_LABELS.get(k, k)
+            label = labels_map.get(k, k)
             lines.append(f"• {label}: {_label_for_spec_value(k, v)}")
         specs_summary = "\n\n📋 Характеристики:\n" + "\n".join(lines)
 
@@ -5022,9 +5139,10 @@ async def edit_action_callback(callback: CallbackQuery, state: FSMContext):
 
     if action == "specs_open":
         current = await db.get_product_specifications(product_id)
+        cat = await _get_product_cat_key(product_id)
         await callback.message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current),
+            reply_markup=inline_specs_kb(product_id, current, cat_key=cat),
         )
         await callback.answer()
         return
@@ -5117,17 +5235,18 @@ async def specs_open_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Ошибка")
         return
     current = await db.get_product_specifications(product_id)
+    cat = await _get_product_cat_key(product_id)
     cur_state = await state.get_state()
     mode = "add" if cur_state == AddProductState.editing_specs.state else "edit"
     try:
         await callback.message.edit_text(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current, mode=mode),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode, cat_key=cat),
         )
     except Exception:
         await callback.message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current, mode=mode),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode, cat_key=cat),
         )
     await callback.answer()
 
@@ -5144,7 +5263,10 @@ async def specs_field_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Ошибка")
         return
     key = parts[2]
-    label = SPEC_LABELS.get(key)
+    cat = await _get_product_cat_key(product_id)
+    labels = spec_labels_for(cat)
+    options_map = spec_options_for(cat)
+    label = labels.get(key)
     if not label:
         await callback.answer("Неизвестное поле")
         return
@@ -5153,10 +5275,10 @@ async def specs_field_callback(callback: CallbackQuery, state: FSMContext):
     cur_state = await state.get_state()
     add_mode = (cur_state == AddProductState.editing_specs.state)
 
-    if key in SPEC_OPTIONS:
+    if key in options_map:
         await callback.message.answer(
             f"Выберите значение для поля «{label}»:",
-            reply_markup=inline_specs_options_kb(product_id, key),
+            reply_markup=inline_specs_options_kb(product_id, key, cat_key=cat),
         )
         await callback.answer()
         return
@@ -5196,7 +5318,8 @@ async def specs_opt_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Ошибка")
         return
     key = parts[2]
-    options = SPEC_OPTIONS.get(key) or []
+    cat = await _get_product_cat_key(product_id)
+    options = spec_options_for(cat).get(key) or []
     if idx < 0 or idx >= len(options):
         await callback.answer("Опция не найдена")
         return
@@ -5209,14 +5332,14 @@ async def specs_opt_callback(callback: CallbackQuery, state: FSMContext):
     try:
         await callback.message.edit_text(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current, mode=mode),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode, cat_key=cat),
         )
     except Exception:
         await callback.message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current, mode=mode),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode, cat_key=cat),
         )
-    await callback.answer(f"✅ {SPEC_LABELS.get(key, key)}: {value}")
+    await callback.answer(f"✅ {spec_labels_for(cat).get(key, key)}: {value}")
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("specs_clear:"))
@@ -5233,17 +5356,18 @@ async def specs_clear_callback(callback: CallbackQuery, state: FSMContext):
     key = parts[2]
     await db.clear_product_specification(product_id, key)
     current = await db.get_product_specifications(product_id)
+    cat = await _get_product_cat_key(product_id)
     cur_state = await state.get_state()
     mode = "add" if cur_state == AddProductState.editing_specs.state else "edit"
     try:
         await callback.message.edit_text(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current, mode=mode),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode, cat_key=cat),
         )
     except Exception:
         await callback.message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(product_id, current, mode=mode),
+            reply_markup=inline_specs_kb(product_id, current, mode=mode, cat_key=cat),
         )
     await callback.answer("🗑 Очищено")
 
@@ -5310,6 +5434,7 @@ async def edit_specs_value_handler(message: Message, state: FSMContext):
         await message.answer(f"✅ {label}: {_label_for_spec_value(key, stored)}")
 
     current = await db.get_product_specifications(int(product_id))
+    cat = await _get_product_cat_key(product_id)
 
     if add_mode:
         # Возвращаемся в меню добавления: чистим только spec-ключи, не теряем
@@ -5324,13 +5449,13 @@ async def edit_specs_value_handler(message: Message, state: FSMContext):
         await message.answer(
             "📋 Характеристики товара\nВыберите поле для заполнения "
             "или нажмите «Завершить добавление».",
-            reply_markup=inline_specs_kb(int(product_id), current, mode="add"),
+            reply_markup=inline_specs_kb(int(product_id), current, mode="add", cat_key=cat),
         )
     else:
         await state.clear()
         await message.answer(
             "📋 Характеристики товара. Выберите поле для редактирования:",
-            reply_markup=inline_specs_kb(int(product_id), current),
+            reply_markup=inline_specs_kb(int(product_id), current, cat_key=cat),
         )
 
 
@@ -6226,7 +6351,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
     dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
-    if target_key_dyn == "boilers":
+    if target_key_dyn in ("boilers", "air_conditioners"):
         try:
             dyn_attrs = await db.get_category_attributes(target_key_dyn, only_filterable=True)
         except Exception as e:
@@ -6563,6 +6688,17 @@ async def product_page(request: Request, product_id: int):
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
 
+    # ── Category-aware spec labels/order для шаблона ──
+    prod_cat = category_key(product.get("category") or "") if isinstance(product, dict) else None
+    if not prod_cat:
+        try:
+            prod_cat = category_key(product["category"] or "")
+        except Exception:
+            prod_cat = None
+    fields_for_product = spec_fields_for(prod_cat)
+    spec_labels_ctx = dict(fields_for_product)
+    spec_field_order_ctx = [k for k, _ in fields_for_product]
+
     return templates.TemplateResponse(
         request=request,
         name="product.html",
@@ -6573,8 +6709,8 @@ async def product_page(request: Request, product_id: int):
                 k: _label_for_spec_value(k, v)
                 for k, v in (specifications or {}).items()
             },
-            "spec_labels": SPEC_LABELS,
-            "spec_field_order": [k for k, _ in SPEC_FIELDS],
+            "spec_labels": spec_labels_ctx,
+            "spec_field_order": spec_field_order_ctx,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
