@@ -654,17 +654,34 @@ _WM_SPEC_OPTIONS = {
     "energy_class": ["A", "A+", "A++", "A+++"],
 }
 
+# hoods
+_HOOD_SPEC_FIELDS = [
+    ("width",             "Ширина, см"),
+    ("productivity",      "Продуктивність, м³/год"),
+    ("control_type",      "Керування"),
+    ("installation_type", "Тип монтажу"),
+    ("noise_level",       "Рівень шуму, дБ"),
+    ("color",             "Колір"),
+]
+_HOOD_SPEC_OPTIONS = {
+    "control_type":      ["Механічне", "Електронне", "Сенсорне"],
+    "installation_type": ["Настінна", "Вбудована", "Острівна", "Телескопічна"],
+    "color":             ["Білий", "Чорний", "Нержавіюча сталь", "Сірий"],
+}
+
 SPEC_FIELDS_BY_CATEGORY = {
     "boilers":          SPEC_FIELDS,
     "air_conditioners": _AC_SPEC_FIELDS,
     "refrigerators":    _REFR_SPEC_FIELDS,
     "washing_machines": _WM_SPEC_FIELDS,
+    "hoods":            _HOOD_SPEC_FIELDS,
 }
 SPEC_OPTIONS_BY_CATEGORY = {
     "boilers":          SPEC_OPTIONS,
     "air_conditioners": _AC_SPEC_OPTIONS,
     "refrigerators":    _REFR_SPEC_OPTIONS,
     "washing_machines": _WM_SPEC_OPTIONS,
+    "hoods":            _HOOD_SPEC_OPTIONS,
 }
 
 
@@ -794,6 +811,42 @@ SPEC_VALUE_MAP = {
         "вертикальне": "top", "вертикальная": "top", "вертикальний": "top",
         "верт": "top", "top": "top", "верхнє": "top", "верхняя": "top",
     },
+    # ── hoods ──
+    "control_type": {
+        "механічне": "mechanical", "механическое": "mechanical",
+        "механический": "mechanical", "механічний": "mechanical",
+        "mechanical": "mechanical",
+        "електронне": "electronic", "электронное": "electronic",
+        "електронний": "electronic", "электронный": "electronic",
+        "electronic": "electronic",
+        "сенсорне": "touch", "сенсорное": "touch",
+        "сенсорний": "touch", "сенсорный": "touch",
+        "touch": "touch",
+    },
+    "installation_type": {
+        "настінна": "wall", "настенная": "wall", "настінний": "wall",
+        "настенный": "wall", "wall": "wall",
+        "вбудована": "built_in", "встраиваемая": "built_in",
+        "встроенная": "built_in", "вбудований": "built_in",
+        "built_in": "built_in", "built-in": "built_in",
+        "острівна": "island", "островная": "island",
+        "острівний": "island", "островной": "island",
+        "island": "island",
+        "телескопічна": "telescopic", "телескопическая": "telescopic",
+        "телескопічний": "telescopic", "телескопический": "telescopic",
+        "telescopic": "telescopic",
+    },
+    "color": {
+        "білий": "white", "белый": "white", "white": "white",
+        "чорний": "black", "чёрный": "black", "черный": "black", "black": "black",
+        "нержавіюча сталь": "stainless_steel",
+        "нержавеющая сталь": "stainless_steel",
+        "нержавіюча": "stainless_steel", "нержавеющая": "stainless_steel",
+        "нержавійка": "stainless_steel", "нержавейка": "stainless_steel",
+        "stainless_steel": "stainless_steel", "stainless steel": "stainless_steel",
+        "inox": "stainless_steel",
+        "сірий": "gray", "серый": "gray", "gray": "gray", "grey": "gray",
+    },
 }
 
 # canonical → UA label (для отображения в боте и на сайте).
@@ -811,6 +864,15 @@ SPEC_CANON_LABEL_UK = {
     "doors":        {"1": "1", "2": "2", "3": "3", "4": "4"},
     "dryer":        {"yes": "Так", "no": "Ні"},
     "loading_type": {"front": "Фронтальне", "top": "Вертикальне"},
+    "control_type": {"mechanical": "Механічне", "electronic": "Електронне", "touch": "Сенсорне"},
+    "installation_type": {
+        "wall": "Настінна", "built_in": "Вбудована",
+        "island": "Острівна", "telescopic": "Телескопічна",
+    },
+    "color": {
+        "white": "Білий", "black": "Чорний",
+        "stainless_steel": "Нержавіюча сталь", "gray": "Сірий",
+    },
 }
 
 
@@ -826,7 +888,7 @@ def _normalize_spec_value(key: str, value) -> str:
     v = str(value).strip()
     if not v:
         return v
-    if key in ("volume", "room_area", "power", "height", "load_capacity", "spin_speed", "depth"):
+    if key in ("volume", "room_area", "power", "height", "load_capacity", "spin_speed", "depth", "width", "productivity", "noise_level"):
         n = _extract_number(v)
         if n is not None:
             return str(int(n) if float(n).is_integer() else n)
@@ -886,6 +948,24 @@ def _label_for_spec_value(key: str, value) -> str:
         if n is not None:
             num = int(n) if float(n).is_integer() else n
             return f"{num} об/хв"
+        return v
+    if key == "width":
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return f"{num} см"
+        return v
+    if key == "productivity":
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return f"{num} м³/год"
+        return v
+    if key == "noise_level":
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return f"{num} дБ"
         return v
     if key == "power":
         # Единица зависит от категории — выводим без неё, чтобы не врать.
@@ -6436,14 +6516,14 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     #                              (?<key>_min=, ?<key>_max=).
     #
     # volume — всегда чекбоксы (см. ТЗ). Остальные number — пока range.
-    DISCRETE_NUMBER_KEYS = {"volume", "height", "load_capacity", "spin_speed", "depth"}
+    DISCRETE_NUMBER_KEYS = {"volume", "height", "load_capacity", "spin_speed", "depth", "width", "productivity", "noise_level"}
     dyn_attrs = []
     dyn_options = {}   # attr_key → list[{value, label_ru, label_uk}] (checkbox-режим)
     dyn_selected = {}  # attr_key → list[str] (checkbox-режим)
     dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
     dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
-    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines"):
+    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines", "hoods"):
         try:
             dyn_attrs = await db.get_category_attributes(target_key_dyn, only_filterable=True)
         except Exception as e:

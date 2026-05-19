@@ -1737,6 +1737,64 @@ class Database:
                 "is_filter": True, "sort_order": 60,
             },
         ],
+        "hoods": [
+            {
+                "attr_key": "width",
+                "label_ru": "Ширина", "label_uk": "Ширина",
+                "attr_type": "number", "unit": "см",
+                "options_json": [],
+                "is_filter": True, "sort_order": 10,
+            },
+            {
+                "attr_key": "productivity",
+                "label_ru": "Производительность", "label_uk": "Продуктивність",
+                "attr_type": "number", "unit": "м³/год",
+                "options_json": [],
+                "is_filter": True, "sort_order": 20,
+            },
+            {
+                "attr_key": "control_type",
+                "label_ru": "Управление", "label_uk": "Керування",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "mechanical", "ru": "Механическое", "uk": "Механічне"},
+                    {"value": "electronic", "ru": "Электронное",  "uk": "Електронне"},
+                    {"value": "touch",      "ru": "Сенсорное",    "uk": "Сенсорне"},
+                ],
+                "is_filter": True, "sort_order": 30,
+            },
+            {
+                "attr_key": "installation_type",
+                "label_ru": "Тип монтажа", "label_uk": "Тип монтажу",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "wall",       "ru": "Настенная",   "uk": "Настінна"},
+                    {"value": "built_in",   "ru": "Встраиваемая","uk": "Вбудована"},
+                    {"value": "island",     "ru": "Островная",   "uk": "Острівна"},
+                    {"value": "telescopic", "ru": "Телескопическая","uk": "Телескопічна"},
+                ],
+                "is_filter": True, "sort_order": 40,
+            },
+            {
+                "attr_key": "noise_level",
+                "label_ru": "Уровень шума", "label_uk": "Рівень шуму",
+                "attr_type": "number", "unit": "дБ",
+                "options_json": [],
+                "is_filter": True, "sort_order": 50,
+            },
+            {
+                "attr_key": "color",
+                "label_ru": "Цвет", "label_uk": "Колір",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "white",           "ru": "Белый",            "uk": "Білий"},
+                    {"value": "black",           "ru": "Чёрный",           "uk": "Чорний"},
+                    {"value": "stainless_steel", "ru": "Нержавеющая сталь","uk": "Нержавіюча сталь"},
+                    {"value": "gray",            "ru": "Серый",            "uk": "Сірий"},
+                ],
+                "is_filter": True, "sort_order": 60,
+            },
+        ],
     }
 
     # ── Legacy → canonical mapping для specifications_json (для миграции) ──
