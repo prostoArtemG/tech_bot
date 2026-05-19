@@ -2112,27 +2112,25 @@ class Database:
         print(f"[migrate] normalize specifications v2: scanned={len(rows)} updated={updated}")
 
     async def _migrate_ac_attributes_v2(self):
-        """One-shot: обновляет category_attributes для air_conditioners.
+        """Идемпотентно обновляет category_attributes для air_conditioners.
 
-        - inverter / wifi / power → is_filter = FALSE (legacy, не ломаем данные).
+        - inverter / wifi / power → is_filter = FALSE (legacy, данные не трогаем).
         - compressor_type: опция non_inverter → «Звичайний» / «Обычный».
         - freon: label_uk → «Фреон».
-        - Добавляет новые поля (power_consumption, cooling_heating_capacity,
-          indoor_outdoor_dimensions, indoor_noise_level) через сидер.
+        - Новые поля (power_consumption, cooling_heating_capacity,
+          indoor_outdoor_dimensions, indoor_noise_level) добавит сидер
+          через ON CONFLICT DO NOTHING.
+
+        Безопасно вызывать многократно (только UPDATE-ы).
         """
         import json
-        flag_key = "migrate_ac_attributes_v2_done"
-        done = await self.fetchval("SELECT value FROM settings WHERE key = $1", flag_key)
-        if done == "1":
-            return
-        # Снять is_filter с устаревших полей
-        for attr_key in ("inverter", "wifi", "power"):
-            await self.execute(
-                "UPDATE category_attributes SET is_filter = FALSE "
-                "WHERE category_key = 'air_conditioners' AND attr_key = $1",
-                attr_key,
-            )
-        # Обновить метку compressor_type (non_inverter → Звичайний)
+        # 1. Снять is_filter с устаревших полей
+        await self.execute(
+            "UPDATE category_attributes SET is_filter = FALSE "
+            "WHERE category_key = 'air_conditioners' "
+            "AND attr_key IN ('inverter', 'wifi', 'power')",
+        )
+        # 2. Обновить метку compressor_type (non_inverter → Звичайний)
         new_ct_opts = json.dumps([
             {"value": "inverter",     "ru": "Инверторный", "uk": "Інверторний"},
             {"value": "non_inverter", "ru": "Обычный",     "uk": "Звичайний"},
@@ -2142,14 +2140,20 @@ class Database:
             "WHERE category_key = 'air_conditioners' AND attr_key = 'compressor_type'",
             new_ct_opts,
         )
-        # Обновить label_uk для freon
+        # 3. Обновить label_uk для freon
         await self.execute(
             "UPDATE category_attributes SET label_uk = 'Фреон' "
             "WHERE category_key = 'air_conditioners' AND attr_key = 'freon'",
         )
-        # Новые поля добавит сидер (_seed_default_category_attributes) через ON CONFLICT DO NOTHING
-        await self.set_setting(flag_key, "1")
-        print("[migrate] ac_attributes_v2: done")
+        # 4. Гарантировать, что новые text-поля НЕ являются фильтрами,
+        #    даже если кто-то их вручную пометил.
+        await self.execute(
+            "UPDATE category_attributes SET is_filter = FALSE "
+            "WHERE category_key = 'air_conditioners' "
+            "AND attr_key IN ('power_consumption', 'cooling_heating_capacity', "
+            "                 'indoor_outdoor_dimensions', 'indoor_noise_level')",
+        )
+        print("[migrate] ac_attributes_v2: applied")
 
     async def _seed_default_category_attributes(self):
         """Идемпотентный сидер. Вставляет только отсутствующие записи."""
