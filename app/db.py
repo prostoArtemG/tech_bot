@@ -1795,6 +1795,75 @@ class Database:
                 "is_filter": True, "sort_order": 60,
             },
         ],
+        "microwaves": [
+            {
+                "attr_key": "volume",
+                "label_ru": "Объем", "label_uk": "Обʼєм",
+                "attr_type": "number", "unit": "л",
+                "options_json": [],
+                "is_filter": True, "sort_order": 10,
+            },
+            {
+                "attr_key": "power",
+                "label_ru": "Мощность", "label_uk": "Потужність",
+                "attr_type": "number", "unit": "Вт",
+                "options_json": [],
+                "is_filter": True, "sort_order": 20,
+            },
+            {
+                "attr_key": "control_type",
+                "label_ru": "Управление", "label_uk": "Керування",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "mechanical", "ru": "Механическое", "uk": "Механічне"},
+                    {"value": "electronic", "ru": "Электронное",  "uk": "Електронне"},
+                    {"value": "touch",      "ru": "Сенсорное",    "uk": "Сенсорне"},
+                ],
+                "is_filter": True, "sort_order": 30,
+            },
+            {
+                "attr_key": "grill",
+                "label_ru": "Гриль", "label_uk": "Гриль",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "yes", "ru": "Да",  "uk": "Так"},
+                    {"value": "no",  "ru": "Нет", "uk": "Ні"},
+                ],
+                "is_filter": True, "sort_order": 40,
+            },
+            {
+                "attr_key": "convection",
+                "label_ru": "Конвекция", "label_uk": "Конвекція",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "yes", "ru": "Да",  "uk": "Так"},
+                    {"value": "no",  "ru": "Нет", "uk": "Ні"},
+                ],
+                "is_filter": True, "sort_order": 50,
+            },
+            {
+                "attr_key": "installation_type",
+                "label_ru": "Тип", "label_uk": "Тип",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "solo",     "ru": "Соло",          "uk": "Соло"},
+                    {"value": "built_in", "ru": "Встраиваемая",  "uk": "Вбудована"},
+                ],
+                "is_filter": True, "sort_order": 60,
+            },
+            {
+                "attr_key": "color",
+                "label_ru": "Цвет", "label_uk": "Колір",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "white",           "ru": "Белый",            "uk": "Білий"},
+                    {"value": "black",           "ru": "Чёрный",           "uk": "Чорний"},
+                    {"value": "stainless_steel", "ru": "Нержавеющая сталь","uk": "Нержавіюча сталь"},
+                    {"value": "gray",            "ru": "Серый",            "uk": "Сірий"},
+                ],
+                "is_filter": True, "sort_order": 70,
+            },
+        ],
     }
 
     # ── Legacy → canonical mapping для specifications_json (для миграции) ──

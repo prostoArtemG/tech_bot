@@ -669,12 +669,31 @@ _HOOD_SPEC_OPTIONS = {
     "color":             ["Білий", "Чорний", "Нержавіюча сталь", "Сірий"],
 }
 
+# microwaves
+_MW_SPEC_FIELDS = [
+    ("volume",            "Обʼєм, л"),
+    ("power",             "Потужність, Вт"),
+    ("control_type",      "Керування"),
+    ("grill",             "Гриль"),
+    ("convection",        "Конвекція"),
+    ("installation_type", "Тип"),
+    ("color",             "Колір"),
+]
+_MW_SPEC_OPTIONS = {
+    "control_type":      ["Механічне", "Електронне", "Сенсорне"],
+    "grill":             ["Так", "Ні"],
+    "convection":        ["Так", "Ні"],
+    "installation_type": ["Соло", "Вбудована"],
+    "color":             ["Білий", "Чорний", "Нержавіюча сталь", "Сірий"],
+}
+
 SPEC_FIELDS_BY_CATEGORY = {
     "boilers":          SPEC_FIELDS,
     "air_conditioners": _AC_SPEC_FIELDS,
     "refrigerators":    _REFR_SPEC_FIELDS,
     "washing_machines": _WM_SPEC_FIELDS,
     "hoods":            _HOOD_SPEC_FIELDS,
+    "microwaves":       _MW_SPEC_FIELDS,
 }
 SPEC_OPTIONS_BY_CATEGORY = {
     "boilers":          SPEC_OPTIONS,
@@ -682,6 +701,7 @@ SPEC_OPTIONS_BY_CATEGORY = {
     "refrigerators":    _REFR_SPEC_OPTIONS,
     "washing_machines": _WM_SPEC_OPTIONS,
     "hoods":            _HOOD_SPEC_OPTIONS,
+    "microwaves":       _MW_SPEC_OPTIONS,
 }
 
 
@@ -835,6 +855,8 @@ SPEC_VALUE_MAP = {
         "телескопічна": "telescopic", "телескопическая": "telescopic",
         "телескопічний": "telescopic", "телескопический": "telescopic",
         "telescopic": "telescopic",
+        "соло": "solo", "solo": "solo", "окрема": "solo", "отдельная": "solo",
+        "окремий": "solo", "отдельный": "solo", "standalone": "solo",
     },
     "color": {
         "білий": "white", "белый": "white", "white": "white",
@@ -846,6 +868,15 @@ SPEC_VALUE_MAP = {
         "stainless_steel": "stainless_steel", "stainless steel": "stainless_steel",
         "inox": "stainless_steel",
         "сірий": "gray", "серый": "gray", "gray": "gray", "grey": "gray",
+    },
+    # ── microwaves (extra yes/no keys) ──
+    "grill": {
+        "так": "yes", "да": "yes", "yes": "yes", "+": "yes", "true": "yes", "1": "yes",
+        "ні": "no",  "нет": "no", "no": "no",  "-": "no",  "false": "no", "0": "no",
+    },
+    "convection": {
+        "так": "yes", "да": "yes", "yes": "yes", "+": "yes", "true": "yes", "1": "yes",
+        "ні": "no",  "нет": "no", "no": "no",  "-": "no",  "false": "no", "0": "no",
     },
 }
 
@@ -868,11 +899,14 @@ SPEC_CANON_LABEL_UK = {
     "installation_type": {
         "wall": "Настінна", "built_in": "Вбудована",
         "island": "Острівна", "telescopic": "Телескопічна",
+        "solo": "Соло",
     },
     "color": {
         "white": "Білий", "black": "Чорний",
         "stainless_steel": "Нержавіюча сталь", "gray": "Сірий",
     },
+    "grill":      {"yes": "Так", "no": "Ні"},
+    "convection": {"yes": "Так", "no": "Ні"},
 }
 
 
@@ -6517,18 +6551,25 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     #
     # volume — всегда чекбоксы (см. ТЗ). Остальные number — пока range.
     DISCRETE_NUMBER_KEYS = {"volume", "height", "load_capacity", "spin_speed", "depth", "width", "productivity", "noise_level"}
+    # Категорийные переопределения: для каких категорий доп. number-атрибуты тоже чекбоксы.
+    DISCRETE_NUMBER_KEYS_BY_CATEGORY = {
+        "microwaves": {"power"},
+    }
     dyn_attrs = []
     dyn_options = {}   # attr_key → list[{value, label_ru, label_uk}] (checkbox-режим)
     dyn_selected = {}  # attr_key → list[str] (checkbox-режим)
     dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
     dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
-    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines", "hoods"):
+    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines", "hoods", "microwaves"):
         try:
             dyn_attrs = await db.get_category_attributes(target_key_dyn, only_filterable=True)
         except Exception as e:
             print(f"[site] get_category_attributes failed: {e}")
             dyn_attrs = []
+
+    # Расширяем discrete-набор переопределениями для текущей категории.
+    discrete_keys_effective = DISCRETE_NUMBER_KEYS | DISCRETE_NUMBER_KEYS_BY_CATEGORY.get(target_key_dyn, set())
 
     products_for_options = list(products) if dyn_attrs else []
 
@@ -6542,7 +6583,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             # Определяем тип рендера и проставляем в attr для шаблона.
             if atype == "select":
                 render_kind = "checkbox"
-            elif atype == "number" and key in DISCRETE_NUMBER_KEYS:
+            elif atype == "number" and key in discrete_keys_effective:
                 render_kind = "checkbox"
             elif atype == "number":
                 render_kind = "range"
