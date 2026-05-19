@@ -623,13 +623,31 @@ _AC_SPEC_OPTIONS = {
     "energy_class":    ["A", "A+", "A++", "A+++"],
 }
 
+# refrigerators
+_REFR_SPEC_FIELDS = [
+    ("no_frost",         "No Frost"),
+    ("volume",           "Обʼєм, л"),
+    ("height",           "Висота, см"),
+    ("freezer_position", "Морозильна камера"),
+    ("doors",            "Кількість дверей"),
+    ("energy_class",     "Клас енергоспоживання"),
+]
+_REFR_SPEC_OPTIONS = {
+    "no_frost":         ["Так", "Ні"],
+    "freezer_position": ["Зверху", "Знизу", "Side-by-Side"],
+    "doors":            ["1", "2", "3", "4"],
+    "energy_class":     ["A", "A+", "A++", "A+++"],
+}
+
 SPEC_FIELDS_BY_CATEGORY = {
     "boilers":          SPEC_FIELDS,
     "air_conditioners": _AC_SPEC_FIELDS,
+    "refrigerators":    _REFR_SPEC_FIELDS,
 }
 SPEC_OPTIONS_BY_CATEGORY = {
     "boilers":          SPEC_OPTIONS,
     "air_conditioners": _AC_SPEC_OPTIONS,
+    "refrigerators":    _REFR_SPEC_OPTIONS,
 }
 
 
@@ -731,6 +749,23 @@ SPEC_VALUE_MAP = {
         "a_plus_plus":       "a_plus_plus",
         "a_plus_plus_plus":  "a_plus_plus_plus",
     },
+    # ── refrigerators ──
+    "no_frost": {
+        "так": "yes", "да": "yes", "yes": "yes", "+": "yes", "true": "yes", "1": "yes",
+        "ні": "no",  "нет": "no", "no": "no",  "-": "no",  "false": "no", "0": "no",
+    },
+    "freezer_position": {
+        "зверху": "top", "сверху": "top", "верх": "top", "top": "top",
+        "знизу": "bottom", "снизу": "bottom", "низ": "bottom", "bottom": "bottom",
+        "side-by-side": "side_by_side",
+        "side_by_side": "side_by_side",
+        "side by side": "side_by_side",
+        "сайд-бай-сайд": "side_by_side",
+        "сайд бай сайд": "side_by_side",
+    },
+    "doors": {
+        "1": "1", "2": "2", "3": "3", "4": "4",
+    },
 }
 
 # canonical → UA label (для отображения в боте и на сайте).
@@ -743,6 +778,9 @@ SPEC_CANON_LABEL_UK = {
     "compressor_type": {"inverter": "Інверторний", "non_inverter": "Неінверторний"},
     "freon":        {"r32": "R32", "r410a": "R410A"},
     "energy_class": {"a": "A", "a_plus": "A+", "a_plus_plus": "A++", "a_plus_plus_plus": "A+++"},
+    "no_frost":     {"yes": "Так", "no": "Ні"},
+    "freezer_position": {"top": "Зверху", "bottom": "Знизу", "side_by_side": "Side-by-Side"},
+    "doors":        {"1": "1", "2": "2", "3": "3", "4": "4"},
 }
 
 
@@ -758,7 +796,7 @@ def _normalize_spec_value(key: str, value) -> str:
     v = str(value).strip()
     if not v:
         return v
-    if key in ("volume", "room_area", "power"):
+    if key in ("volume", "room_area", "power", "height"):
         n = _extract_number(v)
         if n is not None:
             return str(int(n) if float(n).is_integer() else n)
@@ -794,6 +832,12 @@ def _label_for_spec_value(key: str, value) -> str:
         if n is not None:
             num = int(n) if float(n).is_integer() else n
             return f"{num} м²"
+        return v
+    if key == "height":
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return f"{num} см"
         return v
     if key == "power":
         # Единица зависит от категории — выводим без неё, чтобы не врать.
@@ -6344,14 +6388,14 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     #                              (?<key>_min=, ?<key>_max=).
     #
     # volume — всегда чекбоксы (см. ТЗ). Остальные number — пока range.
-    DISCRETE_NUMBER_KEYS = {"volume"}
+    DISCRETE_NUMBER_KEYS = {"volume", "height"}
     dyn_attrs = []
     dyn_options = {}   # attr_key → list[{value, label_ru, label_uk}] (checkbox-режим)
     dyn_selected = {}  # attr_key → list[str] (checkbox-режим)
     dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
     dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
-    if target_key_dyn in ("boilers", "air_conditioners"):
+    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators"):
         try:
             dyn_attrs = await db.get_category_attributes(target_key_dyn, only_filterable=True)
         except Exception as e:

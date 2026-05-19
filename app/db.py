@@ -1621,6 +1621,67 @@ class Database:
                 "is_filter": True, "sort_order": 70,
             },
         ],
+        "refrigerators": [
+            {
+                "attr_key": "no_frost",
+                "label_ru": "No Frost", "label_uk": "No Frost",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "yes", "ru": "Да",  "uk": "Так"},
+                    {"value": "no",  "ru": "Нет", "uk": "Ні"},
+                ],
+                "is_filter": True, "sort_order": 10,
+            },
+            {
+                "attr_key": "volume",
+                "label_ru": "Объём", "label_uk": "Об'єм",
+                "attr_type": "number", "unit": "л",
+                "options_json": [],
+                "is_filter": True, "sort_order": 20,
+            },
+            {
+                "attr_key": "height",
+                "label_ru": "Высота", "label_uk": "Висота",
+                "attr_type": "number", "unit": "см",
+                "options_json": [],
+                "is_filter": True, "sort_order": 30,
+            },
+            {
+                "attr_key": "freezer_position",
+                "label_ru": "Морозильная камера", "label_uk": "Морозильна камера",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "top",           "ru": "Сверху",      "uk": "Зверху"},
+                    {"value": "bottom",        "ru": "Снизу",       "uk": "Знизу"},
+                    {"value": "side_by_side",  "ru": "Side-by-Side","uk": "Side-by-Side"},
+                ],
+                "is_filter": True, "sort_order": 40,
+            },
+            {
+                "attr_key": "doors",
+                "label_ru": "Количество дверей", "label_uk": "Кількість дверей",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "1", "ru": "1", "uk": "1"},
+                    {"value": "2", "ru": "2", "uk": "2"},
+                    {"value": "3", "ru": "3", "uk": "3"},
+                    {"value": "4", "ru": "4", "uk": "4"},
+                ],
+                "is_filter": True, "sort_order": 50,
+            },
+            {
+                "attr_key": "energy_class",
+                "label_ru": "Класс энергопотребления", "label_uk": "Клас енергоспоживання",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "a",              "ru": "A",    "uk": "A"},
+                    {"value": "a_plus",         "ru": "A+",   "uk": "A+"},
+                    {"value": "a_plus_plus",    "ru": "A++",  "uk": "A++"},
+                    {"value": "a_plus_plus_plus","ru": "A+++","uk": "A+++"},
+                ],
+                "is_filter": True, "sort_order": 60,
+            },
+        ],
     }
 
     # ── Legacy → canonical mapping для specifications_json (для миграции) ──
