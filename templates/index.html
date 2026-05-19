@@ -580,6 +580,18 @@ var FILTER_META = {
 
   params.forEach(function (value, key) {
     if (key === 'page' || key === 'category') return;
+    // Skip empty / blank values
+    if (!value || !value.trim()) return;
+    // Skip price filters that aren't positive numbers
+    if (key === 'price_min' || key === 'price_max') {
+      var pv = parseFloat(value);
+      if (isNaN(pv) || pv <= 0) return;
+    }
+    // Skip dynamic range params (_min / _max) with non-numeric values
+    if (key !== 'price_min' && key !== 'price_max' &&
+        (key.endsWith('_min') || key.endsWith('_max'))) {
+      if (isNaN(parseFloat(value))) return;
+    }
     chips.push({ key: key, value: value, label: getLabel(key, value) });
   });
 

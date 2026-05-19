@@ -2369,16 +2369,27 @@ button:hover {
         gap: 8px !important;
     }
 
-    /* Search input takes full width */
+    /* Search input + button — flex row in sidebar (override global grid) */
     .catalog-layout .search-main-row {
-        padding: 0;
-        margin-bottom: 10px;
+        display: flex !important;
+        max-width: 100% !important;
+        margin: 0 0 12px 0 !important;
+        padding: 0 !important;
+        gap: 8px !important;
     }
     .catalog-layout .search-main-row input[type="text"] {
+        flex: 1 !important;
+        min-width: 0 !important;
+        width: auto !important;
         border-radius: 10px !important;
         font-size: 13.5px !important;
     }
     .catalog-layout .search-main-row button[type="submit"] {
+        flex-shrink: 0 !important;
+        width: auto !important;
+        min-width: 60px !important;
+        max-width: none !important;
+        padding: 0 12px !important;
         border-radius: 10px !important;
         font-size: 13px !important;
     }
@@ -2475,6 +2486,10 @@ button:hover {
 .chip-label {
     line-height: 1.2;
     font-size: 12.5px;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .chip-remove {
     font-size: 10px;
