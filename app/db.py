@@ -1682,6 +1682,61 @@ class Database:
                 "is_filter": True, "sort_order": 60,
             },
         ],
+        "washing_machines": [
+            {
+                "attr_key": "load_capacity",
+                "label_ru": "Загрузка", "label_uk": "Завантаження",
+                "attr_type": "number", "unit": "кг",
+                "options_json": [],
+                "is_filter": True, "sort_order": 10,
+            },
+            {
+                "attr_key": "spin_speed",
+                "label_ru": "Отжим", "label_uk": "Віджим",
+                "attr_type": "number", "unit": "об/хв",
+                "options_json": [],
+                "is_filter": True, "sort_order": 20,
+            },
+            {
+                "attr_key": "depth",
+                "label_ru": "Глубина", "label_uk": "Глибина",
+                "attr_type": "number", "unit": "см",
+                "options_json": [],
+                "is_filter": True, "sort_order": 30,
+            },
+            {
+                "attr_key": "dryer",
+                "label_ru": "Сушка", "label_uk": "Сушіння",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "yes", "ru": "Да",  "uk": "Так"},
+                    {"value": "no",  "ru": "Нет", "uk": "Ні"},
+                ],
+                "is_filter": True, "sort_order": 40,
+            },
+            {
+                "attr_key": "loading_type",
+                "label_ru": "Тип загрузки", "label_uk": "Тип завантаження",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "front", "ru": "Фронтальная", "uk": "Фронтальне"},
+                    {"value": "top",   "ru": "Вертикальная","uk": "Вертикальне"},
+                ],
+                "is_filter": True, "sort_order": 50,
+            },
+            {
+                "attr_key": "energy_class",
+                "label_ru": "Класс энергопотребления", "label_uk": "Клас енергоспоживання",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "a",              "ru": "A",    "uk": "A"},
+                    {"value": "a_plus",         "ru": "A+",   "uk": "A+"},
+                    {"value": "a_plus_plus",    "ru": "A++",  "uk": "A++"},
+                    {"value": "a_plus_plus_plus","ru": "A+++","uk": "A+++"},
+                ],
+                "is_filter": True, "sort_order": 60,
+            },
+        ],
     }
 
     # ── Legacy → canonical mapping для specifications_json (для миграции) ──
