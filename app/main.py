@@ -1183,7 +1183,7 @@ class SiteProductPreviewState(StatesGroup):
 
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="� Заказы")],
+        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
         [KeyboardButton(text="🌐 Сайт"), KeyboardButton(text="🌐 Язык")],
         [KeyboardButton(text="❌ Сброс")],
     ],
@@ -1243,7 +1243,7 @@ def inline_order_actions_kb(order_id: int):
     )
 seller_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="� Товары"), KeyboardButton(text="📋 Заказы")],
+        [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
         [KeyboardButton(text="🌐 Сайт"), KeyboardButton(text="🌐 Язык")],
         [KeyboardButton(text="❌ Сброс")],
     ],
@@ -1357,9 +1357,9 @@ site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакты сайта")],
         [KeyboardButton(text="🧢 Шапка сайта")],
-        [KeyboardButton(text="� Баннер сайта")],
+        [KeyboardButton(text="🖼 Баннер сайта")],
         [KeyboardButton(text="📣 Промо-плашка")],
-        [KeyboardButton(text="�👀 Просмотр товара на сайте")],
+        [KeyboardButton(text="👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
         [KeyboardButton(text="📄 Страницы сайта")],
         [KeyboardButton(text="✏️ Редактировать товар")],
