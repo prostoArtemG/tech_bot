@@ -1357,7 +1357,9 @@ site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакты сайта")],
         [KeyboardButton(text="🧢 Шапка сайта")],
-        [KeyboardButton(text="👀 Просмотр товара на сайте")],
+        [KeyboardButton(text="� Баннер сайта")],
+        [KeyboardButton(text="📣 Промо-плашка")],
+        [KeyboardButton(text="�👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
         [KeyboardButton(text="📄 Страницы сайта")],
         [KeyboardButton(text="✏️ Редактировать товар")],
@@ -1387,9 +1389,25 @@ site_banner_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Показать баннер")],
         [KeyboardButton(text="📝 Текст баннера")],
+        [KeyboardButton(text="🏷 Заголовок hero")],
+        [KeyboardButton(text="📄 Подзаголовок hero")],
+        [KeyboardButton(text="🔘 Кнопка hero (текст)")],
+        [KeyboardButton(text="🔗 Кнопка hero (URL)")],
         [KeyboardButton(text="🖼 Фото баннера (URL)")],
         [KeyboardButton(text="👁 Баннер: вкл/выкл")],
         [KeyboardButton(text="♻️ Сбросить баннер")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+site_promo_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Показать промо")],
+        [KeyboardButton(text="📝 Текст промо")],
+        [KeyboardButton(text="📅 Дата окончания промо")],
+        [KeyboardButton(text="👁 Промо: вкл/выкл")],
+        [KeyboardButton(text="♻️ Сбросить промо")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -2594,6 +2612,15 @@ DESIGN_DEFAULTS = {
     "banner_text": "",
     "banner_image_url": "",
     "banner_enabled": "false",
+    # promo bar
+    "promo_enabled": "false",
+    "promo_text": "",
+    "promo_end_date": "",  # ISO date string YYYY-MM-DD
+    # hero banner extra fields
+    "hero_title": "",
+    "hero_subtitle": "",
+    "hero_button_text": "",
+    "hero_button_url": "/",
 }
 
 HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -2607,6 +2634,14 @@ async def get_site_design():
         "banner_text": (await db.get_setting("banner_text")) or "",
         "banner_image_url": (await db.get_setting("banner_image_url")) or "",
         "banner_enabled": ((await db.get_setting("banner_enabled")) or "false") == "true",
+        "hero_title": (await db.get_setting("hero_title")) or "",
+        "hero_subtitle": (await db.get_setting("hero_subtitle")) or "",
+        "hero_button_text": (await db.get_setting("hero_button_text")) or "",
+        "hero_button_url": (await db.get_setting("hero_button_url")) or "/",
+        # promo bar
+        "promo_enabled": ((await db.get_setting("promo_enabled")) or "false") == "true",
+        "promo_text": (await db.get_setting("promo_text")) or "",
+        "promo_end_date": (await db.get_setting("promo_end_date")) or "",
     }
 
 
@@ -2701,18 +2736,28 @@ async def site_banner_show(message: Message):
     await message.answer(
         "🖼 Баннер сайта:\n\n"
         f"Состояние: {state_text}\n"
-        f"Текст: {design['banner_text'] or '-'}\n"
-        f"Фото: {design['banner_image_url'] or '-'}"
+        f"Текст баннера: {design['banner_text'] or '-'}\n"
+        f"Фото: {design['banner_image_url'] or '-'}\n\n"
+        f"— Hero-блок —\n"
+        f"Заголовок: {design['hero_title'] or '-'}\n"
+        f"Подзаголовок: {design['hero_subtitle'] or '-'}\n"
+        f"Кнопка: {design['hero_button_text'] or '-'} → {design['hero_button_url'] or '/'}"
     )
 
 
-@router.message(lambda m: m.text in {"📝 Текст баннера", "🖼 Фото баннера (URL)"})
+@router.message(lambda m: m.text in {"📝 Текст баннера", "🖼 Фото баннера (URL)",
+                                      "🏷 Заголовок hero", "📄 Подзаголовок hero",
+                                      "🔘 Кнопка hero (текст)", "🔗 Кнопка hero (URL)"})
 async def site_banner_field_start(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     field_map = {
-        "📝 Текст баннера": ("banner_text", "Введите текст баннера (отправьте «-» чтобы очистить):"),
-        "🖼 Фото баннера (URL)": ("banner_image_url", "Введите URL изображения баннера (отправьте «-» чтобы очистить):"),
+        "📝 Текст баннера":        ("banner_text",       "Введите текст баннера (отправьте «-» чтобы очистить):"),
+        "🖼 Фото баннера (URL)":   ("banner_image_url",  "Введите URL изображения баннера (отправьте «-» чтобы очистить):"),
+        "🏷 Заголовок hero":       ("hero_title",        "Введите заголовок hero-баннера (отправьте «-» чтобы очистить):"),
+        "📄 Подзаголовок hero":    ("hero_subtitle",     "Введите подзаголовок hero-баннера (отправьте «-» чтобы очистить):"),
+        "🔘 Кнопка hero (текст)":  ("hero_button_text",  "Введите текст кнопки hero-баннера (отправьте «-» чтобы очистить):"),
+        "🔗 Кнопка hero (URL)":    ("hero_button_url",   "Введите URL кнопки hero-баннера (отправьте «-» чтобы очистить):"),
     }
     key, prompt = field_map[message.text]
     await state.update_data(setting_key=key)
@@ -2754,7 +2799,88 @@ async def site_banner_reset(message: Message):
     await db.set_setting("banner_text", "")
     await db.set_setting("banner_image_url", "")
     await db.set_setting("banner_enabled", "false")
+    await db.set_setting("hero_title", "")
+    await db.set_setting("hero_subtitle", "")
+    await db.set_setting("hero_button_text", "")
+    await db.set_setting("hero_button_url", "")
     await message.answer("✅ Баннер сброшен.", reply_markup=site_banner_kb)
+
+
+# ===== Promo bar =====
+
+class SitePromoState(StatesGroup):
+    waiting_for_field = State()
+
+
+@router.message(lambda m: m.text == "📣 Промо-плашка")
+async def site_promo_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer("Промо-плашка:", reply_markup=site_promo_kb)
+
+
+@router.message(lambda m: m.text == "📋 Показать промо")
+async def site_promo_show(message: Message):
+    if not await require_admin(message):
+        return
+    design = await get_site_design()
+    state_text = "ВКЛ" if design["promo_enabled"] else "ВЫКЛ"
+    await message.answer(
+        "📣 Промо-плашка:\n\n"
+        f"Состояние: {state_text}\n"
+        f"Текст: {design['promo_text'] or '-'}\n"
+        f"Дата окончания: {design['promo_end_date'] or 'не задана (показывать всегда)'}"
+    )
+
+
+@router.message(lambda m: m.text in {"📝 Текст промо", "📅 Дата окончания промо"})
+async def site_promo_field_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    field_map = {
+        "📝 Текст промо":           ("promo_text",     "Введите текст промо-плашки (отправьте «-» чтобы очистить):\nПример: 🎯 Безкоштовна доставка по Запоріжжю до 18.05"),
+        "📅 Дата окончания промо":  ("promo_end_date", "Введите дату окончания промо в формате YYYY-MM-DD (например 2026-05-31)\nОтправьте «-» чтобы убрать дату — плашка будет показываться всегда пока включена."),
+    }
+    key, prompt = field_map[message.text]
+    await state.update_data(setting_key=key)
+    await state.set_state(SitePromoState.waiting_for_field)
+    await message.answer(prompt)
+
+
+@router.message(SitePromoState.waiting_for_field)
+async def site_promo_field_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    key = data.get("setting_key")
+    if not key:
+        await state.clear()
+        await message.answer("Ошибка состояния.", reply_markup=site_promo_kb)
+        return
+    value = (message.text or "").strip()
+    if value == "-":
+        value = ""
+    await db.set_setting(key, value)
+    await state.clear()
+    await message.answer("✅ Сохранено", reply_markup=site_promo_kb)
+
+
+@router.message(lambda m: m.text == "👁 Промо: вкл/выкл")
+async def site_promo_toggle(message: Message):
+    if not await require_admin(message):
+        return
+    value = await db.toggle_setting_bool("promo_enabled", "false")
+    text = "включена" if value == "true" else "выключена"
+    await message.answer(f"✅ Промо-плашка {text}", reply_markup=site_promo_kb)
+
+
+@router.message(lambda m: m.text == "♻️ Сбросить промо")
+async def site_promo_reset(message: Message):
+    if not await require_admin(message):
+        return
+    await db.set_setting("promo_text", "")
+    await db.set_setting("promo_end_date", "")
+    await db.set_setting("promo_enabled", "false")
+    await message.answer("✅ Промо-плашка сброшена.", reply_markup=site_promo_kb)
 
 
 # ===== Payment section =====

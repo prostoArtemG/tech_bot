@@ -62,6 +62,51 @@
     </section>
     {% endif %}
 
+    {# ── Промо-плашка ── #}
+    {% if site_design and site_design.promo_enabled and site_design.promo_text %}
+    <div class="promo-bar" id="promoBar"
+         data-end-date="{{ site_design.promo_end_date or '' }}">
+        <span class="promo-bar-text">{{ site_design.promo_text }}</span>
+        <button class="promo-bar-close" onclick="document.getElementById('promoBar').style.display='none'" aria-label="Закрыть">✕</button>
+    </div>
+    <script>
+    (function(){
+        var bar = document.getElementById('promoBar');
+        if (!bar) return;
+        var endDate = bar.dataset.endDate;
+        if (endDate) {
+            var end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            if (new Date() > end) { bar.style.display = 'none'; }
+        }
+    })();
+    </script>
+    {% endif %}
+
+    {# ── Hero banner ── #}
+    {% if site_design and site_design.banner_enabled and (site_design.hero_title or site_design.hero_subtitle) %}
+    <section class="hero-banner">
+        {% if site_design.banner_image_url %}
+        <div class="hero-bg" style="background-image:url('{{ site_design.banner_image_url }}')"></div>
+        {% endif %}
+        <div class="hero-glow hero-glow-1"></div>
+        <div class="hero-glow hero-glow-2"></div>
+        <div class="hero-content">
+            {% if site_design.hero_title %}
+            <h1 class="hero-title">{{ site_design.hero_title }}</h1>
+            {% endif %}
+            {% if site_design.hero_subtitle %}
+            <p class="hero-subtitle">{{ site_design.hero_subtitle }}</p>
+            {% endif %}
+            {% if site_design.hero_button_text %}
+            <a href="{{ site_design.hero_button_url or '/' }}" class="hero-cta">
+                {{ site_design.hero_button_text }}
+            </a>
+            {% endif %}
+        </div>
+    </section>
+    {% endif %}
+
     <section class="site-categories">
         <a href="/" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">
             <div class="site-category-emoji">📦</div>
