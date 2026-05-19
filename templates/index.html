@@ -67,18 +67,42 @@
     <div class="promo-bar" id="promoBar"
          data-end-date="{{ site_design.promo_end_date or '' }}">
         <span class="promo-bar-text">{{ site_design.promo_text }}</span>
+        <span class="promo-bar-countdown" id="promoCountdown"></span>
         <button class="promo-bar-close" onclick="document.getElementById('promoBar').style.display='none'" aria-label="Закрыть">✕</button>
     </div>
     <script>
     (function(){
         var bar = document.getElementById('promoBar');
+        var countdown = document.getElementById('promoCountdown');
         if (!bar) return;
-        var endDate = bar.dataset.endDate;
-        if (endDate) {
-            var end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
-            if (new Date() > end) { bar.style.display = 'none'; }
+        var endDateStr = bar.dataset.endDate;
+        if (!endDateStr) return; // no date — show text only, no countdown
+
+        var end = new Date(endDateStr);
+        end.setHours(23, 59, 59, 999);
+
+        function pad(n) { return String(n).padStart(2, '0'); }
+
+        function tick() {
+            var diff = end - Date.now();
+            if (diff <= 0) {
+                bar.style.display = 'none';
+                clearInterval(timer);
+                return;
+            }
+            var totalSec = Math.floor(diff / 1000);
+            var days  = Math.floor(totalSec / 86400);
+            var hours = Math.floor((totalSec % 86400) / 3600);
+            var mins  = Math.floor((totalSec % 3600)  / 60);
+            var secs  = totalSec % 60;
+            var parts = [];
+            if (days > 0)  parts.push(days  + ' ' + (days === 1 ? 'день' : days < 5 ? 'дні' : 'днів'));
+            parts.push(pad(hours) + ':' + pad(mins) + ':' + pad(secs));
+            countdown.textContent = '— до кінця: ' + parts.join(' ');
         }
+
+        tick();
+        var timer = setInterval(tick, 1000);
     })();
     </script>
     {% endif %}
@@ -99,7 +123,7 @@
             <p class="hero-subtitle">{{ site_design.hero_subtitle }}</p>
             {% endif %}
             {% if site_design.hero_button_text %}
-            <a href="{{ site_design.hero_button_url or '/' }}" class="hero-cta">
+            <a href="{{ site_design.hero_button_url or '#catalog' }}" class="hero-cta">
                 {{ site_design.hero_button_text }}
             </a>
             {% endif %}
@@ -124,7 +148,7 @@
         {% endfor %}
     </section>
 
-    <div class="catalog-layout">
+    <div class="catalog-layout" id="catalog">
     <section class="search-box">
         <form class="search-form" method="get" action="/">
             {% if current_category %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
