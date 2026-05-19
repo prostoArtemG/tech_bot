@@ -687,6 +687,25 @@ _MW_SPEC_OPTIONS = {
     "color":             ["Білий", "Чорний", "Нержавіюча сталь", "Сірий"],
 }
 
+# gas stoves (covers all stove types via stove_type select)
+_STOVE_SPEC_FIELDS = [
+    ("stove_type",    "Тип плити"),
+    ("burners_count", "Кількість конфорок"),
+    ("oven_type",     "Тип духовки"),
+    ("width",         "Ширина, см"),
+    ("control_type",  "Керування"),
+    ("ignition",      "Електропідпал"),
+    ("color",         "Колір"),
+]
+_STOVE_SPEC_OPTIONS = {
+    "stove_type":    ["Газова", "Електрична", "Комбінована", "Індукційна"],
+    "burners_count": ["2", "3", "4", "5"],
+    "oven_type":     ["Газова", "Електрична", "Без духовки"],
+    "control_type":  ["Механічне", "Електронне", "Сенсорне"],
+    "ignition":      ["Так", "Ні"],
+    "color":         ["Білий", "Чорний", "Нержавіюча сталь", "Сірий"],
+}
+
 SPEC_FIELDS_BY_CATEGORY = {
     "boilers":          SPEC_FIELDS,
     "air_conditioners": _AC_SPEC_FIELDS,
@@ -694,6 +713,7 @@ SPEC_FIELDS_BY_CATEGORY = {
     "washing_machines": _WM_SPEC_FIELDS,
     "hoods":            _HOOD_SPEC_FIELDS,
     "microwaves":       _MW_SPEC_FIELDS,
+    "gas_stoves":       _STOVE_SPEC_FIELDS,
 }
 SPEC_OPTIONS_BY_CATEGORY = {
     "boilers":          SPEC_OPTIONS,
@@ -702,6 +722,7 @@ SPEC_OPTIONS_BY_CATEGORY = {
     "washing_machines": _WM_SPEC_OPTIONS,
     "hoods":            _HOOD_SPEC_OPTIONS,
     "microwaves":       _MW_SPEC_OPTIONS,
+    "gas_stoves":       _STOVE_SPEC_OPTIONS,
 }
 
 
@@ -878,6 +899,30 @@ SPEC_VALUE_MAP = {
         "так": "yes", "да": "yes", "yes": "yes", "+": "yes", "true": "yes", "1": "yes",
         "ні": "no",  "нет": "no", "no": "no",  "-": "no",  "false": "no", "0": "no",
     },
+    # ── gas stoves ──
+    "stove_type": {
+        "газова": "gas", "газовая": "gas", "gas": "gas", "газ": "gas",
+        "електрична": "electric", "электрическая": "electric",
+        "електро": "electric", "электро": "electric", "electric": "electric",
+        "комбінована": "combined", "комбинированная": "combined",
+        "комбі": "combined", "комби": "combined", "combined": "combined",
+        "індукційна": "induction", "индукционная": "induction",
+        "индукция": "induction", "індукція": "induction", "induction": "induction",
+    },
+    "burners_count": {
+        "2": "2", "3": "3", "4": "4", "5": "5",
+    },
+    "oven_type": {
+        "газова": "gas", "газовая": "gas", "gas": "gas",
+        "електрична": "electric", "электрическая": "electric",
+        "електро": "electric", "электро": "electric", "electric": "electric",
+        "без духовки": "none", "немає": "none", "нет": "none",
+        "відсутня": "none", "отсутствует": "none", "none": "none", "no": "none",
+    },
+    "ignition": {
+        "так": "yes", "да": "yes", "yes": "yes", "+": "yes", "true": "yes", "1": "yes",
+        "ні": "no",  "нет": "no", "no": "no",  "-": "no",  "false": "no", "0": "no",
+    },
 }
 
 # canonical → UA label (для отображения в боте и на сайте).
@@ -907,6 +952,13 @@ SPEC_CANON_LABEL_UK = {
     },
     "grill":      {"yes": "Так", "no": "Ні"},
     "convection": {"yes": "Так", "no": "Ні"},
+    "stove_type": {
+        "gas": "Газова", "electric": "Електрична",
+        "combined": "Комбінована", "induction": "Індукційна",
+    },
+    "burners_count": {"2": "2", "3": "3", "4": "4", "5": "5"},
+    "oven_type":  {"gas": "Газова", "electric": "Електрична", "none": "Без духовки"},
+    "ignition":   {"yes": "Так", "no": "Ні"},
 }
 
 
@@ -6561,7 +6613,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
     dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
-    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines", "hoods", "microwaves"):
+    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines", "hoods", "microwaves", "gas_stoves"):
         try:
             dyn_attrs = await db.get_category_attributes(target_key_dyn, only_filterable=True)
         except Exception as e:

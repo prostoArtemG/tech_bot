@@ -1864,6 +1864,83 @@ class Database:
                 "is_filter": True, "sort_order": 70,
             },
         ],
+        "gas_stoves": [
+            {
+                "attr_key": "stove_type",
+                "label_ru": "Тип плиты", "label_uk": "Тип плити",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "gas",       "ru": "Газовая",       "uk": "Газова"},
+                    {"value": "electric",  "ru": "Электрическая", "uk": "Електрична"},
+                    {"value": "combined",  "ru": "Комбинированная","uk": "Комбінована"},
+                    {"value": "induction", "ru": "Индукционная",  "uk": "Індукційна"},
+                ],
+                "is_filter": True, "sort_order": 10,
+            },
+            {
+                "attr_key": "burners_count",
+                "label_ru": "Количество конфорок", "label_uk": "Кількість конфорок",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "2", "ru": "2", "uk": "2"},
+                    {"value": "3", "ru": "3", "uk": "3"},
+                    {"value": "4", "ru": "4", "uk": "4"},
+                    {"value": "5", "ru": "5", "uk": "5"},
+                ],
+                "is_filter": True, "sort_order": 20,
+            },
+            {
+                "attr_key": "oven_type",
+                "label_ru": "Тип духовки", "label_uk": "Тип духовки",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "gas",      "ru": "Газовая",       "uk": "Газова"},
+                    {"value": "electric", "ru": "Электрическая", "uk": "Електрична"},
+                    {"value": "none",     "ru": "Без духовки",   "uk": "Без духовки"},
+                ],
+                "is_filter": True, "sort_order": 30,
+            },
+            {
+                "attr_key": "width",
+                "label_ru": "Ширина", "label_uk": "Ширина",
+                "attr_type": "number", "unit": "см",
+                "options_json": [],
+                "is_filter": True, "sort_order": 40,
+            },
+            {
+                "attr_key": "control_type",
+                "label_ru": "Управление", "label_uk": "Керування",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "mechanical", "ru": "Механическое", "uk": "Механічне"},
+                    {"value": "electronic", "ru": "Электронное",  "uk": "Електронне"},
+                    {"value": "touch",      "ru": "Сенсорное",    "uk": "Сенсорне"},
+                ],
+                "is_filter": True, "sort_order": 50,
+            },
+            {
+                "attr_key": "ignition",
+                "label_ru": "Электроподжиг", "label_uk": "Електропідпал",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "yes", "ru": "Да",  "uk": "Так"},
+                    {"value": "no",  "ru": "Нет", "uk": "Ні"},
+                ],
+                "is_filter": True, "sort_order": 60,
+            },
+            {
+                "attr_key": "color",
+                "label_ru": "Цвет", "label_uk": "Колір",
+                "attr_type": "select", "unit": None,
+                "options_json": [
+                    {"value": "white",           "ru": "Белый",            "uk": "Білий"},
+                    {"value": "black",           "ru": "Чёрный",           "uk": "Чорний"},
+                    {"value": "stainless_steel", "ru": "Нержавеющая сталь","uk": "Нержавіюча сталь"},
+                    {"value": "gray",            "ru": "Серый",            "uk": "Сірий"},
+                ],
+                "is_filter": True, "sort_order": 70,
+            },
+        ],
     }
 
     # ── Legacy → canonical mapping для specifications_json (для миграции) ──
