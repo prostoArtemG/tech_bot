@@ -2812,6 +2812,31 @@ class SitePromoState(StatesGroup):
     waiting_for_field = State()
 
 
+def _normalize_promo_date(value: str) -> str | None:
+    """Normalize user-entered date to YYYY-MM-DDTHH:MM:SS+03:00.
+    Accepts: 'DD.MM.YYYY HH:MM', 'DD.MM.YYYY', 'YYYY-MM-DD HH:MM', 'YYYY-MM-DD'.
+    Returns None if parsing fails.
+    """
+    value = value.strip()
+    formats = [
+        ("%d.%m.%Y %H:%M", True),
+        ("%d.%m.%Y %H:%M:%S", True),
+        ("%d.%m.%Y", False),
+        ("%Y-%m-%d %H:%M", True),
+        ("%Y-%m-%d %H:%M:%S", True),
+        ("%Y-%m-%d", False),
+    ]
+    for fmt, has_time in formats:
+        try:
+            dt = datetime.strptime(value, fmt)
+            if not has_time:
+                dt = dt.replace(hour=23, minute=59, second=59)
+            return dt.strftime("%Y-%m-%dT%H:%M:%S+03:00")
+        except ValueError:
+            continue
+    return None
+
+
 @router.message(lambda m: m.text == "📣 Промо-плашка")
 async def site_promo_menu_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
@@ -2840,7 +2865,7 @@ async def site_promo_field_start(message: Message, state: FSMContext):
         return
     field_map = {
         "📝 Текст промо":           ("promo_text",     "Введите текст промо-плашки (отправьте «-» чтобы очистить):\nПример: 🎯 Безкоштовна доставка по Запоріжжю до 18.05"),
-        "📅 Дата окончания промо":  ("promo_end_date", "Введите дату окончания промо в формате YYYY-MM-DD (например 2026-05-31)\nОтправьте «-» чтобы убрать дату — плашка будет показываться всегда пока включена."),
+        "📅 Дата окончания промо":  ("promo_end_date", "Введіть дату закінчення промо.\nФормат: 2026-05-20 23:59 або 20.05.2026 23:59\nЯкщо не вказати час — буде 23:59 за Києвом.\nВідправте «-» щоб прибрати дату — плашка буде показуватись завжди."),
     }
     key, prompt = field_map[message.text]
     await state.update_data(setting_key=key)
@@ -2859,9 +2884,18 @@ async def site_promo_field_save(message: Message, state: FSMContext):
     value = (message.text or "").strip()
     if value == "-":
         value = ""
+    elif key == "promo_end_date" and value:
+        value = _normalize_promo_date(value)
+        if value is None:
+            await message.answer(
+                "❌ Невірний формат дати.\n"
+                "Приклади: 2026-05-20 23:59  або  20.05.2026 23:59\n"
+                "Спробуйте ще раз або відправте «-» щоб прибрати дату."
+            )
+            return
     await db.set_setting(key, value)
     await state.clear()
-    await message.answer("✅ Сохранено", reply_markup=site_promo_kb)
+    await message.answer("✅ Збережено", reply_markup=site_promo_kb)
 
 
 @router.message(lambda m: m.text == "👁 Промо: вкл/выкл")
