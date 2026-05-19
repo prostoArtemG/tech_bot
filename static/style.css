@@ -2410,62 +2410,72 @@ button:hover {
 }
 
 /* ============================================================
-   CATALOG TOOLBAR — active chips + sort
+   CATALOG TOOLBAR — chips row + sort row
    ============================================================ */
+
+/* Desktop: chips on the left, sort on the right — single row */
 .catalog-toolbar {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
-    min-height: 34px;
+    gap: 12px;
+    margin-bottom: 14px;
     padding: 0 2px;
+    min-height: 36px;
 }
 
-.active-chips-bar {
+/* Chips row: wraps on desktop, scrolls on mobile */
+.chips-row {
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
-    min-width: 0;
     flex: 1;
+    min-width: 0;
 }
 
+/* Inner chips container */
 .active-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
     align-items: center;
+    gap: 6px;
 }
 
-/* ─── Compact chip pill (fit-content, not full-width) ─── */
+/* ─── Chip pill — override global button{} rule ─── */
 .filter-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 12px 4px 12px;
-    background: #f0fdf4;
-    border: 1.5px solid #bbf7d0;
-    border-radius: 999px;
-    font-size: 12.5px;
-    color: #15803d;
-    cursor: pointer;
-    white-space: nowrap;
-    font-family: inherit;
-    font-weight: 500;
-    line-height: 1.4;
-    width: fit-content;
-    flex-shrink: 0;
-    transition: all 0.15s ease;
-    box-shadow: 0 1px 3px rgba(22, 163, 74, 0.08);
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    padding: 5px 12px !important;
+    background: #f0fdf4 !important;
+    border: 1.5px solid #bbf7d0 !important;
+    border-radius: 999px !important;
+    font-size: 12.5px !important;
+    color: #15803d !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    font-family: inherit !important;
+    font-weight: 500 !important;
+    line-height: 1.4 !important;
+    width: auto !important;
+    max-width: max-content !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    margin-top: 0 !important;
+    box-shadow: 0 1px 3px rgba(22, 163, 74, 0.08) !important;
+    transition: background 0.15s ease, border-color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.15s ease !important;
 }
 .filter-chip:hover {
-    background: #dcfce7;
-    border-color: #86efac;
-    transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(22, 163, 74, 0.15);
+    background: #dcfce7 !important;
+    border-color: #86efac !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 3px 8px rgba(22, 163, 74, 0.16) !important;
 }
-.chip-label { line-height: 1.2; }
+.chip-label {
+    line-height: 1.2;
+    font-size: 12.5px;
+}
 .chip-remove {
     font-size: 10px;
     opacity: 0.5;
@@ -2473,14 +2483,14 @@ button:hover {
     margin-left: 1px;
     transition: opacity 0.15s;
 }
-.filter-chip:hover .chip-remove { opacity: 1; }
+.filter-chip:hover .chip-remove { opacity: 1 !important; }
 
 /* ─── Clear-all link ─── */
 .clear-filters-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 12px;
+    padding: 5px 12px;
     background: transparent;
     border: 1.5px solid #fca5a5;
     border-radius: 999px;
@@ -2488,10 +2498,10 @@ button:hover {
     color: #ef4444;
     text-decoration: none;
     white-space: nowrap;
-    transition: all 0.15s ease;
-    line-height: 1.4;
     font-weight: 500;
+    line-height: 1.4;
     flex-shrink: 0;
+    transition: all 0.15s ease;
 }
 .clear-filters-btn::before {
     content: '×';
@@ -2504,10 +2514,13 @@ button:hover {
     border-color: #ef4444;
 }
 
-/* ─── Sort dropdown (custom styled) ─── */
-.sort-wrap {
+/* ─── Sort row ─── */
+.sort-row {
     flex-shrink: 0;
-    margin-left: auto;
+}
+
+/* ─── Sort dropdown (custom arrow) ─── */
+.sort-wrap {
     position: relative;
     display: flex;
     align-items: center;
@@ -2528,7 +2541,7 @@ button:hover {
 .sort-select {
     -webkit-appearance: none;
     appearance: none;
-    padding: 6px 30px 6px 12px;
+    padding: 7px 30px 7px 12px;
     border: 1.5px solid #e5e7eb;
     border-radius: 10px;
     font-size: 13px;
@@ -2537,13 +2550,11 @@ button:hover {
     cursor: pointer;
     outline: none;
     font-weight: 500;
-    transition: border-color 0.15s, box-shadow 0.15s;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    min-width: 150px;
+    min-width: 152px;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
-.sort-select:hover {
-    border-color: #9ca3af;
-}
+.sort-select:hover { border-color: #9ca3af; }
 .sort-select:focus {
     border-color: var(--site-accent, #16a34a);
     box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
@@ -2561,45 +2572,55 @@ button:hover {
    MOBILE overrides for toolbar
    ============================================================ */
 @media (max-width: 768px) {
+    /* Stack chips row + sort row vertically */
     .catalog-toolbar {
+        display: block;
         padding: 0 14px;
-        flex-wrap: nowrap;
-        align-items: center;
         margin-bottom: 8px;
-        gap: 6px;
     }
 
-    /* Chips scroll horizontally on mobile */
-    .active-chips-bar {
-        flex: 1;
-        overflow-x: auto;
+    /* Chips: horizontal scroll strip */
+    .chips-row {
+        display: flex;
         flex-wrap: nowrap;
+        overflow-x: auto;
         scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
-        gap: 5px;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+        padding-bottom: 2px;
         min-width: 0;
     }
-    .active-chips-bar::-webkit-scrollbar { display: none; }
+    .chips-row::-webkit-scrollbar { display: none; }
+
     .active-chips {
+        display: flex;
         flex-wrap: nowrap;
-        gap: 5px;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
     }
     .clear-filters-btn {
         flex-shrink: 0;
     }
 
-    /* Sort: compact on mobile */
+    /* Sort: own full-width block row */
+    .sort-row {
+        display: block;
+        margin-bottom: 6px;
+    }
     .sort-wrap {
-        flex-shrink: 0;
-        margin-left: 0;
+        width: 100%;
     }
     .sort-wrap::after {
-        right: 8px;
+        right: 12px;
     }
     .sort-select {
-        font-size: 12px;
-        padding: 5px 26px 5px 9px;
+        width: 100%;
         min-width: 0;
-        max-width: 130px;
+        max-width: none;
+        font-size: 13px;
+        padding: 9px 30px 9px 12px;
     }
 }

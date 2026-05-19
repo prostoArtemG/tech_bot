@@ -214,19 +214,21 @@
 
     <div class="catalog-content">
     <div class="catalog-toolbar" id="catalogToolbar">
-      <div class="active-chips-bar">
+      <div class="chips-row" id="chipsRow">
         <div class="active-chips" id="activeChips"></div>
         <a class="clear-filters-btn" id="clearFiltersBtn" href="/"
            style="display:none"
            data-ru="Скинути фільтри" data-uk="Скинути фільтри">Скинути фільтри</a>
       </div>
-      <div class="sort-wrap">
-        <select id="sortSelect" class="sort-select" aria-label="Сортування">
-          <option value="" data-ru="За популярністю" data-uk="За популярністю">За популярністю</option>
-          <option value="price_asc" data-ru="Від дешевих" data-uk="Від дешевих">Від дешевих</option>
-          <option value="price_desc" data-ru="Від дорогих" data-uk="Від дорогих">Від дорогих</option>
-          <option value="new" data-ru="Новинки" data-uk="Новинки">Новинки</option>
-        </select>
+      <div class="sort-row">
+        <div class="sort-wrap">
+          <select id="sortSelect" class="sort-select" aria-label="Сортування">
+            <option value="" data-ru="За популярністю" data-uk="За популярністю">За популярністю</option>
+            <option value="price_asc" data-ru="Від дешевих" data-uk="Від дешевих">Від дешевих</option>
+            <option value="price_desc" data-ru="Від дорогих" data-uk="Від дорогих">Від дорогих</option>
+            <option value="new" data-ru="Новинки" data-uk="Новинки">Новинки</option>
+          </select>
+        </div>
       </div>
     </div>
 
