@@ -2651,43 +2651,69 @@ button:hover {
     z-index: 90;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 11px 48px 11px 20px;
+    gap: 0;
+    padding: 11px 44px 11px 0;
     background: linear-gradient(90deg, #052e16 0%, #14532d 40%, #166534 60%, #052e16 100%);
     background-size: 200% 100%;
     animation: promoSlide 6s linear infinite;
     box-shadow: 0 2px 16px rgba(22,163,74,0.22), inset 0 1px 0 rgba(255,255,255,0.06);
     border-bottom: 1px solid rgba(22,163,74,0.25);
+    overflow: hidden;
 }
 @keyframes promoSlide {
     0%   { background-position: 0% 50%; }
     50%  { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
 }
+/* Marquee container: clips moving text */
+.promo-marquee-wrap {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+/* Text scrolls from right to left via padding + transform */
 .promo-bar-text {
+    display: inline-block;
+    white-space: nowrap;
+    /* padding-left: 100% pushes text off the right edge of the wrapper */
+    padding-left: 100%;
     font-size: 13.5px;
     font-weight: 600;
     color: #d1fae5;
     letter-spacing: 0.2px;
     line-height: 1.4;
-    text-align: center;
+    animation: marqueeScroll 22s linear infinite;
 }
+@keyframes marqueeScroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
+/* Countdown: static, right of marquee */
 .promo-bar-countdown {
+    flex-shrink: 0;
     font-size: 13px;
     font-weight: 700;
     color: #86efac;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
+    padding: 0 14px 0 0;
 }
-@media (max-width: 600px) {
-    .promo-bar-countdown { font-size: 11.5px; }
+.promo-bar-countdown:not(:empty) {
+    padding: 0 14px 0 12px;
+    border-left: 1px solid rgba(134,239,172,0.3);
+}
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .promo-bar { animation: none; }
+    .promo-bar-text {
+        padding-left: 16px;
+        animation: none;
+    }
 }
 .promo-bar-close {
     position: absolute;
-    right: 14px;
+    right: 12px;
     top: 50%;
     transform: translateY(-50%);
     background: none !important;
@@ -2706,15 +2732,16 @@ button:hover {
     justify-content: center;
     border-radius: 50% !important;
     transition: color 0.2s, background 0.2s;
+    z-index: 2;
 }
 .promo-bar-close:hover {
     color: #bbf7d0 !important;
     background: rgba(255,255,255,0.07) !important;
 }
 @media (max-width: 600px) {
-    .promo-bar { padding: 9px 38px 9px 14px; flex-wrap: wrap; gap: 4px; }
-    .promo-bar-text { font-size: 12px; }
-    .promo-bar-countdown { font-size: 11.5px; width: 100%; text-align: center; }
+    .promo-bar { padding: 9px 36px 9px 0; }
+    .promo-bar-text { font-size: 12px; animation-duration: 18s; }
+    .promo-bar-countdown { font-size: 11.5px; padding: 0 8px 0 8px; }
 }
 
 /* ============================================================
