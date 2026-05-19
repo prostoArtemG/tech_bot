@@ -230,6 +230,12 @@ class Database:
         except Exception as e:
             print(f"[migrate] normalize specifications failed: {e}")
 
+        # ── One-shot: обновить атрибуты air_conditioners v2 ──
+        try:
+            await self._migrate_ac_attributes_v2()
+        except Exception as e:
+            print(f"[migrate] ac_attributes_v2 failed: {e}")
+
         await self.execute("""
         CREATE TABLE IF NOT EXISTS customers (
             id SERIAL PRIMARY KEY,
@@ -1562,6 +1568,7 @@ class Database:
                 "is_filter": True, "sort_order": 10,
             },
             {
+                # legacy — kept for backward compat with existing products
                 "attr_key": "inverter",
                 "label_ru": "Инвертор", "label_uk": "Інвертор",
                 "attr_type": "select", "unit": None,
@@ -1569,9 +1576,10 @@ class Database:
                     {"value": "yes", "ru": "Да", "uk": "Так"},
                     {"value": "no",  "ru": "Нет", "uk": "Ні"},
                 ],
-                "is_filter": True, "sort_order": 20,
+                "is_filter": False, "sort_order": 20,
             },
             {
+                # legacy — kept for backward compat with existing products
                 "attr_key": "wifi",
                 "label_ru": "Wi-Fi", "label_uk": "Wi-Fi",
                 "attr_type": "select", "unit": None,
@@ -1579,21 +1587,21 @@ class Database:
                     {"value": "yes", "ru": "Да", "uk": "Так"},
                     {"value": "no",  "ru": "Нет", "uk": "Ні"},
                 ],
-                "is_filter": True, "sort_order": 30,
+                "is_filter": False, "sort_order": 30,
             },
             {
                 "attr_key": "compressor_type",
                 "label_ru": "Тип компрессора", "label_uk": "Тип компресора",
                 "attr_type": "select", "unit": None,
                 "options_json": [
-                    {"value": "inverter",     "ru": "Инверторный",   "uk": "Інверторний"},
-                    {"value": "non_inverter", "ru": "Неинверторный", "uk": "Неінверторний"},
+                    {"value": "inverter",     "ru": "Инверторный", "uk": "Інверторний"},
+                    {"value": "non_inverter", "ru": "Обычный",     "uk": "Звичайний"},
                 ],
                 "is_filter": True, "sort_order": 40,
             },
             {
                 "attr_key": "freon",
-                "label_ru": "Хладагент", "label_uk": "Холодоагент",
+                "label_ru": "Хладагент", "label_uk": "Фреон",
                 "attr_type": "select", "unit": None,
                 "options_json": [
                     {"value": "r32",   "ru": "R32",   "uk": "R32"},
@@ -1602,23 +1610,56 @@ class Database:
                 "is_filter": True, "sort_order": 50,
             },
             {
+                # legacy — kept for backward compat with existing products
                 "attr_key": "power",
                 "label_ru": "Мощность", "label_uk": "Потужність",
                 "attr_type": "number", "unit": "кВт",
                 "options_json": [],
-                "is_filter": True, "sort_order": 60,
+                "is_filter": False, "sort_order": 60,
             },
             {
                 "attr_key": "energy_class",
                 "label_ru": "Класс энергоэффективности", "label_uk": "Клас енергоефективності",
                 "attr_type": "select", "unit": None,
                 "options_json": [
-                    {"value": "a",              "ru": "A",    "uk": "A"},
-                    {"value": "a_plus",         "ru": "A+",   "uk": "A+"},
-                    {"value": "a_plus_plus",    "ru": "A++",  "uk": "A++"},
-                    {"value": "a_plus_plus_plus","ru": "A+++","uk": "A+++"},
+                    {"value": "a",               "ru": "A",    "uk": "A"},
+                    {"value": "a_plus",          "ru": "A+",   "uk": "A+"},
+                    {"value": "a_plus_plus",     "ru": "A++",  "uk": "A++"},
+                    {"value": "a_plus_plus_plus","ru": "A+++", "uk": "A+++"},
                 ],
                 "is_filter": True, "sort_order": 70,
+            },
+            {
+                "attr_key": "power_consumption",
+                "label_ru": "Потребляемая мощность холод/тепло, Вт",
+                "label_uk": "Споживана потужність холод/тепло, Вт",
+                "attr_type": "text", "unit": None,
+                "options_json": [],
+                "is_filter": False, "sort_order": 80,
+            },
+            {
+                "attr_key": "cooling_heating_capacity",
+                "label_ru": "Производительность, кВт холод/тепло",
+                "label_uk": "Продуктивність, кВт холод/тепло",
+                "attr_type": "text", "unit": None,
+                "options_json": [],
+                "is_filter": False, "sort_order": 90,
+            },
+            {
+                "attr_key": "indoor_outdoor_dimensions",
+                "label_ru": "Размеры внутр./внешн. блока, мм",
+                "label_uk": "Розміри внутр./зовн. блоку, мм",
+                "attr_type": "text", "unit": None,
+                "options_json": [],
+                "is_filter": False, "sort_order": 100,
+            },
+            {
+                "attr_key": "indoor_noise_level",
+                "label_ru": "Уровень шума внутреннего блока, дБ",
+                "label_uk": "Рівень шуму внутрішнього блоку, дБ",
+                "attr_type": "number", "unit": "дБ",
+                "options_json": [],
+                "is_filter": False, "sort_order": 110,
             },
         ],
         "refrigerators": [
@@ -2069,6 +2110,46 @@ class Database:
 
         await self.set_setting(flag_key, "1")
         print(f"[migrate] normalize specifications v2: scanned={len(rows)} updated={updated}")
+
+    async def _migrate_ac_attributes_v2(self):
+        """One-shot: обновляет category_attributes для air_conditioners.
+
+        - inverter / wifi / power → is_filter = FALSE (legacy, не ломаем данные).
+        - compressor_type: опция non_inverter → «Звичайний» / «Обычный».
+        - freon: label_uk → «Фреон».
+        - Добавляет новые поля (power_consumption, cooling_heating_capacity,
+          indoor_outdoor_dimensions, indoor_noise_level) через сидер.
+        """
+        import json
+        flag_key = "migrate_ac_attributes_v2_done"
+        done = await self.fetchval("SELECT value FROM settings WHERE key = $1", flag_key)
+        if done == "1":
+            return
+        # Снять is_filter с устаревших полей
+        for attr_key in ("inverter", "wifi", "power"):
+            await self.execute(
+                "UPDATE category_attributes SET is_filter = FALSE "
+                "WHERE category_key = 'air_conditioners' AND attr_key = $1",
+                attr_key,
+            )
+        # Обновить метку compressor_type (non_inverter → Звичайний)
+        new_ct_opts = json.dumps([
+            {"value": "inverter",     "ru": "Инверторный", "uk": "Інверторний"},
+            {"value": "non_inverter", "ru": "Обычный",     "uk": "Звичайний"},
+        ])
+        await self.execute(
+            "UPDATE category_attributes SET options_json = $1::jsonb "
+            "WHERE category_key = 'air_conditioners' AND attr_key = 'compressor_type'",
+            new_ct_opts,
+        )
+        # Обновить label_uk для freon
+        await self.execute(
+            "UPDATE category_attributes SET label_uk = 'Фреон' "
+            "WHERE category_key = 'air_conditioners' AND attr_key = 'freon'",
+        )
+        # Новые поля добавит сидер (_seed_default_category_attributes) через ON CONFLICT DO NOTHING
+        await self.set_setting(flag_key, "1")
+        print("[migrate] ac_attributes_v2: done")
 
     async def _seed_default_category_attributes(self):
         """Идемпотентный сидер. Вставляет только отсутствующие записи."""

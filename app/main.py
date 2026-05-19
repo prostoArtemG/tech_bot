@@ -607,18 +607,17 @@ SPEC_OPTIONS = {
 # Для категорий, у которых форма характеристик отличается от boilers.
 # Архитектура та же: список (key, label) + опции-кнопки для select-полей.
 _AC_SPEC_FIELDS = [
-    ("room_area",       "Площа приміщення, м²"),
-    ("inverter",        "Інвертор"),
-    ("wifi",            "Wi-Fi"),
-    ("compressor_type", "Тип компресора"),
-    ("freon",           "Холодоагент"),
-    ("power",           "Потужність, кВт"),
-    ("energy_class",    "Клас енергоефективності"),
+    ("room_area",                 "Площа приміщення, м²"),
+    ("compressor_type",           "Тип компресора"),
+    ("freon",                     "Фреон"),
+    ("power_consumption",         "Споживана потужність холод/тепло, Вт"),
+    ("cooling_heating_capacity",  "Продуктивність, кВт холод/тепло"),
+    ("indoor_outdoor_dimensions", "Розміри внутр./зовн. блоку, мм"),
+    ("indoor_noise_level",        "Рівень шуму внутрішнього блоку, дБ"),
+    ("energy_class",              "Клас енергоефективності"),
 ]
 _AC_SPEC_OPTIONS = {
-    "inverter":        ["Так", "Ні"],
-    "wifi":            ["Так", "Ні"],
-    "compressor_type": ["Інверторний", "Неінверторний"],
+    "compressor_type": ["Інверторний", "Звичайний"],
     "freon":           ["R32", "R410A"],
     "energy_class":    ["A", "A+", "A++", "A+++"],
 }
@@ -807,6 +806,8 @@ SPEC_VALUE_MAP = {
         "неинверторный": "non_inverter",
         "non_inverter":  "non_inverter",
         "non-inverter":  "non_inverter",
+        "звичайний":    "non_inverter",
+        "обычный":      "non_inverter",
     },
     "freon": {
         "r32":   "r32",
@@ -932,7 +933,7 @@ SPEC_CANON_LABEL_UK = {
     "heater_type":  {"dry": "Сухий", "wet": "Мокрий"},
     "inverter":     {"yes": "Так", "no": "Ні"},
     "wifi":         {"yes": "Так", "no": "Ні"},
-    "compressor_type": {"inverter": "Інверторний", "non_inverter": "Неінверторний"},
+    "compressor_type": {"inverter": "Інверторний", "non_inverter": "Звичайний"},
     "freon":        {"r32": "R32", "r410a": "R410A"},
     "energy_class": {"a": "A", "a_plus": "A+", "a_plus_plus": "A++", "a_plus_plus_plus": "A+++"},
     "no_frost":     {"yes": "Так", "no": "Ні"},
@@ -974,7 +975,7 @@ def _normalize_spec_value(key: str, value) -> str:
     v = str(value).strip()
     if not v:
         return v
-    if key in ("volume", "room_area", "power", "height", "load_capacity", "spin_speed", "depth", "width", "productivity", "noise_level"):
+    if key in ("volume", "room_area", "power", "height", "load_capacity", "spin_speed", "depth", "width", "productivity", "noise_level", "indoor_noise_level"):
         n = _extract_number(v)
         if n is not None:
             return str(int(n) if float(n).is_integer() else n)
@@ -1059,6 +1060,12 @@ def _label_for_spec_value(key: str, value) -> str:
         if n is not None:
             num = int(n) if float(n).is_integer() else n
             return str(num)
+        return v
+    if key == "indoor_noise_level":
+        n = _extract_number(v)
+        if n is not None:
+            num = int(n) if float(n).is_integer() else n
+            return f"{num} дБ"
         return v
     canon_map = SPEC_CANON_LABEL_UK.get(key)
     if canon_map and v in canon_map:
