@@ -79,6 +79,7 @@
         {% endfor %}
     </section>
 
+    <div class="catalog-layout">
     <section class="search-box">
         <form class="search-form" method="get" action="/">
             {% if current_category %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
@@ -210,14 +211,30 @@
       })();
     </script>
 
+    <div class="catalog-content">
+    <div class="catalog-toolbar" id="catalogToolbar">
+      <div class="active-chips-bar">
+        <div class="active-chips" id="activeChips"></div>
+        <a class="clear-filters-btn" id="clearFiltersBtn" href="/"
+           style="display:none"
+           data-ru="Скинути фільтри" data-uk="Скинути фільтри">Скинути фільтри</a>
+      </div>
+      <div class="sort-wrap">
+        <select id="sortSelect" class="sort-select" aria-label="Сортування">
+          <option value="" data-ru="За популярністю" data-uk="За популярністю">За популярністю</option>
+          <option value="price_asc" data-ru="Від дешевих" data-uk="Від дешевих">Від дешевих</option>
+          <option value="price_desc" data-ru="Від дорогих" data-uk="Від дорогих">Від дорогих</option>
+          <option value="new" data-ru="Новинки" data-uk="Новинки">Новинки</option>
+        </select>
+      </div>
+    </div>
 
-
-    <main class="products products-grid">
+    <main class="products products-grid" id="productsGrid">
         {% for product in products %}
         {% set _b = (product.brand or '')|trim %}
         {% set _m = (product.model or '')|trim %}
         {% if (_b and _b not in ['-', 'None']) or (_m and _m not in ['-', 'None']) %}
-        <div class="card" data-href="/product/{{ product.id }}" tabindex="0" role="link" aria-label="{{ product.brand }} {{ product.model }}">
+        <div class="card" data-href="/product/{{ product.id }}" data-id="{{ product.id }}" data-price="{{ product.current_price or product.price }}" data-specs="{{ (product.specifications_json or {})|tojson|e }}" tabindex="0" role="link" aria-label="{{ product.brand }} {{ product.model }}">
             <div class="card-image-wrap">
                 {% if product.is_sale %}
                 <div class="card-sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></div>
@@ -286,6 +303,9 @@
       {% endif %}
     </div>
     {% endif %}
+
+  </div>{# /catalog-content #}
+</div>{# /catalog-layout #}
 
 </body>
 <script src="/static/cart.js"></script>
@@ -507,4 +527,152 @@
     </div>
   </div>
 </footer>
+
+<script>
+/* ─── Filter metadata: built by Jinja, consumed by chips JS ─── */
+var FILTER_META = {
+  {% for attr in dyn_attrs %}
+  {{ attr.attribute_key | tojson }}: {
+    label_ru: {{ attr.name_ru | tojson }},
+    label_uk: {{ attr.name_ua | tojson }},
+    unit: {{ (attr.unit or '') | tojson }},
+    type: {{ (attr.type or '') | tojson }},
+    options: {
+      {% set opts = dyn_options.get(attr.attribute_key) or [] %}
+      {% for opt in opts %}
+      {{ opt.value | tojson }}: { ru: {{ opt.label_ru | tojson }}, uk: {{ opt.label_uk | tojson }} }{% if not loop.last %},{% endif %}
+
+      {% endfor %}
+    }
+  }{% if not loop.last %},{% endif %}
+
+  {% endfor %}
+};
+</script>
+
+<script>
+/* ─── Active filter chips ─── */
+(function () {
+  var chipsEl = document.getElementById('activeChips');
+  var clearBtn = document.getElementById('clearFiltersBtn');
+  if (!chipsEl) return;
+  var params = new URLSearchParams(window.location.search);
+  var chips = [];
+  var lang = (document.cookie.match(/(?:^|;\s*)lang=([^;]+)/) || [])[1] || 'ru';
+
+  function getLabel(key, value) {
+    if (key === 'brand') return value;
+    if (key === 'price_min') return 'від ' + value + ' грн';
+    if (key === 'price_max') return 'до ' + value + ' грн';
+    if (key === 'in_stock') return 'В наявності';
+    if (key === 'q') return '"' + value + '"';
+    var meta = (typeof FILTER_META !== 'undefined') && FILTER_META[key];
+    if (meta) {
+      var opt = meta.options[value];
+      if (opt) return lang === 'uk' ? opt.uk : opt.ru;
+      return value + (meta.unit ? '\u00a0' + meta.unit : '');
+    }
+    return value;
+  }
+
+  params.forEach(function (value, key) {
+    if (key === 'page' || key === 'category') return;
+    chips.push({ key: key, value: value, label: getLabel(key, value) });
+  });
+
+  if (chips.length === 0) {
+    if (clearBtn) clearBtn.style.display = 'none';
+    return;
+  }
+
+  chips.forEach(function (chip) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'filter-chip';
+    btn.setAttribute('aria-label', 'Видалити фільтр: ' + chip.label);
+    btn.innerHTML = '<span class="chip-label">' + chip.label + '</span>'
+                  + '<span class="chip-remove" aria-hidden="true">&#x2715;</span>';
+    btn.addEventListener('click', function () {
+      var p = new URLSearchParams(window.location.search);
+      var all = p.getAll(chip.key);
+      p.delete(chip.key);
+      all.forEach(function (v) { if (v !== chip.value) p.append(chip.key, v); });
+      p.delete('page');
+      var qs = p.toString();
+      window.location.href = qs ? '/?' + qs : '/';
+    });
+    chipsEl.appendChild(btn);
+  });
+
+  if (clearBtn) {
+    clearBtn.style.display = '';
+    var cat = params.get('category');
+    clearBtn.href = cat ? '/?category=' + encodeURIComponent(cat) : '/';
+  }
+}());
+
+/* ─── Sort (client-side) ─── */
+(function () {
+  var sel = document.getElementById('sortSelect');
+  var grid = document.getElementById('productsGrid');
+  if (!sel || !grid) return;
+
+  var cards = Array.from(grid.querySelectorAll('.card'));
+  cards.forEach(function (c, i) { c.dataset.origIdx = i; });
+
+  var saved = sessionStorage.getItem('catalogSort') || '';
+  if (saved) { sel.value = saved; doSort(saved); }
+
+  sel.addEventListener('change', function () {
+    sessionStorage.setItem('catalogSort', this.value);
+    doSort(this.value);
+  });
+
+  function doSort(mode) {
+    var list = Array.from(grid.querySelectorAll('.card'));
+    if (!mode) {
+      list.sort(function (a, b) { return (a.dataset.origIdx | 0) - (b.dataset.origIdx | 0); });
+    } else if (mode === 'price_asc') {
+      list.sort(function (a, b) { return (+a.dataset.price || 0) - (+b.dataset.price || 0); });
+    } else if (mode === 'price_desc') {
+      list.sort(function (a, b) { return (+b.dataset.price || 0) - (+a.dataset.price || 0); });
+    } else if (mode === 'new') {
+      list.sort(function (a, b) { return (+b.dataset.id || 0) - (+a.dataset.id || 0); });
+    }
+    list.forEach(function (c) { grid.appendChild(c); });
+  }
+}());
+
+/* ─── Filter option counts (from current page products) ─── */
+(function () {
+  var grid = document.getElementById('productsGrid');
+  if (!grid) return;
+
+  var counts = {};
+  grid.querySelectorAll('.card[data-specs]').forEach(function (card) {
+    try {
+      var specs = JSON.parse(card.dataset.specs || '{}');
+      Object.keys(specs).forEach(function (k) {
+        var v = String(specs[k]);
+        var mk = k + '\x00' + v;
+        counts[mk] = (counts[mk] || 0) + 1;
+      });
+    } catch (e) {}
+  });
+
+  document.querySelectorAll('.dyn-option input[type="checkbox"]').forEach(function (inp) {
+    var n = counts[inp.name + '\x00' + inp.value];
+    if (n > 0) {
+      var lbl = inp.closest('.dyn-option');
+      if (lbl) {
+        var badge = document.createElement('span');
+        badge.className = 'filter-count-badge';
+        badge.textContent = '(' + n + ')';
+        lbl.appendChild(badge);
+      }
+    }
+  });
+}());
+</script>
+
 </html>

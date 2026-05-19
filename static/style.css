@@ -2113,3 +2113,255 @@ button:hover {
         width: auto;
     }
 }
+
+/* ============================================================
+   CATALOG LAYOUT — desktop sidebar + content column
+   ============================================================ */
+.catalog-layout {
+    display: block;
+}
+
+.catalog-content {
+    min-width: 0;
+}
+
+@media (min-width: 769px) {
+    .catalog-layout {
+        display: flex;
+        align-items: flex-start;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 16px;
+        gap: 0;
+    }
+
+    /* Sidebar */
+    .catalog-layout .search-box {
+        width: 260px;
+        flex-shrink: 0;
+        position: sticky;
+        top: 8px;
+        max-height: calc(100vh - 24px);
+        overflow-y: auto;
+        scrollbar-width: thin;
+        border-right: 1px solid #e5e7eb;
+        padding-right: 14px !important;
+        margin: 0 !important;
+        max-width: 260px !important;
+        padding-bottom: 24px !important;
+    }
+
+    /* Always-open filter panel in sidebar (override desktop collapse) */
+    .catalog-layout .filters-panel {
+        max-height: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        padding: 0 0 0 10px !important;
+        margin: 0 !important;
+    }
+
+    .catalog-layout .filters-panel-body {
+        padding: 6px 0 0 !important;
+    }
+
+    /* Hide the toggle button — not needed in sidebar */
+    .catalog-layout .filters-toggle-row {
+        display: none !important;
+    }
+
+    /* Stack filters vertically in sidebar */
+    .catalog-layout .dynamic-filters {
+        flex-direction: column !important;
+        gap: 6px !important;
+    }
+
+    .catalog-layout .dyn-filter {
+        min-width: auto !important;
+        width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    .catalog-layout .search-filters-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 10px !important;
+        gap: 8px !important;
+    }
+
+    .catalog-layout .search-main-row {
+        padding: 0 10px;
+    }
+
+    /* Content column */
+    .catalog-content {
+        flex: 1;
+        min-width: 0;
+        padding-left: 20px;
+    }
+
+    /* Products grid fills content column — remove its own centering */
+    .catalog-layout .products,
+    .catalog-layout .products-grid {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 8px 0 30px !important;
+    }
+}
+
+/* ============================================================
+   CATALOG TOOLBAR — active chips + sort
+   ============================================================ */
+.catalog-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    min-height: 34px;
+    padding: 0 2px;
+}
+
+.active-chips-bar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.active-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+}
+
+/* ─── Chip pill ─── */
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 20px;
+    font-size: 12.5px;
+    color: #1d4ed8;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    line-height: 1.4;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.filter-chip:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+
+.chip-remove {
+    font-size: 10px;
+    opacity: 0.65;
+    line-height: 1;
+    margin-left: 1px;
+}
+
+.filter-chip:hover .chip-remove { opacity: 1; }
+
+/* ─── Clear-all link ─── */
+.clear-filters-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #6b7280;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+    line-height: 1.4;
+}
+
+.clear-filters-btn:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* ─── Sort dropdown ─── */
+.sort-wrap {
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.sort-select {
+    padding: 5px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #374151;
+    background: #fff;
+    cursor: pointer;
+    outline: none;
+}
+
+.sort-select:focus {
+    border-color: var(--site-accent, #2563eb);
+}
+
+/* ─── Count badge next to filter option ─── */
+.filter-count-badge {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 400;
+    margin-left: 3px;
+}
+
+/* ============================================================
+   MOBILE overrides for toolbar
+   ============================================================ */
+@media (max-width: 768px) {
+    .catalog-toolbar {
+        padding: 0 14px;
+        flex-wrap: nowrap;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    /* Chips scroll horizontally */
+    .active-chips-bar {
+        flex: 1;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        gap: 5px;
+        min-width: 0;
+    }
+
+    .active-chips-bar::-webkit-scrollbar { display: none; }
+
+    .active-chips {
+        flex-wrap: nowrap;
+        gap: 5px;
+    }
+
+    .clear-filters-btn {
+        flex-shrink: 0;
+    }
+
+    /* Sort: compact, stays on the right */
+    .sort-wrap {
+        flex-shrink: 0;
+        margin-left: 0;
+    }
+
+    .sort-select {
+        font-size: 12px;
+        padding: 4px 6px;
+        max-width: 130px;
+    }
+}
