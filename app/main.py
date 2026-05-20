@@ -1610,11 +1610,14 @@ def inline_edit_fields_kb(product=None):
 
     rows.extend([
         [
+            InlineKeyboardButton(text="� Модельная группа", callback_data="edit_field:model_group"),
             InlineKeyboardButton(text="📂 Изменить категорию", callback_data="edit_action:change_category"),
-            InlineKeyboardButton(text="🖼 Управление фото", callback_data="edit_action:manage_photos"),
         ],
         [
+            InlineKeyboardButton(text="🖼 Управление фото", callback_data="edit_action:manage_photos"),
             InlineKeyboardButton(text=visibility_text, callback_data=f"edit_action:{visibility_action}"),
+        ],
+        [
             InlineKeyboardButton(text="❌ Удалить товар", callback_data="edit_action:soft_delete"),
         ],
         [
@@ -1639,6 +1642,7 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
         "specs": "Характеристики",
         "old_price": "Старая цена",
         "boiler_volume_liters": "Объем бойлера (л)",
+        "model_group": "Модельная группа",
     }
 
     await state.update_data(field=field, field_title=field_titles[field])
@@ -1657,6 +1661,12 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
     elif field == "boiler_volume_liters":
         await callback.message.answer(
             "Введите объем бойлера в литрах (число): 50, 80, 100, 120 ...\nОтправьте «-» чтобы очистить."
+        )
+    elif field == "model_group":
+        await callback.message.answer(
+            "Введите код модельной группы (латиница/цифры/дефис), например: «atlantic-steatite».\n"
+            "Одинаковый код у всех вариантов одной модели (разных объёмов / площадей).\n"
+            "Отправьте «-» чтобы очистить."
         )
     else:
         await callback.message.answer(f"Введите новое значение для поля: {field_titles[field]}")
@@ -6298,6 +6308,18 @@ async def edit_product_value_handler(message: Message, state: FSMContext):
                 await message.answer("Объём должен быть от 1 до 1000 литров.")
                 return
 
+    elif field == "model_group":
+        if value == "-" or value == "":
+            value = None
+        else:
+            # Нормализуем: lowercase, пробелы/пунктуацию → дефис, обрезаем до 64.
+            v = re.sub(r"[^\w]+", "-", value.strip().lower(), flags=re.UNICODE)
+            v = re.sub(r"-+", "-", v).strip("-")
+            if not v:
+                await message.answer("Код пустой после нормализации. Введите буквы/цифры.")
+                return
+            value = v[:64]
+
     await db.update_product_field(product_id, field, value)
 
     product = await db.get_product_by_id(product_id)
@@ -7147,56 +7169,82 @@ def _product_volume_l(p):
     return _extract_number(v)
 
 
+def _product_variant_value(p, cat_key):
+    """
+    Возвращает (value_number, label, unit) — то, по чему различаются варианты
+    в данной категории. None — если у товара нет осмысленного значения.
+    """
+    if cat_key == "boilers":
+        n = _product_volume_l(p)
+        return (n, "л", "volume") if n is not None else None
+    if cat_key == "air_conditioners":
+        try:
+            v = _product_attr_value(p, "room_area")
+        except Exception:
+            v = None
+        n = _extract_number(v)
+        return (n, "м²", "room_area") if n is not None else None
+    return None
+
+
 def _collect_product_variants(current, candidates):
     """
     Финальный отбор вариантов «той же модели».
-    Foundation под `model_group`: если в продукте есть поле model_group и оно
-    непустое — группируем по нему. Иначе — по нормализованному stem модели.
-    Для бойлеров возвращаем только варианты с другим объёмом.
+    Приоритет — model_group: если у текущего товара поле непустое, варианты
+    отбираются строго по совпадению model_group (надёжный путь). Если пусто —
+    fallback: brand + category + нормализованный stem названия.
+    Для бойлеров и кондиционеров требуется наличие различающего значения
+    (volume / room_area), и убираются дубликаты с тем же значением.
     """
     if not current or not candidates:
         return []
 
-    cur_id = current.get("id") if isinstance(current, dict) else current["id"]
-    cur_brand = (current.get("brand") if isinstance(current, dict) else current["brand"]) or ""
-    cur_model = (current.get("model") if isinstance(current, dict) else current["model"]) or ""
+    cur_id = current["id"]
+    cur_brand = (current["brand"] or "")
+    cur_model = (current["model"] or "")
     try:
         cur_cat_key = category_key(current["category"] or "") or ""
     except Exception:
         cur_cat_key = ""
 
-    # ── group key (model_group → stem fallback) ──
-    def _group_of(p):
+    def _model_group_of(p):
         try:
             mg = p["model_group"] if "model_group" in p.keys() else None
         except (KeyError, TypeError, AttributeError):
             mg = None
-        if mg:
-            return ("mg", str(mg).strip().lower())
-        return ("stem", _model_stem(p.get("model") if isinstance(p, dict) else p["model"]))
+        return (str(mg).strip().lower() if mg else "")
 
-    cur_group = _group_of(current)
-    if cur_group[0] == "stem" and not cur_group[1]:
+    cur_mg = _model_group_of(current)
+    cur_stem = _model_stem(cur_model)
+    if not cur_mg and not cur_stem:
         return []
 
-    cur_volume = _product_volume_l(current) if cur_cat_key == "boilers" else None
+    def _is_same_group(p):
+        mg = _model_group_of(p)
+        if cur_mg:
+            # Strict matching by model_group when current has it.
+            return bool(mg) and mg == cur_mg
+        # Fallback: same brand + same normalized stem.
+        if (p["brand"] or "").strip().lower() != cur_brand.strip().lower():
+            return False
+        return _model_stem(p["model"]) == cur_stem
+
+    cur_diff = _product_variant_value(current, cur_cat_key)
+    cur_diff_value = cur_diff[0] if cur_diff else None
+    diff_unit = cur_diff[1] if cur_diff else ""
 
     variants = []
-    seen_ids = set()
+    seen_ids = {cur_id}
     for p in candidates:
-        if p["id"] == cur_id or p["id"] in seen_ids:
+        if p["id"] in seen_ids:
             continue
-        if (p["brand"] or "").strip().lower() != cur_brand.strip().lower():
+        if not _is_same_group(p):
             continue
-        if _group_of(p) != cur_group:
-            continue
-        vol = _product_volume_l(p)
-        # Бойлеры: вариант обязан иметь объём; если у текущего объём задан,
-        # отсекаем дубликаты с тем же объёмом.
-        if cur_cat_key == "boilers":
-            if vol is None:
+        diff = _product_variant_value(p, cur_cat_key)
+        if cur_cat_key in ("boilers", "air_conditioners"):
+            if diff is None:
                 continue
-            if cur_volume is not None and vol == cur_volume:
+            if cur_diff_value is not None and diff[0] == cur_diff_value:
                 continue
         seen_ids.add(p["id"])
         variants.append({
@@ -7209,14 +7257,15 @@ def _collect_product_variants(current, candidates):
             "is_sale": p["is_sale"],
             "stock_status": p["stock_status"],
             "availability_status": p["availability_status"],
-            "volume": vol,
+            "diff_value": diff[0] if diff else None,
+            "diff_unit": diff[1] if diff else "",
             "is_current": False,
         })
 
     if not variants:
         return []
 
-    # Добавляем текущий товар как active (для подсветки в UI).
+    # Текущий товар как active.
     variants.append({
         "id": cur_id,
         "brand": cur_brand,
@@ -7226,16 +7275,18 @@ def _collect_product_variants(current, candidates):
         "old_price": current["old_price"],
         "is_sale": current["is_sale"],
         "stock_status": current["stock_status"],
-        "availability_status": current.get("availability_status") if isinstance(current, dict) else None,
-        "volume": cur_volume,
+        "availability_status": None,
+        "diff_value": cur_diff_value,
+        "diff_unit": diff_unit,
         "is_current": True,
     })
 
-    # Бойлеры — сортировка по объёму ascending; иначе по id.
-    if cur_cat_key == "boilers":
-        variants.sort(key=lambda v: (v["volume"] is None, v["volume"] or 0, v["id"]))
-    else:
-        variants.sort(key=lambda v: v["id"])
+    # Сортировка по различающему значению (если есть), иначе по id.
+    variants.sort(key=lambda v: (
+        v["diff_value"] is None,
+        v["diff_value"] if v["diff_value"] is not None else 0,
+        v["id"],
+    ))
     return variants
 
 

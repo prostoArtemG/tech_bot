@@ -164,6 +164,21 @@ class Database:
         ADD COLUMN IF NOT EXISTS boiler_ten_type TEXT;
         """)
 
+        # --- Variants foundation: model_group ------------------------------
+        # Группирует варианты одной модельной серии (разные объёмы
+        # бойлеров, разные площади кондиционеров и т.п.). При пустом
+        # значении варианты ищутся фолбэком через brand + нормализованное
+        # название модели.
+        await self.execute("""
+        ALTER TABLE products
+        ADD COLUMN IF NOT EXISTS model_group TEXT;
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS idx_products_model_group
+            ON products (model_group)
+            WHERE model_group IS NOT NULL;
+        """)
+
         # --- Foundation: stable category_key (этап 1) ----------------------
         # Хранится параллельно с человеко-читаемым `category` для обратной
         # совместимости. Заполняется автоматически при INSERT/UPDATE и
@@ -590,6 +605,7 @@ class Database:
                 photo_url, description, specs, is_active, deleted_at,
                 current_price, old_price, is_sale, stock_status,
                 boiler_volume_liters, boiler_ten_type,
+                model_group,
                 specifications_json
             FROM products
             WHERE id = $1
@@ -610,7 +626,8 @@ class Database:
             SELECT
                 id, category, category_key, brand, model, price,
                 photo_url, availability_status, current_price, old_price,
-                is_sale, stock_status, boiler_volume_liters, specifications_json
+                is_sale, stock_status, boiler_volume_liters, model_group,
+                specifications_json
             FROM products
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
@@ -779,6 +796,7 @@ class Database:
             "stock_status",
             "boiler_volume_liters",
             "boiler_ten_type",
+            "model_group",
         }
 
         if field not in allowed_fields:

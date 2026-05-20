@@ -124,8 +124,8 @@
                             <a class="variant-card" href="/product/{{ v.id }}">
                             {% endif %}
                                 <div class="variant-main">
-                                    {% if v.volume is not none %}
-                                    <div class="variant-vol">{{ v.volume|int if v.volume == v.volume|int else v.volume }} <span data-ru="л" data-uk="л">л</span></div>
+                                    {% if v.diff_value is not none %}
+                                    <div class="variant-vol">{{ v.diff_value|int if v.diff_value == v.diff_value|int else v.diff_value }}{% if v.diff_unit %} <span>{{ v.diff_unit }}</span>{% endif %}</div>
                                     {% else %}
                                     <div class="variant-vol">{{ v.model }}</div>
                                     {% endif %}
