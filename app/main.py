@@ -1169,6 +1169,19 @@ class SiteBannerState(StatesGroup):
     waiting_for_field = State()
 
 
+class BannersAddState(StatesGroup):
+    title = State()
+    subtitle = State()
+    button_text = State()
+    button_link = State()
+    image_url = State()
+    sort_order = State()
+
+
+class BannersEditState(StatesGroup):
+    waiting_for_value = State()
+
+
 class SitePagesState(StatesGroup):
     waiting_for_text = State()
 
@@ -1357,7 +1370,7 @@ site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакты сайта")],
         [KeyboardButton(text="🧢 Шапка сайта")],
-        [KeyboardButton(text="🖼 Баннер сайта")],
+        [KeyboardButton(text="🖼 Баннер сайта"), KeyboardButton(text="🖼 Баннеры")],
         [KeyboardButton(text="📣 Промо-плашка")],
         [KeyboardButton(text="👀 Просмотр товара на сайте")],
         [KeyboardButton(text="📂 Категории сайта")],
@@ -2814,6 +2827,272 @@ async def site_banner_reset(message: Message):
     await db.set_setting("hero_button_text", "")
     await db.set_setting("hero_button_url", "")
     await message.answer("✅ Баннер сброшен.", reply_markup=site_banner_kb)
+
+
+# ===== Multi-banner slider CMS =====
+
+def _banner_list_kb(banners):
+    """Inline-клавиатура: список баннеров + кнопка добавить."""
+    rows = []
+    for b in banners:
+        title = (b["title"] or b["subtitle"] or "Без названия")[:40]
+        state = "✅" if b["is_active"] else "❌"
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{state} #{b['id']} {title}",
+                callback_data=f"bnr_open:{b['id']}",
+            )
+        ])
+    rows.append([InlineKeyboardButton(text="➕ Добавить баннер", callback_data="bnr_add")])
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="bnr_close")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _banner_edit_kb(banner_id: int, is_active: bool):
+    """Inline-клавиатура управления одним баннером."""
+    toggle_text = "👁 Выключить" if is_active else "👁 Включить"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📝 Заголовок",   callback_data=f"bnr_ef:{banner_id}:title"),
+            InlineKeyboardButton(text="📄 Подзаголовок", callback_data=f"bnr_ef:{banner_id}:subtitle"),
+        ],
+        [
+            InlineKeyboardButton(text="🔘 Кнопка (текст)", callback_data=f"bnr_ef:{banner_id}:button_text"),
+            InlineKeyboardButton(text="🔗 Кнопка (URL)",   callback_data=f"bnr_ef:{banner_id}:button_link"),
+        ],
+        [
+            InlineKeyboardButton(text="🖼 Фото (URL)",  callback_data=f"bnr_ef:{banner_id}:image_url"),
+            InlineKeyboardButton(text="🔢 Порядок",    callback_data=f"bnr_ef:{banner_id}:sort_order"),
+        ],
+        [
+            InlineKeyboardButton(text=toggle_text, callback_data=f"bnr_toggle:{banner_id}"),
+            InlineKeyboardButton(text="🗑 Удалить",    callback_data=f"bnr_delete:{banner_id}"),
+        ],
+        [InlineKeyboardButton(text="⬅️ К списку", callback_data="bnr_list")],
+    ])
+
+
+async def _send_banners_list(message, edit: bool = False):
+    banners = await db.list_all_banners()
+    text = f"🖼 Баннеры сайта ({len(banners)} шт.):"
+    kb = _banner_list_kb(banners)
+    try:
+        if edit:
+            await message.edit_text(text, reply_markup=kb)
+        else:
+            await message.answer(text, reply_markup=kb)
+    except Exception:
+        await message.answer(text, reply_markup=kb)
+
+
+async def _send_banner_card(message, banner_id: int, edit: bool = False):
+    b = await db.get_banner(banner_id)
+    if not b:
+        await message.answer("Баннер не найден.")
+        return
+    state_text = "✅ Активен" if b["is_active"] else "❌ Выключен"
+    text = (
+        f"🖼 Баннер #{b['id']}\n"
+        f"Статус: {state_text}\n"
+        f"Заголовок: {b['title'] or '—'}\n"
+        f"Подзаголовок: {b['subtitle'] or '—'}\n"
+        f"Кнопка: {b['button_text'] or '—'} → {b['button_link'] or '—'}\n"
+        f"Фото: {b['image_url'] or '—'}\n"
+        f"Порядок: {b['sort_order']}"
+    )
+    kb = _banner_edit_kb(banner_id, bool(b["is_active"]))
+    try:
+        if edit:
+            await message.edit_text(text, reply_markup=kb)
+        else:
+            await message.answer(text, reply_markup=kb)
+    except Exception:
+        await message.answer(text, reply_markup=kb)
+
+
+@router.message(lambda m: m.text == "🖼 Баннеры")
+async def banners_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await _send_banners_list(message)
+
+
+@router.callback_query(lambda c: c.data == "bnr_list")
+async def bnr_list_callback(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await _send_banners_list(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "bnr_close")
+async def bnr_close_callback(callback: CallbackQuery):
+    try:
+        await callback.message.edit_text("✅ Закрыто.")
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("bnr_open:"))
+async def bnr_open_callback(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    banner_id = int(callback.data.split(":")[1])
+    await _send_banner_card(callback.message, banner_id, edit=True)
+    await callback.answer()
+
+
+# — Добавить баннер: пошаговый FSM —
+
+@router.callback_query(lambda c: c.data == "bnr_add")
+async def bnr_add_start(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await state.set_state(BannersAddState.title)
+    await callback.message.answer(
+        "➕ Добавить баннер\n\n"
+        "Шаг 1/6 — Заголовок (например: «Акция — скидки до 30%»)\n"
+        "Отправьте «-» чтобы пропустить."
+    )
+    await callback.answer()
+
+
+@router.message(BannersAddState.title)
+async def bnr_add_title(message: Message, state: FSMContext):
+    await state.update_data(title="" if message.text.strip() == "-" else message.text.strip())
+    await state.set_state(BannersAddState.subtitle)
+    await message.answer("Шаг 2/6 — Подзаголовок (отправьте «-» чтобы пропустить):")
+
+
+@router.message(BannersAddState.subtitle)
+async def bnr_add_subtitle(message: Message, state: FSMContext):
+    await state.update_data(subtitle="" if message.text.strip() == "-" else message.text.strip())
+    await state.set_state(BannersAddState.button_text)
+    await message.answer("Шаг 3/6 — Текст кнопки (например: «Смотреть»; «-» пропустить):")
+
+
+@router.message(BannersAddState.button_text)
+async def bnr_add_button_text(message: Message, state: FSMContext):
+    await state.update_data(button_text="" if message.text.strip() == "-" else message.text.strip())
+    await state.set_state(BannersAddState.button_link)
+    await message.answer("Шаг 4/6 — URL кнопки (например: «/?category=konditsionery»; «-» пропустить):")
+
+
+@router.message(BannersAddState.button_link)
+async def bnr_add_button_link(message: Message, state: FSMContext):
+    await state.update_data(button_link="" if message.text.strip() == "-" else message.text.strip())
+    await state.set_state(BannersAddState.image_url)
+    await message.answer("Шаг 5/6 — URL изображения баннера («-» пропустить):")
+
+
+@router.message(BannersAddState.image_url)
+async def bnr_add_image_url(message: Message, state: FSMContext):
+    await state.update_data(image_url="" if message.text.strip() == "-" else message.text.strip())
+    await state.set_state(BannersAddState.sort_order)
+    await message.answer("Шаг 6/6 — Порядок сортировки (число; меньше = раньше; по умолчанию 100; «-» пропустить):")
+
+
+@router.message(BannersAddState.sort_order)
+async def bnr_add_sort_order(message: Message, state: FSMContext):
+    raw = message.text.strip()
+    sort_order = 100
+    if raw != "-":
+        try:
+            sort_order = int(raw)
+        except ValueError:
+            await message.answer("Введите число или «-» для пропуска:")
+            return
+    data = await state.get_data()
+    await state.clear()
+    banner = await db.create_banner(
+        title=data.get("title", ""),
+        subtitle=data.get("subtitle", ""),
+        button_text=data.get("button_text", ""),
+        button_link=data.get("button_link", ""),
+        image_url=data.get("image_url", ""),
+        sort_order=sort_order,
+    )
+    await message.answer(f"✅ Баннер #{banner['id']} создан!")
+    await _send_banners_list(message)
+
+
+# — Редактировать поле баннера —
+
+_BANNER_FIELD_LABELS = {
+    "title": "Заголовок",
+    "subtitle": "Подзаголовок",
+    "button_text": "Текст кнопки",
+    "button_link": "URL кнопки",
+    "image_url": "URL изображения",
+    "sort_order": "Порядок сортировки",
+}
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("bnr_ef:"))
+async def bnr_edit_field_start(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    banner_id, field = int(parts[1]), parts[2]
+    if field not in _BANNER_FIELD_LABELS:
+        await callback.answer("Неизвестное поле", show_alert=True)
+        return
+    await state.update_data(bnr_edit_id=banner_id, bnr_edit_field=field)
+    await state.set_state(BannersEditState.waiting_for_value)
+    label = _BANNER_FIELD_LABELS[field]
+    hint = " (число)" if field == "sort_order" else ""
+    await callback.message.answer(
+        f"✏️ Редактирование баннера #{banner_id}\n"
+        f"Поле: {label}{hint}\n"
+        "Отправьте новое значение или «-» чтобы очистить:"
+    )
+    await callback.answer()
+
+
+@router.message(BannersEditState.waiting_for_value)
+async def bnr_edit_field_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    banner_id = data.get("bnr_edit_id")
+    field = data.get("bnr_edit_field")
+    if not banner_id or not field:
+        await state.clear()
+        await message.answer("Ошибка состояния.")
+        return
+
+    raw = message.text.strip()
+    if raw == "-":
+        value = "" if field != "sort_order" else 100
+    elif field == "sort_order":
+        try:
+            value = int(raw)
+        except ValueError:
+            await message.answer("Введите целое число:")
+            return
+    else:
+        value = raw
+
+    await db.update_banner_field(banner_id, field, value)
+    await state.clear()
+    await message.answer(f"✅ Сохранено.")
+    await _send_banner_card(message, banner_id)
+
+
+# — Включить/выключить —
+
+@router.callback_query(lambda c: c.data and c.data.startswith("bnr_toggle:"))
+async def bnr_toggle_callback(callback: CallbackQuery):
+    banner_id = int(callback.data.split(":")[1])
+    is_active = await db.toggle_banner_active(banner_id)
+    state_text = "включён" if is_active else "выключен"
+    await callback.answer(f"Баннер {state_text}", show_alert=False)
+    await _send_banner_card(callback.message, banner_id, edit=True)
+
+
+# — Удалить —
+
+@router.callback_query(lambda c: c.data and c.data.startswith("bnr_delete:"))
+async def bnr_delete_callback(callback: CallbackQuery):
+    banner_id = int(callback.data.split(":")[1])
+    await db.delete_banner(banner_id)
+    await callback.answer("🗑 Баннер удалён", show_alert=False)
+    await _send_banners_list(callback.message, edit=True)
 
 
 # ===== Promo bar =====
@@ -7072,6 +7351,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
     site_design = await get_site_design()
+    active_banners = await db.list_active_banners()
 
     return templates.TemplateResponse(
         request=request,
@@ -7107,6 +7387,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
             "site_design": site_design,
+            "active_banners": active_banners,
         }
     )
 

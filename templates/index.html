@@ -121,8 +121,8 @@
     </script>
     {% endif %}
 
-    {# ── Hero banner ── #}
-    {% if site_design and site_design.banner_enabled and (site_design.hero_title or site_design.hero_subtitle) %}
+    {# ── Hero banner (legacy, shown only when no multi-banners) ── #}
+    {% if not active_banners and site_design and site_design.banner_enabled and (site_design.hero_title or site_design.hero_subtitle) %}
     <section class="hero-banner">
         {% if site_design.banner_image_url %}
         <div class="hero-bg" style="background-image:url('{{ site_design.banner_image_url }}')"></div>
@@ -143,6 +143,85 @@
             {% endif %}
         </div>
     </section>
+    {% endif %}
+
+    {# ── Multi-banner slider ── #}
+    {% if active_banners %}
+    {% set _bc = active_banners | length %}
+    <section class="bnr-slider{% if _bc == 1 %} bnr-static{% endif %}" id="bnrSlider" aria-label="Баннеры">
+        <div class="bnr-track" id="bnrTrack">
+        {% for b in active_banners %}
+            <div class="bnr-slide" role="group" aria-label="Баннер {{ loop.index }} из {{ _bc }}">
+                {% if b.image_url %}
+                <div class="bnr-bg" style="background-image:url('{{ b.image_url }}')"></div>
+                {% endif %}
+                <div class="bnr-overlay"></div>
+                <div class="bnr-content">
+                    {% if b.title %}<h2 class="bnr-title">{{ b.title }}</h2>{% endif %}
+                    {% if b.subtitle %}<p class="bnr-subtitle">{{ b.subtitle }}</p>{% endif %}
+                    {% if b.button_text %}
+                    <a href="{{ b.button_link or '#catalog' }}" class="bnr-cta">{{ b.button_text }}</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+        {% if _bc > 1 %}
+        <button class="bnr-arrow bnr-prev" id="bnrPrev" aria-label="Назад">&#8249;</button>
+        <button class="bnr-arrow bnr-next" id="bnrNext" aria-label="Вперёд">&#8250;</button>
+        <div class="bnr-dots" id="bnrDots" role="tablist">
+            {% for b in active_banners %}
+            <button class="bnr-dot{% if loop.first %} active{% endif %}"
+                    role="tab" aria-label="Слайд {{ loop.index }}"
+                    data-idx="{{ loop.index0 }}"></button>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+    <script>
+    (function(){
+        var slider = document.getElementById('bnrSlider');
+        if (!slider) return;
+        var track  = document.getElementById('bnrTrack');
+        var slides = track ? track.querySelectorAll('.bnr-slide') : [];
+        var total  = slides.length;
+        if (total <= 1) return;
+
+        var idx    = 0;
+        var timer  = null;
+        var dots   = document.querySelectorAll('#bnrDots .bnr-dot');
+
+        function goTo(n) {
+            idx = (n + total) % total;
+            track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+            dots.forEach(function(d, i){ d.classList.toggle('active', i === idx); });
+        }
+
+        function startAuto() {
+            clearInterval(timer);
+            timer = setInterval(function(){ goTo(idx + 1); }, 5000);
+        }
+
+        var prev = document.getElementById('bnrPrev');
+        var next = document.getElementById('bnrNext');
+        if (prev) prev.addEventListener('click', function(){ goTo(idx - 1); startAuto(); });
+        if (next) next.addEventListener('click', function(){ goTo(idx + 1); startAuto(); });
+
+        dots.forEach(function(d){
+            d.addEventListener('click', function(){ goTo(+this.dataset.idx); startAuto(); });
+        });
+
+        // Touch swipe
+        var sx = 0;
+        slider.addEventListener('touchstart', function(e){ sx = e.touches[0].clientX; }, {passive:true});
+        slider.addEventListener('touchend',   function(e){
+            var dx = e.changedTouches[0].clientX - sx;
+            if (Math.abs(dx) > 40) { goTo(dx < 0 ? idx + 1 : idx - 1); startAuto(); }
+        }, {passive:true});
+
+        startAuto();
+    })();
+    </script>
     {% endif %}
 
     <section class="site-categories">

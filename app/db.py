@@ -422,6 +422,21 @@ class Database:
         );
         """)
 
+        # ── Multi-banner slider ───────────────────────────────────
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS banners (
+            id SERIAL PRIMARY KEY,
+            image_url TEXT NOT NULL DEFAULT '',
+            title TEXT NOT NULL DEFAULT '',
+            subtitle TEXT NOT NULL DEFAULT '',
+            button_text TEXT NOT NULL DEFAULT '',
+            button_link TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 100,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -1341,6 +1356,58 @@ class Database:
             WHERE created_at::date = CURRENT_DATE
             """
         )
+
+    # ── Banners CRUD ─────────────────────────────────────────
+    async def list_active_banners(self):
+        return await self.fetch(
+            "SELECT * FROM banners WHERE is_active = TRUE ORDER BY sort_order ASC, id ASC"
+        )
+
+    async def list_all_banners(self):
+        return await self.fetch(
+            "SELECT * FROM banners ORDER BY sort_order ASC, id ASC"
+        )
+
+    async def get_banner(self, banner_id: int):
+        return await self.fetchrow("SELECT * FROM banners WHERE id = $1", banner_id)
+
+    async def create_banner(
+        self,
+        title: str = "",
+        subtitle: str = "",
+        button_text: str = "",
+        button_link: str = "",
+        image_url: str = "",
+        sort_order: int = 100,
+    ):
+        return await self.fetchrow(
+            """
+            INSERT INTO banners
+                (image_url, title, subtitle, button_text, button_link, sort_order, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+            RETURNING *
+            """,
+            image_url, title, subtitle, button_text, button_link, sort_order,
+        )
+
+    async def update_banner_field(self, banner_id: int, field: str, value):
+        allowed = {"title", "subtitle", "button_text", "button_link", "image_url", "sort_order"}
+        if field not in allowed:
+            raise ValueError(f"Banner field {field!r} not allowed")
+        await self.execute(
+            f"UPDATE banners SET {field} = $1 WHERE id = $2",
+            value, banner_id,
+        )
+
+    async def toggle_banner_active(self, banner_id: int):
+        row = await self.fetchrow(
+            "UPDATE banners SET is_active = NOT is_active WHERE id = $1 RETURNING is_active",
+            banner_id,
+        )
+        return bool(row and row["is_active"])
+
+    async def delete_banner(self, banner_id: int):
+        await self.execute("DELETE FROM banners WHERE id = $1", banner_id)
 
     async def get_top_site_products(self, limit: int = 10):
         return await self.fetch(

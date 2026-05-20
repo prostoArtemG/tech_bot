@@ -3001,3 +3001,163 @@ button:hover {
     .hero-content { padding: 32px 16px; }
     .hero-title { letter-spacing: -0.3px; }
 }
+
+/* ============================================================
+   MULTI-BANNER SLIDER
+   ============================================================ */
+.bnr-slider {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    min-height: 320px;
+    background: #0a0f1e;
+    user-select: none;
+}
+.bnr-static {
+    pointer-events: auto;
+}
+.bnr-track {
+    display: flex;
+    height: 100%;
+    min-height: 320px;
+    transition: transform 0.5s cubic-bezier(.4,0,.2,1);
+    will-change: transform;
+}
+.bnr-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    min-height: 320px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.bnr-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    transform: scale(1.04);
+    transition: transform 8s ease;
+    pointer-events: none;
+}
+.bnr-slider .bnr-slide:first-child .bnr-bg { transform: scale(1); }
+.bnr-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg,rgba(0,0,0,.30) 0%,rgba(0,0,0,.55) 100%);
+    pointer-events: none;
+}
+.bnr-content {
+    position: relative;
+    z-index: 2;
+    max-width: 680px;
+    width: 100%;
+    padding: 56px 32px;
+    text-align: center;
+}
+.bnr-title {
+    font-size: clamp(24px, 4vw, 46px);
+    font-weight: 800;
+    color: #f0fdf4;
+    line-height: 1.18;
+    letter-spacing: -.5px;
+    margin: 0 0 14px;
+    text-shadow: 0 2px 24px rgba(0,0,0,.55);
+}
+.bnr-subtitle {
+    font-size: clamp(13px, 1.8vw, 17px);
+    font-weight: 400;
+    color: rgba(209,250,229,.82);
+    line-height: 1.6;
+    margin: 0 0 28px;
+    text-shadow: 0 1px 10px rgba(0,0,0,.4);
+}
+.bnr-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 30px;
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 14px;
+    text-decoration: none;
+    box-shadow: 0 4px 18px rgba(22,163,74,.45);
+    transition: transform .2s, box-shadow .2s, background .2s;
+}
+.bnr-cta:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 8px 28px rgba(22,163,74,.55);
+    background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+    color: #fff;
+    text-decoration: none;
+}
+.bnr-cta:active { transform: scale(.98); }
+
+/* Arrows */
+.bnr-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    background: rgba(255,255,255,.12);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,.18);
+    color: #fff;
+    font-size: 28px;
+    line-height: 1;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s;
+}
+.bnr-arrow:hover { background: rgba(255,255,255,.24); }
+.bnr-prev { left: 16px; }
+.bnr-next { right: 16px; }
+
+/* Dots */
+.bnr-dots {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+}
+.bnr-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.4);
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: background .2s, transform .2s;
+}
+.bnr-dot.active {
+    background: #fff;
+    transform: scale(1.35);
+}
+
+@media (max-width: 768px) {
+    .bnr-slider, .bnr-track, .bnr-slide { min-height: 240px; }
+    .bnr-content { padding: 36px 20px; }
+    .bnr-cta { padding: 11px 22px; font-size: 14px; }
+    .bnr-arrow { width: 36px; height: 36px; font-size: 22px; }
+    .bnr-prev { left: 8px; }
+    .bnr-next { right: 8px; }
+}
+@media (max-width: 480px) {
+    .bnr-slider, .bnr-track, .bnr-slide { min-height: 200px; }
+    .bnr-content { padding: 28px 14px; }
+    .bnr-title { letter-spacing: -.3px; }
+    .bnr-arrow { display: none; }
+}
