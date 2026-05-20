@@ -597,6 +597,34 @@ class Database:
             product_id
         )
 
+    async def get_product_variants(self, category_key: str, brand: str):
+        """
+        Кандидаты-варианты: тот же category_key, тот же brand,
+        активные, не скрытые, не удалённые. Финальный отбор «той же модели»
+        делает Python-слой (по model_group или нормализованному stem).
+        """
+        if not category_key or not brand:
+            return []
+        return await self.fetch(
+            """
+            SELECT
+                id, category, category_key, brand, model, price,
+                photo_url, availability_status, current_price, old_price,
+                is_sale, stock_status, boiler_volume_liters, specifications_json
+            FROM products
+            WHERE COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
+              AND COALESCE(availability_status, 'in_stock') != 'hidden'
+              AND LOWER(COALESCE(brand, '')) = LOWER($2)
+              AND (
+                category_key = $1
+                OR (category_key IS NULL AND LOWER(COALESCE(category, '')) = LOWER($1))
+              )
+            ORDER BY id ASC
+            """,
+            category_key, brand,
+        )
+
     async def get_product_images(self, product_id: int):
         return await self.fetch(
             """

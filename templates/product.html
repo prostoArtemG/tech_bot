@@ -109,6 +109,55 @@
                     <div class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} <span data-ru="мес" data-uk="міс">мес</span></div>
                 </div>
 
+                {% if variants and variants|length > 1 %}
+                <div class="variants-box">
+                    <h3 class="variants-title"
+                        data-ru="Другие варианты этой модели"
+                        data-uk="Інші варіанти цієї моделі">Інші варіанти цієї моделі</h3>
+                    <div class="variants-list">
+                        {% for v in variants %}
+                            {% set v_price = v.current_price or v.price %}
+                            {% set v_status = (v.stock_status or 'in_stock') %}
+                            {% if v.is_current %}
+                            <div class="variant-card variant-active" aria-current="true">
+                            {% else %}
+                            <a class="variant-card" href="/product/{{ v.id }}">
+                            {% endif %}
+                                <div class="variant-main">
+                                    {% if v.volume is not none %}
+                                    <div class="variant-vol">{{ v.volume|int if v.volume == v.volume|int else v.volume }} <span data-ru="л" data-uk="л">л</span></div>
+                                    {% else %}
+                                    <div class="variant-vol">{{ v.model }}</div>
+                                    {% endif %}
+                                    <div class="variant-price-row">
+                                        <span class="variant-price">{{ v_price }} <span data-ru="грн" data-uk="грн">грн</span></span>
+                                        {% if v.is_sale and v.old_price %}
+                                        <span class="variant-old-price">{{ v.old_price }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="variant-status">
+                                    {% if v_status == 'preorder' %}
+                                        <span class="variant-badge variant-pre" data-ru="Под заказ" data-uk="Під замовлення">Під замовлення</span>
+                                    {% elif v_status == 'out_of_stock' %}
+                                        <span class="variant-badge variant-out" data-ru="Нет в наличии" data-uk="Немає в наявності">Немає в наявності</span>
+                                    {% else %}
+                                        <span class="variant-badge variant-in" data-ru="В наличии" data-uk="В наявності">В наявності</span>
+                                    {% endif %}
+                                    {% if v.is_current %}
+                                    <span class="variant-current-tag" data-ru="Поточний" data-uk="Поточний">Поточний</span>
+                                    {% endif %}
+                                </div>
+                            {% if v.is_current %}
+                            </div>
+                            {% else %}
+                            </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if (product.category | cat_key) == 'boilers' and (product.boiler_volume_liters or product.boiler_ten_type) %}
                 <div class="specs-box">
                     <h3 data-ru="Характеристики бойлера" data-uk="Характеристики бойлера">Характеристики бойлера</h3>

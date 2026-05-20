@@ -7114,6 +7114,131 @@ async def site_order_form(
     )
 
 
+def _model_stem(model: str) -> str:
+    """
+    Нормализуем модель для группировки вариантов одной серии.
+    Удаляем объёмные/числовые токены, оставляем буквенно-цифровой костяк.
+    "Atlantic Steatite 80л" / "Atlantic Steatite 100" → "atlantic steatite".
+    """
+    s = (model or "").lower().strip()
+    if not s:
+        return ""
+    # волуминные токены: "80л", "80 л", "80l", "100 liter(s)", "150 літр(ів)"
+    s = re.sub(r"\b\d+\s*(?:л|l|liters?|liter|літр\w*|литр\w*)\b", " ", s, flags=re.IGNORECASE)
+    # одиночные числовые токены 2–4 цифр (вероятный объём/мощность)
+    s = re.sub(r"\b\d{2,4}\b", " ", s)
+    # пунктуация → пробел
+    s = re.sub(r"[^\w\s]+", " ", s, flags=re.UNICODE)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _product_volume_l(p):
+    """Объём бойлера в литрах: колонка → specifications_json.volume."""
+    try:
+        v = p["boiler_volume_liters"] if "boiler_volume_liters" in p.keys() else None
+    except (KeyError, TypeError, AttributeError):
+        v = None
+    if v in (None, ""):
+        try:
+            v = _product_attr_value(p, "volume")
+        except Exception:
+            v = None
+    return _extract_number(v)
+
+
+def _collect_product_variants(current, candidates):
+    """
+    Финальный отбор вариантов «той же модели».
+    Foundation под `model_group`: если в продукте есть поле model_group и оно
+    непустое — группируем по нему. Иначе — по нормализованному stem модели.
+    Для бойлеров возвращаем только варианты с другим объёмом.
+    """
+    if not current or not candidates:
+        return []
+
+    cur_id = current.get("id") if isinstance(current, dict) else current["id"]
+    cur_brand = (current.get("brand") if isinstance(current, dict) else current["brand"]) or ""
+    cur_model = (current.get("model") if isinstance(current, dict) else current["model"]) or ""
+    try:
+        cur_cat_key = category_key(current["category"] or "") or ""
+    except Exception:
+        cur_cat_key = ""
+
+    # ── group key (model_group → stem fallback) ──
+    def _group_of(p):
+        try:
+            mg = p["model_group"] if "model_group" in p.keys() else None
+        except (KeyError, TypeError, AttributeError):
+            mg = None
+        if mg:
+            return ("mg", str(mg).strip().lower())
+        return ("stem", _model_stem(p.get("model") if isinstance(p, dict) else p["model"]))
+
+    cur_group = _group_of(current)
+    if cur_group[0] == "stem" and not cur_group[1]:
+        return []
+
+    cur_volume = _product_volume_l(current) if cur_cat_key == "boilers" else None
+
+    variants = []
+    seen_ids = set()
+    for p in candidates:
+        if p["id"] == cur_id or p["id"] in seen_ids:
+            continue
+        if (p["brand"] or "").strip().lower() != cur_brand.strip().lower():
+            continue
+        if _group_of(p) != cur_group:
+            continue
+        vol = _product_volume_l(p)
+        # Бойлеры: вариант обязан иметь объём; если у текущего объём задан,
+        # отсекаем дубликаты с тем же объёмом.
+        if cur_cat_key == "boilers":
+            if vol is None:
+                continue
+            if cur_volume is not None and vol == cur_volume:
+                continue
+        seen_ids.add(p["id"])
+        variants.append({
+            "id": p["id"],
+            "brand": p["brand"],
+            "model": p["model"],
+            "price": p["price"],
+            "current_price": p["current_price"],
+            "old_price": p["old_price"],
+            "is_sale": p["is_sale"],
+            "stock_status": p["stock_status"],
+            "availability_status": p["availability_status"],
+            "volume": vol,
+            "is_current": False,
+        })
+
+    if not variants:
+        return []
+
+    # Добавляем текущий товар как active (для подсветки в UI).
+    variants.append({
+        "id": cur_id,
+        "brand": cur_brand,
+        "model": cur_model,
+        "price": current["price"],
+        "current_price": current["current_price"],
+        "old_price": current["old_price"],
+        "is_sale": current["is_sale"],
+        "stock_status": current["stock_status"],
+        "availability_status": current.get("availability_status") if isinstance(current, dict) else None,
+        "volume": cur_volume,
+        "is_current": True,
+    })
+
+    # Бойлеры — сортировка по объёму ascending; иначе по id.
+    if cur_cat_key == "boilers":
+        variants.sort(key=lambda v: (v["volume"] is None, v["volume"] or 0, v["id"]))
+    else:
+        variants.sort(key=lambda v: v["id"])
+    return variants
+
+
 @web_app.get("/product/{product_id}", response_class=HTMLResponse)
 async def product_page(request: Request, product_id: int):
     product = await db.get_product_by_id(product_id)
@@ -7132,6 +7257,17 @@ async def product_page(request: Request, product_id: int):
 
     images = await db.get_product_images(product_id)
     specifications = await db.get_product_specifications(product_id)
+
+    # ── Варианты той же модели (другие объёмы для бойлеров и т.п.) ──
+    variants = []
+    try:
+        cat_key_for_var = category_key(product["category"] or "") or ""
+        if cat_key_for_var and (product["brand"] or "").strip():
+            cands = await db.get_product_variants(cat_key_for_var, product["brand"])
+            variants = _collect_product_variants(product, cands)
+    except Exception as e:
+        print(f"[site] product variants failed: {e}")
+        variants = []
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
         "phones": await get_phones_list(),
@@ -7170,6 +7306,7 @@ async def product_page(request: Request, product_id: int):
             },
             "spec_labels": spec_labels_ctx,
             "spec_field_order": spec_field_order_ctx,
+            "variants": variants,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,

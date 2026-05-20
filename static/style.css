@@ -848,6 +848,103 @@ button:hover {
     margin-top: 8px;
 }
 
+/* ── Variants of same model (product page) ── */
+.variants-box {
+    margin-top: 18px;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+}
+.variants-title {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+}
+.variants-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.variant-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fafafa;
+    color: #111827;
+    text-decoration: none;
+    transition: border-color .15s ease, background .15s ease, transform .05s ease;
+}
+.variant-card:hover {
+    border-color: #6366f1;
+    background: #f5f7ff;
+}
+.variant-card:active { transform: translateY(1px); }
+.variant-active {
+    border-color: #10b981;
+    background: #ecfdf5;
+    cursor: default;
+}
+.variant-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.variant-vol {
+    font-weight: 600;
+    font-size: 15px;
+}
+.variant-price-row {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.variant-price {
+    font-size: 14px;
+    color: #111827;
+    font-weight: 500;
+}
+.variant-old-price {
+    font-size: 12px;
+    color: #9ca3af;
+    text-decoration: line-through;
+}
+.variant-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.variant-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+.variant-in   { background: #dcfce7; color: #166534; }
+.variant-pre  { background: #fef3c7; color: #92400e; }
+.variant-out  { background: #fee2e2; color: #991b1b; }
+.variant-current-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #10b981;
+    color: #fff;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+@media (max-width: 480px) {
+    .variant-card { padding: 9px 10px; }
+    .variant-vol { font-size: 14px; }
+    .variant-price { font-size: 13px; }
+}
+
 /* specs */
 .specs-box {
     margin-top: 18px;
