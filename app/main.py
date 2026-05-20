@@ -6688,13 +6688,16 @@ def _product_attr_value(p, key):
 
 
 @web_app.get("/", response_class=HTMLResponse)
-async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = "", price_min: str = "", price_max: str = "", in_stock: str = "", volume: str = ""):
+async def site_home(request: Request, q: str = "", category: str = "", page: int = 1, brand: str = "", price_min: str = "", price_max: str = "", in_stock: str = "", volume: str = "", sort: str = ""):
     q = (q or "").strip()
     category = (category or "").strip()
     brand = (brand or "").strip()
     price_min = (price_min or "").strip()
     price_max = (price_max or "").strip()
     volume = (volume or "").strip()
+    sort = (sort or "").strip().lower()
+    if sort not in ("", "price_asc", "price_desc", "new", "newest", "popular"):
+        sort = ""
 
     if q:
         products = await db.search_site_products(q)
@@ -6773,6 +6776,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     # Категорийные переопределения: для каких категорий доп. number-атрибуты тоже чекбоксы.
     DISCRETE_NUMBER_KEYS_BY_CATEGORY = {
         "microwaves": {"power"},
+        "air_conditioners": {"room_area"},
     }
     dyn_attrs = []
     dyn_options = {}   # attr_key → list[{value, label_ru, label_uk}] (checkbox-режим)
@@ -6972,6 +6976,28 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
                 }
 
     per_page = 12
+    # ── Sort ──
+    # price_asc / price_desc — по current_price (fallback → price);
+    # new/newest — по id desc (новые товары имеют больший id);
+    # popular / "" — не трогаем порядок из БД (это выборка из list_site_products).
+    def _price_of(p):
+        try:
+            return float(p.get("current_price") or p.get("price") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    def _id_of(p):
+        try:
+            return int(p.get("id") or 0)
+        except (TypeError, ValueError):
+            return 0
+    if sort == "price_asc":
+        products = sorted(products, key=_price_of)
+    elif sort == "price_desc":
+        products = sorted(products, key=_price_of, reverse=True)
+    elif sort in ("new", "newest"):
+        products = sorted(products, key=_id_of, reverse=True)
+    # popular / "" — без изменений.
+
     total = len(products)
     pages = math.ceil(total / per_page) if total else 1
     page = max(1, min(page, pages))
@@ -7051,6 +7077,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "dyn_selected": dyn_selected,
             "dyn_range": dyn_range,
             "dyn_query_extras": dyn_query_extras,
+            "current_sort": sort,
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,

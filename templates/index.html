@@ -306,10 +306,10 @@
       <div class="sort-row">
         <div class="sort-wrap">
           <select id="sortSelect" class="sort-select" aria-label="Сортування">
-            <option value="" data-ru="За популярністю" data-uk="За популярністю">За популярністю</option>
-            <option value="price_asc" data-ru="Від дешевих" data-uk="Від дешевих">Від дешевих</option>
-            <option value="price_desc" data-ru="Від дорогих" data-uk="Від дорогих">Від дорогих</option>
-            <option value="new" data-ru="Новинки" data-uk="Новинки">Новинки</option>
+            <option value=""           {% if not current_sort or current_sort == 'popular' %}selected{% endif %} data-ru="За популярністю" data-uk="За популярністю">За популярністю</option>
+            <option value="price_asc"  {% if current_sort == 'price_asc' %}selected{% endif %} data-ru="Від дешевих" data-uk="Від дешевих">Від дешевих</option>
+            <option value="price_desc" {% if current_sort == 'price_desc' %}selected{% endif %} data-ru="Від дорогих" data-uk="Від дорогих">Від дорогих</option>
+            <option value="new"        {% if current_sort in ['new','newest'] %}selected{% endif %} data-ru="Новинки" data-uk="Новинки">Новинки</option>
           </select>
         </div>
       </div>
@@ -369,7 +369,7 @@
     </main>
 
     {% if pages > 1 %}
-    {% set _qs_ns = namespace(s=(('&q=' ~ q) if q else '') ~ (('&category=' ~ current_category) if current_category else '') ~ (('&brand=' ~ current_brand) if current_brand else '') ~ (('&price_min=' ~ price_min) if price_min else '') ~ (('&price_max=' ~ price_max) if price_max else '') ~ ('&in_stock=1' if in_stock else '')) %}
+    {% set _qs_ns = namespace(s=(('&q=' ~ q) if q else '') ~ (('&category=' ~ current_category) if current_category else '') ~ (('&brand=' ~ current_brand) if current_brand else '') ~ (('&price_min=' ~ price_min) if price_min else '') ~ (('&price_max=' ~ price_max) if price_max else '') ~ ('&in_stock=1' if in_stock else '') ~ (('&sort=' ~ current_sort) if current_sort else '')) %}
     {# Dynamic-filter params (multi-checkbox + number range). #}
     {% if dyn_query_extras %}
         {% for _pair in dyn_query_extras %}
@@ -664,7 +664,7 @@ var FILTER_META = {
   }
 
   params.forEach(function (value, key) {
-    if (key === 'page' || key === 'category') return;
+    if (key === 'page' || key === 'category' || key === 'sort') return;
     // Skip empty / blank values
     if (!value || !value.trim()) return;
     // Skip price filters that aren't positive numbers
@@ -711,36 +711,19 @@ var FILTER_META = {
   }
 }());
 
-/* ─── Sort (client-side) ─── */
+/* ─── Sort (server-side via URL navigation) ─── */
 (function () {
   var sel = document.getElementById('sortSelect');
-  var grid = document.getElementById('productsGrid');
-  if (!sel || !grid) return;
-
-  var cards = Array.from(grid.querySelectorAll('.card'));
-  cards.forEach(function (c, i) { c.dataset.origIdx = i; });
-
-  var saved = sessionStorage.getItem('catalogSort') || '';
-  if (saved) { sel.value = saved; doSort(saved); }
+  if (!sel) return;
 
   sel.addEventListener('change', function () {
-    sessionStorage.setItem('catalogSort', this.value);
-    doSort(this.value);
+    var p = new URLSearchParams(window.location.search);
+    if (this.value) p.set('sort', this.value);
+    else p.delete('sort');
+    p.delete('page');
+    var qs = p.toString();
+    window.location.href = qs ? '/?' + qs : '/';
   });
-
-  function doSort(mode) {
-    var list = Array.from(grid.querySelectorAll('.card'));
-    if (!mode) {
-      list.sort(function (a, b) { return (a.dataset.origIdx | 0) - (b.dataset.origIdx | 0); });
-    } else if (mode === 'price_asc') {
-      list.sort(function (a, b) { return (+a.dataset.price || 0) - (+b.dataset.price || 0); });
-    } else if (mode === 'price_desc') {
-      list.sort(function (a, b) { return (+b.dataset.price || 0) - (+a.dataset.price || 0); });
-    } else if (mode === 'new') {
-      list.sort(function (a, b) { return (+b.dataset.id || 0) - (+a.dataset.id || 0); });
-    }
-    list.forEach(function (c) { grid.appendChild(c); });
-  }
 }());
 
 /* ─── Filter option counts (from current page products) ─── */
