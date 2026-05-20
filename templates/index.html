@@ -209,6 +209,32 @@
                 </label>
             </div>
 
+            {# ── Category chooser (только когда категория не выбрана) ── #}
+            {% if not current_category %}
+            {% set _cat_qs = (('&brand=' ~ current_brand) if current_brand else '')
+                ~ (('&price_min=' ~ price_min) if price_min else '')
+                ~ (('&price_max=' ~ price_max) if price_max else '')
+                ~ ('&in_stock=1' if in_stock else '')
+                ~ (('&sort=' ~ current_sort) if current_sort else '')
+                ~ (('&q=' ~ q) if q else '') %}
+            <div class="filters-category-chooser">
+                <p class="filters-cat-hint"
+                   data-ru="Для детальных характеристик выберите категорию"
+                   data-uk="Для детальних характеристик оберіть категорію">Для детальних характеристик оберіть категорію</p>
+                <div class="filters-cat-grid">
+                    {% for card in category_cards %}
+                    <a class="filters-cat-pill"
+                       href="/?category={{ card.filter_value | urlencode }}{{ _cat_qs }}"
+                       data-ru="{{ card.name_ru }}"
+                       data-uk="{{ card.name_uk }}">
+                        <span class="filters-cat-emoji" aria-hidden="true">{{ card.emoji }}</span>
+                        <span class="filters-cat-label">{{ card.name_ru }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             {# ── Динамические фильтры по категории (etap 6) ── #}
             {% if dyn_attrs %}
             <div class="dynamic-filters">

@@ -1581,6 +1581,50 @@ button:hover {
   left: 5px;
 }
 
+/* ── Category chooser (когда категория не выбрана) ── */
+.filters-category-chooser {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+.filters-cat-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.35;
+}
+.filters-cat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filters-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+  text-decoration: none;
+  line-height: 1.2;
+  transition: background .15s ease, border-color .15s ease, transform .05s ease;
+}
+.filters-cat-pill:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+.filters-cat-pill:active { transform: translateY(1px); }
+.filters-cat-emoji { font-size: 14px; }
+.filters-cat-label { white-space: nowrap; }
+@media (max-width: 640px) {
+  .filters-cat-pill { padding: 5px 10px; font-size: 12px; }
+}
+
 /* ── Dynamic category filters (etap 3) ── */
 .dynamic-filters {
   display: flex;
