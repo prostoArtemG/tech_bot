@@ -7136,21 +7136,60 @@ async def site_order_form(
     )
 
 
+_MODEL_STEM_NOISE = {
+    # фичи / опции
+    "wifi", "wi-fi", "wf", "smart", "inverter", "inv", "dc",
+    "eco", "econom", "premium", "pro", "plus", "lite", "mini", "max",
+    # цвета
+    "black", "white", "silver", "gray", "grey", "gold", "blue", "red",
+    "green", "beige", "brown", "graphite", "titan", "titanium",
+    "чорний", "білий", "сірий", "сріблястий", "золотий", "синій",
+    "червоний", "зелений", "коричневий", "графіт",
+    "черный", "белый", "серый", "серебристый", "золотой", "синий",
+    "красный", "зеленый", "коричневый",
+}
+
+
 def _model_stem(model: str) -> str:
     """
     Нормализуем модель для группировки вариантов одной серии.
-    Удаляем объёмные/числовые токены, оставляем буквенно-цифровой костяк.
-    "Atlantic Steatite 80л" / "Atlantic Steatite 100" → "atlantic steatite".
+    Удаляем объёмные/площадные/числовые токены и шумовые слова
+    (WiFi, Inverter, цвета), оставляем буквенно-цифровой костяк.
+
+    "Atlantic Steatite 80л"      → "atlantic steatite"
+    "Bosch TR2000 50 л"          → "bosch tr"
+    "Fujico FMA-12 WiFi"         → "fujico fma"
+    "Fujico FMA-18 Inverter"     → "fujico fma"
     """
-    s = (model or "").lower().strip()
+    s = (model or "")
     if not s:
         return ""
-    # волуминные токены: "80л", "80 л", "80l", "100 liter(s)", "150 літр(ів)"
-    s = re.sub(r"\b\d+\s*(?:л|l|liters?|liter|літр\w*|литр\w*)\b", " ", s, flags=re.IGNORECASE)
-    # одиночные числовые токены 2–4 цифр (вероятный объём/мощность)
-    s = re.sub(r"\b\d{2,4}\b", " ", s)
+    # NFKD нормализация (полноширинные/спецсимволы → ascii-эквиваленты)
+    try:
+        import unicodedata
+        s = unicodedata.normalize("NFKD", s)
+    except Exception:
+        pass
+    s = s.lower().strip()
+    # объёмные токены: "80л", "80 л", "80l", "100 liter(s)", "150 літр(ів)"
+    s = re.sub(r"\b\d+[\.,]?\d*\s*(?:л|l|liters?|liter|літр\w*|литр\w*)\b",
+               " ", s, flags=re.IGNORECASE)
+    # площадные токены: "25м²", "35 m2", "40 кв.м", "50 sqm"
+    s = re.sub(r"\b\d+[\.,]?\d*\s*(?:м²|m²|м2|m2|кв\.?\s*м|sq\s*m|sqm)\b",
+               " ", s, flags=re.IGNORECASE)
+    # мощности/частоты: "2.5 кВт", "12000 BTU", "220В", "50Гц"
+    s = re.sub(r"\b\d+[\.,]?\d*\s*(?:квт|kw|btu|вт|w|в|v|гц|hz|а|a)\b",
+               " ", s, flags=re.IGNORECASE)
+    # дефисы/подчёркивания → пробел (до удаления чисел, чтобы "FMA-12" → "FMA 12")
+    s = re.sub(r"[\-_/]+", " ", s)
+    # одиночные числовые токены 2–5 цифр (вероятный объём/мощность/индекс модели)
+    s = re.sub(r"\b\d{2,5}\b", " ", s)
     # пунктуация → пробел
     s = re.sub(r"[^\w\s]+", " ", s, flags=re.UNICODE)
+    # удаляем шумовые слова (WiFi, Inverter, цвета и т.п.)
+    tokens = [t for t in s.split() if t and t not in _MODEL_STEM_NOISE]
+    s = " ".join(tokens)
+    # двойные пробелы
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
