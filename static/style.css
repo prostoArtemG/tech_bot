@@ -3228,50 +3228,84 @@ button:hover {
     .bnr-img { max-height: 280px; }
 }
 
-/* ── Mobile: text → image → button (column) ── */
+/* ── Mobile: button overlaid over image bottom ── */
 @media (max-width: 680px) {
     .bnr-inner {
         grid-template-areas:
             "text"
-            "img"
-            "cta";
+            "img";
         grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto;
-        height: auto;
-        min-height: 300px;
-        padding: 20px 16px 24px;
+        grid-template-rows: auto 1fr;
+        height: 260px;
+        padding: 14px 14px 0;
         column-gap: 0;
-        row-gap: 14px;
+        row-gap: 10px;
         overflow: hidden;
+        position: relative;
+    }
+    /* dark gradient overlay — fades image into button area */
+    .bnr-inner::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 120px;
+        background: linear-gradient(to top, rgba(0,0,0,.72), transparent);
+        pointer-events: none;
+        z-index: 2;
     }
     .bnr-text {
         max-width: 100%;
-        padding: 22px 20px;
+        padding: 16px 18px 12px;
         align-items: center;
         text-align: center;
         animation: none;
     }
-    .bnr-title { font-size: clamp(18px, 5vw, 26px); margin-bottom: 8px; }
-    .bnr-subtitle { font-size: 13px; }
+    .bnr-title { font-size: clamp(15px, 4.5vw, 21px); margin-bottom: 5px; }
+    .bnr-subtitle { font-size: 12px; }
     .bnr-img-col {
-        max-height: 180px;
+        align-self: stretch;
+        max-height: none;
         justify-self: center;
+        overflow: visible;
     }
     .bnr-img { max-height: 180px; animation-duration: 7s; }
+    /* CTA: absolute, centered, bottom of hero, above gradient */
     .bnr-cta {
-        justify-self: center;
-        width: 85%;
+        position: absolute;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 3;
+        width: 170px;
         min-width: unset;
-        height: 52px;
-        margin-top: 0;
+        height: 44px;
+        padding: 0 20px;
+        background: rgba(8,16,28,.80);
+        border: 1px solid rgba(34,197,94,.38);
+        box-shadow: 0 0 18px rgba(34,197,94,.16);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        color: #a7f3d0;
         font-size: 14px;
+        font-weight: 600;
+        border-radius: 14px;
+        text-decoration: none;
+        white-space: nowrap;
     }
+    .bnr-cta:hover {
+        background: rgba(12,24,42,.90);
+        box-shadow: 0 0 26px rgba(34,197,94,.28);
+        transform: translateX(-50%) translateY(-1px);
+        color: #d1fae5;
+    }
+    .bnr-cta:active { transform: translateX(-50%) scale(.97); }
     .bnr-arrow { display: none; }
-    .bnr-dots { bottom: 10px; }
+    /* dots above the button */
+    .bnr-dots { bottom: 64px; z-index: 4; }
 }
 @media (max-width: 400px) {
-    .bnr-inner { padding: 16px 12px 20px; row-gap: 12px; min-height: 260px; }
-    .bnr-text { padding: 18px 16px; border-radius: 20px; }
-    .bnr-cta { width: 90%; height: 48px; font-size: 13px; }
+    .bnr-inner { height: 240px; padding: 12px 12px 0; row-gap: 8px; }
+    .bnr-text { padding: 14px 14px 10px; border-radius: 18px; }
+    .bnr-cta { width: 155px; height: 40px; font-size: 13px; bottom: 12px; }
     .bnr-img { max-height: 150px; }
 }
