@@ -3029,31 +3029,33 @@ button:hover {
     background: var(--site-primary, #111827);
     overflow: hidden;
 }
-/* subtle accent glow on the right behind product photo */
+/* subtle accent glow behind product photo */
 .bnr-slide::after {
     content: '';
     position: absolute;
     inset: 0;
     background: radial-gradient(
         ellipse 55% 130% at 92% 50%,
-        rgba(22,163,74,.14) 0%,
+        rgba(22,163,74,.13) 0%,
         transparent 65%
     );
     pointer-events: none;
     z-index: 0;
 }
 
-/* ── Two-column inner ── */
+/* ── Two-column inner — fixed 320px height on desktop ── */
 .bnr-inner {
     display: flex;
     flex-direction: row;
     align-items: center;
+    justify-content: space-between;
+    overflow: hidden;
     width: 100%;
     max-width: 1280px;
+    height: 320px;
     margin: 0 auto;
-    padding: 40px 56px;
-    gap: 48px;
-    min-height: 300px;
+    padding: 0 56px;
+    gap: 40px;
     box-sizing: border-box;
     position: relative;
     z-index: 1;
@@ -3066,9 +3068,8 @@ button:hover {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0;
 }
-/* When text is the only child (no image) — center it */
+/* text-only banner — centre content */
 .bnr-text:only-child {
     align-items: center;
     text-align: center;
@@ -3076,30 +3077,33 @@ button:hover {
     margin: 0 auto;
 }
 
-/* ── Image column (right) ── */
+/* ── Image column (right) — max 45% width, max 280px tall ── */
 .bnr-img-col {
-    flex: 0 0 42%;
-    max-width: 42%;
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 45%;
+    max-height: 280px;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 260px;
+    overflow: hidden;
 }
-/* When image is the only child (no text) — take more space */
+/* image-only banner — cap width, keep it tidy */
 .bnr-img-col:only-child {
-    flex: 0 0 80%;
-    max-width: 600px;
-    height: 280px;
+    max-width: 420px;
+    max-height: 280px;
     margin: 0 auto;
 }
+/* ── The actual image — contain, no crop ── */
 .bnr-img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: center;
     display: block;
-    /* lift product off background */
-    filter: drop-shadow(0 12px 32px rgba(0,0,0,.40));
+    max-width: 100%;
+    max-height: 280px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    object-position: center center;
+    filter: drop-shadow(0 10px 28px rgba(0,0,0,.38));
     transition: transform .35s ease;
 }
 .bnr-slide:hover .bnr-img { transform: translateY(-4px) scale(1.02); }
@@ -3198,36 +3202,38 @@ button:hover {
 
 /* ── Tablet ── */
 @media (max-width: 900px) {
-    .bnr-inner { padding: 32px 36px; gap: 32px; min-height: 260px; }
-    .bnr-img-col { flex: 0 0 38%; max-width: 38%; height: 220px; }
+    .bnr-inner { height: 280px; padding: 0 32px; gap: 28px; }
+    .bnr-img-col { max-width: 42%; max-height: 240px; }
+    .bnr-img { max-height: 240px; }
 }
 
-/* ── Mobile: stack text top / image bottom ── */
+/* ── Mobile: column — text top, image bottom ── */
 @media (max-width: 680px) {
     .bnr-inner {
         flex-direction: column;
         align-items: center;
-        text-align: center;
-        padding: 28px 20px 20px;
-        gap: 20px;
-        min-height: 0;
+        justify-content: center;
+        height: auto;
+        padding: 24px 20px 20px;
+        gap: 16px;
+        overflow: hidden;
     }
-    .bnr-text { align-items: center; order: 0; }
+    .bnr-text { align-items: center; text-align: center; order: 0; }
     .bnr-text:only-child { text-align: center; align-items: center; }
     .bnr-img-col {
-        flex: 0 0 auto;
-        max-width: 100%;
-        width: 100%;
-        height: 180px;
         order: 1;
+        max-width: 90%;
+        max-height: 220px;
+        width: auto;
     }
-    .bnr-img-col:only-child { height: 220px; flex: 0 0 auto; max-width: 100%; }
-    .bnr-img { object-position: center bottom; }
+    .bnr-img-col:only-child { max-width: 80%; max-height: 220px; }
+    .bnr-img { max-height: 220px; }
     .bnr-arrow { display: none; }
-    .bnr-dots { bottom: 10px; }
+    .bnr-dots { bottom: 8px; }
 }
 @media (max-width: 400px) {
-    .bnr-inner { padding: 22px 16px 16px; gap: 16px; }
-    .bnr-img-col { height: 150px; }
+    .bnr-inner { padding: 20px 16px 16px; gap: 12px; }
+    .bnr-img-col { max-height: 180px; }
+    .bnr-img { max-height: 180px; }
     .bnr-cta { padding: 11px 22px; font-size: 13px; }
 }
