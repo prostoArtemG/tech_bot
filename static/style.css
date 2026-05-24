@@ -3003,8 +3003,17 @@ button:hover {
 }
 
 /* ============================================================
-   MULTI-BANNER SLIDER  — premium two-column layout
+   MULTI-BANNER SLIDER  — Premium Tech Store redesign
    ============================================================ */
+
+@keyframes bnrFadeUp {
+    from { opacity: 0; transform: translateY(22px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bnrFloat {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-10px); }
+}
 
 /* ── Wrapper & track ── */
 .bnr-slider {
@@ -3012,12 +3021,12 @@ button:hover {
     overflow: hidden;
     width: 100%;
     user-select: none;
-    background: var(--site-primary, #111827);
+    background: #0b1120;
 }
 .bnr-static { pointer-events: auto; }
 .bnr-track {
     display: flex;
-    transition: transform 0.5s cubic-bezier(.4,0,.2,1);
+    transition: transform 0.55s cubic-bezier(.4,0,.2,1);
     will-change: transform;
 }
 
@@ -3026,24 +3035,22 @@ button:hover {
     flex: 0 0 100%;
     width: 100%;
     position: relative;
-    background: var(--site-primary, #111827);
+    background: transparent;
     overflow: hidden;
 }
-/* subtle accent glow behind product photo */
-.bnr-slide::after {
+/* ambient neon glow */
+.bnr-slide::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(
-        ellipse 55% 130% at 92% 50%,
-        rgba(22,163,74,.13) 0%,
-        transparent 65%
-    );
+    background:
+        radial-gradient(ellipse 70% 100% at 78% 42%, rgba(34,197,94,.10) 0%, transparent 55%),
+        radial-gradient(ellipse 40% 60% at 20% 80%, rgba(34,197,94,.06) 0%, transparent 55%);
     pointer-events: none;
     z-index: 0;
 }
 
-/* ── Two-column inner — fixed 320px height on desktop ── */
+/* ── Inner two-column layout ── */
 .bnr-inner {
     display: flex;
     flex-direction: row;
@@ -3052,24 +3059,32 @@ button:hover {
     overflow: hidden;
     width: 100%;
     max-width: 1280px;
-    height: 320px;
+    height: 420px;
     margin: 0 auto;
-    padding: 0 56px;
-    gap: 40px;
+    padding: 0 64px;
+    gap: 52px;
     box-sizing: border-box;
     position: relative;
     z-index: 1;
 }
 
-/* ── Text column (left) ── */
+/* ── Glass content card (left) ── */
 .bnr-text {
-    flex: 1 1 0%;
+    flex: 0 1 auto;
+    max-width: 52%;
     min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    padding: 40px 44px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 28px;
+    box-shadow: 0 0 40px rgba(34,197,94,.18), inset 0 1px 0 rgba(255,255,255,.06);
+    animation: bnrFadeUp .55s ease both;
 }
-/* text-only banner — centre content */
 .bnr-text:only-child {
     align-items: center;
     text-align: center;
@@ -3077,52 +3092,53 @@ button:hover {
     margin: 0 auto;
 }
 
-/* ── Image column (right) — max 45% width, max 280px tall ── */
+/* ── Image column (right) ── */
 .bnr-img-col {
     flex: 0 0 auto;
-    width: auto;
-    max-width: 45%;
-    max-height: 280px;
+    max-width: 48%;
+    max-height: 320px;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: visible;
 }
-/* image-only banner — cap width, keep it tidy */
 .bnr-img-col:only-child {
-    max-width: 420px;
-    max-height: 280px;
+    max-width: 400px;
+    max-height: 320px;
     margin: 0 auto;
 }
-/* ── The actual image — contain, no crop ── */
 .bnr-img {
     display: block;
     max-width: 100%;
-    max-height: 280px;
+    max-height: 320px;
     width: auto;
     height: auto;
     object-fit: contain;
-    object-position: center center;
-    filter: drop-shadow(0 10px 28px rgba(0,0,0,.38));
-    transition: transform .35s ease;
+    object-position: center;
+    filter: drop-shadow(0 0 30px rgba(34,197,94,.28));
+    animation: bnrFloat 5s ease-in-out infinite;
+    transition: filter .3s ease;
 }
-.bnr-slide:hover .bnr-img { transform: translateY(-4px) scale(1.02); }
+.bnr-slide:hover .bnr-img {
+    filter: drop-shadow(0 0 48px rgba(34,197,94,.46));
+}
 
 /* ── Typography ── */
 .bnr-title {
-    font-size: clamp(22px, 3.2vw, 42px);
+    font-size: clamp(20px, 2.7vw, 38px);
     font-weight: 800;
     color: #f0fdf4;
     line-height: 1.18;
-    letter-spacing: -.5px;
+    letter-spacing: -.4px;
     margin: 0 0 12px;
 }
 .bnr-subtitle {
-    font-size: clamp(13px, 1.5vw, 16px);
+    font-size: clamp(12px, 1.3vw, 15px);
     font-weight: 400;
-    color: rgba(209,250,229,.80);
-    line-height: 1.65;
+    color: rgba(209,250,229,.78);
+    line-height: 1.75;
     margin: 0 0 28px;
+    white-space: pre-line;
 }
 
 /* ── CTA button ── */
@@ -3130,25 +3146,25 @@ button:hover {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 13px 30px;
-    background: linear-gradient(135deg, var(--site-accent, #16a34a) 0%, #15803d 100%);
+    padding: 14px 32px;
+    background: linear-gradient(135deg, var(--site-accent, #22c55e) 0%, #16a34a 100%);
     color: #fff;
     font-size: 15px;
     font-weight: 700;
-    border-radius: 14px;
+    border-radius: 16px;
     text-decoration: none;
-    box-shadow: 0 4px 20px rgba(22,163,74,.40);
-    transition: transform .2s, box-shadow .2s, background .2s;
+    box-shadow: 0 4px 24px rgba(34,197,94,.40), 0 0 0 1px rgba(34,197,94,.20);
+    transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
     white-space: nowrap;
 }
 .bnr-cta:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 8px 28px rgba(22,163,74,.55);
-    background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 8px 32px rgba(34,197,94,.55), 0 0 0 1px rgba(34,197,94,.30);
+    filter: brightness(1.08);
     color: #fff;
     text-decoration: none;
 }
-.bnr-cta:active { transform: scale(.98); }
+.bnr-cta:active { transform: scale(.97); }
 
 /* ── Arrows ── */
 .bnr-arrow {
@@ -3156,11 +3172,12 @@ button:hover {
     top: 50%;
     transform: translateY(-50%);
     z-index: 10;
-    background: rgba(255,255,255,.10);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,.16);
+    background: rgba(255,255,255,.07);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.13);
     color: #fff;
-    font-size: 28px;
+    font-size: 26px;
     line-height: 1;
     width: 44px;
     height: 44px;
@@ -3169,16 +3186,19 @@ button:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background .2s;
+    transition: background .2s, box-shadow .2s;
 }
-.bnr-arrow:hover { background: rgba(255,255,255,.22); }
-.bnr-prev { left: 16px; }
-.bnr-next { right: 16px; }
+.bnr-arrow:hover {
+    background: rgba(34,197,94,.18);
+    box-shadow: 0 0 18px rgba(34,197,94,.35);
+}
+.bnr-prev { left: 18px; }
+.bnr-next { right: 18px; }
 
 /* ── Dots ── */
 .bnr-dots {
     position: absolute;
-    bottom: 14px;
+    bottom: 16px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
@@ -3189,51 +3209,69 @@ button:hover {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: rgba(255,255,255,.35);
+    background: rgba(255,255,255,.28);
     border: none;
     cursor: pointer;
     padding: 0;
-    transition: background .2s, transform .2s;
+    transition: background .25s, transform .25s, box-shadow .25s;
 }
 .bnr-dot.active {
-    background: #fff;
-    transform: scale(1.4);
+    background: #22c55e;
+    transform: scale(1.35);
+    box-shadow: 0 0 8px rgba(34,197,94,.65);
 }
 
 /* ── Tablet ── */
-@media (max-width: 900px) {
-    .bnr-inner { height: 280px; padding: 0 32px; gap: 28px; }
-    .bnr-img-col { max-width: 42%; max-height: 240px; }
-    .bnr-img { max-height: 240px; }
+@media (max-width: 960px) {
+    .bnr-inner { height: 360px; padding: 0 40px; gap: 36px; }
+    .bnr-text { padding: 32px 34px; max-width: 54%; }
+    .bnr-img-col { max-width: 44%; max-height: 280px; }
+    .bnr-img { max-height: 280px; }
 }
 
-/* ── Mobile: column — text top, image bottom ── */
+/* ── Mobile: content top / image bottom ── */
 @media (max-width: 680px) {
     .bnr-inner {
         flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        align-items: stretch;
+        justify-content: flex-start;
         height: auto;
-        padding: 24px 20px 20px;
+        min-height: 300px;
+        padding: 20px 16px 24px;
         gap: 16px;
         overflow: hidden;
     }
-    .bnr-text { align-items: center; text-align: center; order: 0; }
-    .bnr-text:only-child { text-align: center; align-items: center; }
+    .bnr-text {
+        order: 0;
+        max-width: 100%;
+        padding: 22px 20px;
+        align-items: center;
+        text-align: center;
+        animation: none;
+    }
+    .bnr-text:only-child { max-width: 100%; }
+    .bnr-title { font-size: clamp(18px, 5vw, 26px); margin-bottom: 8px; }
+    .bnr-subtitle { margin-bottom: 18px; font-size: 13px; }
+    .bnr-cta {
+        display: flex;
+        width: 100%;
+        justify-content: center;
+        padding: 13px 20px;
+    }
     .bnr-img-col {
         order: 1;
-        max-width: 90%;
-        max-height: 220px;
-        width: auto;
+        max-width: 100%;
+        max-height: 180px;
+        width: 100%;
     }
-    .bnr-img-col:only-child { max-width: 80%; max-height: 220px; }
-    .bnr-img { max-height: 220px; }
+    .bnr-img-col:only-child { max-height: 200px; max-width: 100%; }
+    .bnr-img { max-height: 180px; animation-duration: 7s; }
     .bnr-arrow { display: none; }
-    .bnr-dots { bottom: 8px; }
+    .bnr-dots { bottom: 10px; }
 }
 @media (max-width: 400px) {
-    .bnr-inner { padding: 20px 16px 16px; gap: 12px; }
-    .bnr-img-col { max-height: 180px; }
-    .bnr-img { max-height: 180px; }
-    .bnr-cta { padding: 11px 22px; font-size: 13px; }
+    .bnr-inner { padding: 16px 12px 20px; gap: 12px; min-height: 260px; }
+    .bnr-text { padding: 18px 16px; border-radius: 20px; }
+    .bnr-cta { font-size: 14px; padding: 12px 16px; }
+    .bnr-img { max-height: 150px; }
 }
