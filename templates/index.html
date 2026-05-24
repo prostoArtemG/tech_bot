@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Technovlada</title>
+    <title>{% if seo_index and seo_index.meta_title %}{{ seo_index.meta_title }}{% else %}{{ site_title or 'Technovlada' }}{% endif %}</title>
+    {% if seo_index and seo_index.meta_description %}
+    <meta name="description" content="{{ seo_index.meta_description }}">
+    {% endif %}
     <link rel="stylesheet" href="/static/style.css">
     {% if site_design %}
     <style>
@@ -504,6 +507,17 @@
 
   </div>{# /catalog-content #}
 </div>{# /catalog-layout #}
+
+{% if seo_index and seo_index.seo_text %}
+<div class="seo-text-block">
+    {% if seo_index.h1 %}<h1 class="seo-h1">{{ seo_index.h1 }}</h1>{% endif %}
+    <div class="seo-text">{{ seo_index.seo_text }}</div>
+</div>
+{% elif seo_index and seo_index.h1 %}
+<div class="seo-text-block">
+    <h1 class="seo-h1">{{ seo_index.h1 }}</h1>
+</div>
+{% endif %}
 
 </body>
 <script src="/static/cart.js"></script>

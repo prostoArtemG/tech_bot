@@ -1182,6 +1182,10 @@ class BannersEditState(StatesGroup):
     waiting_for_value = State()
 
 
+class SeoMainState(StatesGroup):
+    waiting_for_value = State()
+
+
 class SitePagesState(StatesGroup):
     waiting_for_text = State()
 
@@ -1379,6 +1383,19 @@ site_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="🌐 Язык сайта")],
         [KeyboardButton(text="📊 Аналитика сайта")],
         [KeyboardButton(text="📋 Заявки/Покупатели"), KeyboardButton(text="👥 Пользователи")],
+        [KeyboardButton(text="🔎 SEO")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
+
+seo_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🏠 Главная страница")],
+        [KeyboardButton(text="📂 Категории SEO")],
+        [KeyboardButton(text="🗺 Sitemap")],
+        [KeyboardButton(text="🤖 Robots.txt")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -3140,6 +3157,135 @@ async def bnr_delete_callback(callback: CallbackQuery):
     await db.delete_banner(banner_id)
     await callback.answer("🗑 Баннер удалён", show_alert=False)
     await _send_banners_list(callback.message, edit=True)
+
+
+# ===== SEO =====
+
+def _seo_field_label(field: str) -> str:
+    labels = {
+        "meta_title": "🔤 meta title",
+        "meta_description": "📄 meta description",
+        "h1": "📌 H1",
+        "seo_text": "📝 SEO-текст",
+    }
+    return labels.get(field, field)
+
+
+def _seo_main_inline_kb() -> InlineKeyboardMarkup:
+    fields = ["meta_title", "meta_description", "h1", "seo_text"]
+    rows = [
+        [InlineKeyboardButton(
+            text=f"✏️ {_seo_field_label(f)}",
+            callback_data=f"seo_ef:index:{f}"
+        )]
+        for f in fields
+    ]
+    rows.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="seo_close")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _send_seo_main_card(target, edit: bool = False):
+    seo = await db.get_seo_page("index")
+
+    def _v(val):
+        return val if val else "—"
+
+    text = (
+        "🏠 <b>SEO: Главная страница</b>\n\n"
+        f"🔤 <b>meta title:</b> {_v(seo['meta_title'])}\n"
+        f"📄 <b>meta description:</b> {_v(seo['meta_description'])}\n"
+        f"📌 <b>H1:</b> {_v(seo['h1'])}\n"
+        f"📝 <b>SEO-текст:</b> {_v(seo['seo_text'][:80] + '…' if seo['seo_text'] and len(seo['seo_text']) > 80 else seo['seo_text'])}\n"
+    )
+    kb = _seo_main_inline_kb()
+    if edit and hasattr(target, "edit_text"):
+        try:
+            await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            return
+        except Exception:
+            pass
+    await target.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.message(lambda m: m.text == "🔎 SEO")
+async def seo_menu_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await message.answer("🔎 SEO", reply_markup=seo_kb)
+
+
+@router.message(lambda m: m.text == "🏠 Главная страница")
+async def seo_main_page_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await _send_seo_main_card(message)
+
+
+@router.message(lambda m: m.text == "📂 Категории SEO")
+async def seo_categories_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await message.answer("⚙️ SEO категорий — в разработке.")
+
+
+@router.message(lambda m: m.text == "🗺 Sitemap")
+async def seo_sitemap_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    base = await db.get_setting("site_url") or ""
+    url = f"{base.rstrip('/')}/sitemap.xml" if base else "/sitemap.xml"
+    await message.answer(f"🗺 Sitemap доступен по адресу:\n<code>{url}</code>", parse_mode="HTML")
+
+
+@router.message(lambda m: m.text == "🤖 Robots.txt")
+async def seo_robots_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    base = await db.get_setting("site_url") or ""
+    url = f"{base.rstrip('/')}/robots.txt" if base else "/robots.txt"
+    await message.answer(f"🤖 Robots.txt доступен по адресу:\n<code>{url}</code>", parse_mode="HTML")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_ef:"))
+async def seo_edit_field_start(callback: CallbackQuery, state: FSMContext):
+    _, page_key, field = callback.data.split(":")
+    label = _seo_field_label(field)
+    await state.set_state(SeoMainState.waiting_for_value)
+    await state.update_data(seo_page_key=page_key, seo_field=field)
+    await callback.message.answer(
+        f"✏️ Введите новое значение для <b>{label}</b>\n"
+        f"Отправьте «-» чтобы очистить поле.",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "seo_close")
+async def seo_close_callback(callback: CallbackQuery):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.message(SeoMainState.waiting_for_value)
+async def seo_edit_field_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    page_key = data.get("seo_page_key", "index")
+    field = data.get("seo_field")
+    if not field:
+        await state.clear()
+        await message.answer("Ошибка состояния.")
+        return
+
+    raw = (message.text or "").strip()
+    value = "" if raw == "-" else raw
+
+    await db.set_seo_page_field(page_key, field, value)
+    await state.clear()
+    await message.answer("✅ Сохранено.")
+    await _send_seo_main_card(message)
 
 
 # ===== Promo bar =====
@@ -7399,6 +7545,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
     site_design = await get_site_design()
     active_banners = await db.list_active_banners()
+    seo_index = await db.get_seo_page("index")
 
     return templates.TemplateResponse(
         request=request,
@@ -7435,6 +7582,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "header_show_language": header_show_language,
             "site_design": site_design,
             "active_banners": active_banners,
+            "seo_index": seo_index,
         }
     )
 

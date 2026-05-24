@@ -1409,6 +1409,21 @@ class Database:
     async def delete_banner(self, banner_id: int):
         await self.execute("DELETE FROM banners WHERE id = $1", banner_id)
 
+    # ── SEO pages ──────────────────────────────────────────────────────────────
+    async def get_seo_page(self, page_key: str) -> dict:
+        """Return dict with all 4 SEO fields for a given page key (e.g. 'index')."""
+        fields = ["meta_title", "meta_description", "h1", "seo_text"]
+        result = {}
+        for f in fields:
+            result[f] = await self.get_setting(f"seo_{page_key}_{f}") or ""
+        return result
+
+    async def set_seo_page_field(self, page_key: str, field: str, value: str):
+        allowed = {"meta_title", "meta_description", "h1", "seo_text"}
+        if field not in allowed:
+            raise ValueError(f"Invalid SEO field: {field}")
+        await self.set_setting(f"seo_{page_key}_{field}", value)
+
     async def get_top_site_products(self, limit: int = 10):
         return await self.fetch(
             """
