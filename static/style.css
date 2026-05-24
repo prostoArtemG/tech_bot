@@ -3228,27 +3228,28 @@ button:hover {
     .bnr-img { max-height: 280px; }
 }
 
-/* ── Mobile: button overlaid over image bottom ── */
+/* ── Mobile: image shifted up, button in flow below image ── */
 @media (max-width: 680px) {
     .bnr-inner {
         grid-template-areas:
             "text"
-            "img";
+            "img"
+            "cta";
         grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-        height: 260px;
-        padding: 14px 14px 0;
+        grid-template-rows: auto auto auto;
+        height: auto;
+        padding: 14px 14px 16px;
         column-gap: 0;
-        row-gap: 10px;
+        row-gap: 8px;
         overflow: hidden;
         position: relative;
     }
-    /* dark gradient overlay — fades image into button area */
+    /* dark gradient — background decoration, bottom of hero */
     .bnr-inner::after {
         content: '';
         position: absolute;
         bottom: 0; left: 0; right: 0;
-        height: 120px;
+        height: 100px;
         background: linear-gradient(to top, rgba(0,0,0,.72), transparent);
         pointer-events: none;
         z-index: 2;
@@ -3262,24 +3263,26 @@ button:hover {
     }
     .bnr-title { font-size: clamp(15px, 4.5vw, 21px); margin-bottom: 5px; }
     .bnr-subtitle { font-size: 12px; }
+    /* image shifted up — transform on wrapper keeps float animation intact */
     .bnr-img-col {
-        align-self: stretch;
-        max-height: none;
+        max-height: 180px;
         justify-self: center;
         overflow: visible;
+        transform: translateY(-12px);
     }
     .bnr-img { max-height: 180px; animation-duration: 7s; }
-    /* CTA: absolute, centered, bottom of hero, above gradient */
+    /* button: normal flow, pulled up toward image */
     .bnr-cta {
-        position: absolute;
-        bottom: 14px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 3;
+        position: relative;
+        bottom: unset;
+        left: unset;
+        transform: none;
+        justify-self: center;
         width: 170px;
         min-width: unset;
         height: 44px;
         padding: 0 20px;
+        margin-top: -8px;
         background: rgba(8,16,28,.80);
         border: 1px solid rgba(34,197,94,.38);
         box-shadow: 0 0 18px rgba(34,197,94,.16);
@@ -3290,22 +3293,23 @@ button:hover {
         font-weight: 600;
         border-radius: 14px;
         text-decoration: none;
+        z-index: 3;
         white-space: nowrap;
     }
     .bnr-cta:hover {
         background: rgba(12,24,42,.90);
         box-shadow: 0 0 26px rgba(34,197,94,.28);
-        transform: translateX(-50%) translateY(-1px);
+        transform: translateY(-1px);
         color: #d1fae5;
     }
-    .bnr-cta:active { transform: translateX(-50%) scale(.97); }
+    .bnr-cta:active { transform: scale(.97); }
     .bnr-arrow { display: none; }
-    /* dots above the button */
-    .bnr-dots { bottom: 64px; z-index: 4; }
+    .bnr-dots { bottom: 10px; z-index: 4; }
 }
 @media (max-width: 400px) {
-    .bnr-inner { height: 240px; padding: 12px 12px 0; row-gap: 8px; }
+    .bnr-inner { padding: 12px 12px 14px; row-gap: 6px; }
     .bnr-text { padding: 14px 14px 10px; border-radius: 18px; }
-    .bnr-cta { width: 155px; height: 40px; font-size: 13px; bottom: 12px; }
+    .bnr-img-col { transform: translateY(-8px); }
+    .bnr-cta { width: 155px; height: 40px; font-size: 13px; margin-top: -6px; }
     .bnr-img { max-height: 150px; }
 }
