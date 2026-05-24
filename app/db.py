@@ -451,6 +451,20 @@ class Database:
         );
         """)
 
+        # ── SEO per product ──────────────────────────────────────
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS seo_products (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL UNIQUE REFERENCES products(id) ON DELETE CASCADE,
+            meta_title TEXT NOT NULL DEFAULT '',
+            meta_description TEXT NOT NULL DEFAULT '',
+            h1 TEXT NOT NULL DEFAULT '',
+            seo_text TEXT NOT NULL DEFAULT '',
+            indexable BOOLEAN NOT NULL DEFAULT TRUE,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -1472,6 +1486,47 @@ class Database:
             site_category_id,
         )
         return bool(row and row["indexable"])
+
+    # ── SEO per product ─────────────────────────────────────────────────────
+    async def get_product_seo(self, product_id: int):
+        return await self.fetchrow(
+            "SELECT * FROM seo_products WHERE product_id = $1",
+            product_id,
+        )
+
+    async def upsert_product_seo_field(self, product_id: int, field: str, value: str):
+        allowed = {"meta_title", "meta_description", "h1", "seo_text"}
+        if field not in allowed:
+            raise ValueError(f"Invalid SEO field: {field}")
+        await self.execute(
+            f"""
+            INSERT INTO seo_products (product_id, {field}, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (product_id) DO UPDATE
+            SET {field} = EXCLUDED.{field}, updated_at = NOW()
+            """,
+            product_id,
+            value,
+        )
+
+    async def toggle_product_seo_indexable(self, product_id: int) -> bool:
+        row = await self.fetchrow(
+            """
+            INSERT INTO seo_products (product_id, indexable, updated_at)
+            VALUES ($1, FALSE, NOW())
+            ON CONFLICT (product_id) DO UPDATE
+            SET indexable = NOT seo_products.indexable, updated_at = NOW()
+            RETURNING indexable
+            """,
+            product_id,
+        )
+        return bool(row and row["indexable"])
+
+    async def list_noindex_product_ids(self) -> set:
+        rows = await self.fetch(
+            "SELECT product_id FROM seo_products WHERE indexable = FALSE"
+        )
+        return {r["product_id"] for r in rows}
 
     async def get_top_site_products(self, limit: int = 10):
         return await self.fetch(

@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ product.brand }} {{ product.model }}</title>
+    <title>{% if seo_product and seo_product.meta_title %}{{ seo_product.meta_title }}{% else %}{{ product.brand }} {{ product.model }}{% endif %}</title>
+    {% if seo_product and seo_product.meta_description %}
+    <meta name="description" content="{{ seo_product.meta_description }}">
+    {% endif %}
+    {% if seo_product and not seo_product.indexable %}
+    <meta name="robots" content="noindex, follow">
+    {% endif %}
     <link rel="stylesheet" href="/static/style.css">
     {% if site_design %}
     <style>
@@ -257,6 +263,17 @@
 
     </div>
 </main>
+
+{% if seo_product and seo_product.seo_text %}
+<div class="seo-text-block">
+    {% if seo_product.h1 %}<h1 class="seo-h1">{{ seo_product.h1 }}</h1>{% endif %}
+    <div class="seo-text">{{ seo_product.seo_text }}</div>
+</div>
+{% elif seo_product and seo_product.h1 %}
+<div class="seo-text-block">
+    <h1 class="seo-h1">{{ seo_product.h1 }}</h1>
+</div>
+{% endif %}
 
 <script>
     function changeImage(thumbEl, src, idx) {

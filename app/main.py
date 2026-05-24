@@ -1190,6 +1190,10 @@ class SeoCategoryState(StatesGroup):
     waiting_for_value = State()
 
 
+class SeoProductState(StatesGroup):
+    waiting_for_value = State()
+
+
 class SitePagesState(StatesGroup):
     waiting_for_text = State()
 
@@ -1653,6 +1657,9 @@ def inline_edit_fields_kb(product=None):
         ],
         [
             InlineKeyboardButton(text="❌ Удалить товар", callback_data="edit_action:soft_delete"),
+        ],
+        [
+            InlineKeyboardButton(text="🔎 SEO товара", callback_data=f"seo_prod_open:{product['id']}" if product and product.get("id") else "seo_prod_open:0"),
         ],
         [
             InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_flow"),
@@ -3386,6 +3393,127 @@ async def seo_cat_edit_save(message: Message, state: FSMContext):
             reply_markup=_seo_cat_inline_kb(cat_id, seo),
             parse_mode="HTML",
         )
+
+
+# ===== SEO: Products =====
+
+def _seo_product_card_text(product, seo) -> str:
+    def _v(val):
+        return val if val else "—"
+    indexable = seo["indexable"] if seo is not None else True
+    idx_icon = "✅" if indexable else "🚫"
+    idx_label = "Да" if indexable else "Нет"
+    seo_text_preview = ""
+    if seo and seo["seo_text"]:
+        seo_text_preview = seo["seo_text"][:80] + ("…" if len(seo["seo_text"]) > 80 else "")
+    prod_name = f"{product.get('brand') or ''} {product.get('model') or ''}".strip() if product else ""
+    return (
+        f"🔎 <b>SEO: {prod_name}</b>\n\n"
+        f"🔤 <b>meta title:</b> {_v(seo['meta_title'] if seo else '')}\n"
+        f"📄 <b>meta description:</b> {_v(seo['meta_description'] if seo else '')}\n"
+        f"📌 <b>H1:</b> {_v(seo['h1'] if seo else '')}\n"
+        f"📝 <b>SEO-текст:</b> {_v(seo_text_preview)}\n"
+        f"{idx_icon} <b>Индексация:</b> {idx_label}\n"
+    )
+
+
+def _seo_product_inline_kb(product_id: int, seo) -> InlineKeyboardMarkup:
+    fields = ["meta_title", "meta_description", "h1", "seo_text"]
+    rows = [
+        [InlineKeyboardButton(
+            text=f"✏️ {_seo_field_label(f)}",
+            callback_data=f"seo_prod_ef:{product_id}:{f}"
+        )]
+        for f in fields
+    ]
+    indexable = seo["indexable"] if seo is not None else True
+    idx_text = "🚫 Выключить индексацию" if indexable else "✅ Включить индексацию"
+    rows.append([InlineKeyboardButton(text=idx_text, callback_data=f"seo_prod_idx:{product_id}")])
+    rows.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="seo_close")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_prod_open:"))
+async def seo_prod_open_callback(callback: CallbackQuery):
+    try:
+        product_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        await callback.answer("Ошибка", show_alert=True)
+        return
+    product = await db.get_product_by_id(product_id)
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+    seo = await db.get_product_seo(product_id)
+    await callback.message.answer(
+        _seo_product_card_text(product, seo),
+        reply_markup=_seo_product_inline_kb(product_id, seo),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_prod_idx:"))
+async def seo_prod_idx_callback(callback: CallbackQuery):
+    try:
+        product_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        await callback.answer("Ошибка", show_alert=True)
+        return
+    new_val = await db.toggle_product_seo_indexable(product_id)
+    product = await db.get_product_by_id(product_id)
+    seo = await db.get_product_seo(product_id)
+    text = _seo_product_card_text(product, seo)
+    kb = _seo_product_inline_kb(product_id, seo)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    idx_label = "включена" if new_val else "выключена"
+    await callback.answer(f"Индексация {idx_label}", show_alert=False)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_prod_ef:"))
+async def seo_prod_edit_start(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    try:
+        product_id = int(parts[1])
+    except (ValueError, IndexError):
+        await callback.answer("Ошибка", show_alert=True)
+        return
+    field = parts[2]
+    label = _seo_field_label(field)
+    await state.set_state(SeoProductState.waiting_for_value)
+    await state.update_data(seo_product_id=product_id, seo_field=field)
+    await callback.message.answer(
+        f"✏️ Введите новое значение для <b>{label}</b>\n"
+        f"Отправьте «-» чтобы очистить поле.",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(SeoProductState.waiting_for_value)
+async def seo_prod_edit_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    product_id = data.get("seo_product_id")
+    field = data.get("seo_field")
+    if not product_id or not field:
+        await state.clear()
+        await message.answer("Ошибка состояния.")
+        return
+    raw = (message.text or "").strip()
+    value = "" if raw == "-" else raw
+    await db.upsert_product_seo_field(product_id, field, value)
+    await state.clear()
+    await message.answer("✅ Сохранено.")
+    product = await db.get_product_by_id(product_id)
+    seo = await db.get_product_seo(product_id)
+    await message.answer(
+        _seo_product_card_text(product, seo),
+        reply_markup=_seo_product_inline_kb(product_id, seo),
+        parse_mode="HTML",
+    )
 
 
 @router.message(lambda m: m.text == "🗺 Sitemap")
@@ -7990,6 +8118,28 @@ def _collect_product_variants(current, candidates):
     return variants
 
 
+def _build_product_seo(product, seo_row, site_title: str) -> dict:
+    """Build effective SEO dict for a product page, falling back to auto-templates."""
+    product_name = f"{product.get('brand') or ''} {product.get('model') or ''}".strip()
+    try:
+        _price_val = float(product.get("current_price") or product.get("price") or 0)
+        _price_str = f"{_price_val:.0f}"
+    except Exception:
+        _price_str = ""
+    auto_title = f"{product_name} купити в Запоріжжі — {site_title or 'Technovlada'}"
+    auto_desc = (
+        f"{product_name} за ціною {_price_str} грн. "
+        f"Замовлення онлайн, консультація, гарантія."
+    )
+    return {
+        "meta_title": (seo_row["meta_title"] if seo_row and seo_row["meta_title"] else auto_title),
+        "meta_description": (seo_row["meta_description"] if seo_row and seo_row["meta_description"] else auto_desc),
+        "h1": (seo_row["h1"] if seo_row and seo_row["h1"] else product_name),
+        "seo_text": (seo_row["seo_text"] if seo_row and seo_row["seo_text"] else ""),
+        "indexable": (bool(seo_row["indexable"]) if seo_row is not None else True),
+    }
+
+
 @web_app.get("/product/{product_id}", response_class=HTMLResponse)
 async def product_page(request: Request, product_id: int):
     product = await db.get_product_by_id(product_id)
@@ -8065,6 +8215,7 @@ async def product_page(request: Request, product_id: int):
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
             "site_design": await get_site_design(),
+            "seo_product": _build_product_seo(product, await db.get_product_seo(product_id), site_title),
         }
     )
 
@@ -8199,15 +8350,19 @@ async def sitemap_xml(request: Request):
     # Товары
     try:
         products = await db.list_site_products()
+        noindex_ids = await db.list_noindex_product_ids()
     except Exception as e:
         print(f"[sitemap] products failed: {e}")
         products = []
+        noindex_ids = set()
     for p in products:
         try:
             pid = p["id"] if not isinstance(p, dict) else p.get("id")
         except Exception:
             pid = None
         if not pid:
+            continue
+        if pid in noindex_ids:
             continue
         urls.append((f"{base}/product/{pid}", "weekly", "0.7"))
 
