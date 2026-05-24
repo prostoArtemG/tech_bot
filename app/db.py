@@ -1,10 +1,37 @@
 import os
+import re
 import asyncpg
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+
+# ── Slug helpers ────────────────────────────────────────────────────────────
+_CYRILLIC_MAP = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'h', 'д': 'd', 'е': 'e',
+    'є': 'ye', 'ж': 'zh', 'з': 'z', 'и': 'y', 'і': 'i', 'ї': 'yi',
+    'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+    'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f',
+    'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+    'ь': '', 'ю': 'yu', 'я': 'ya', 'ё': 'yo', 'ъ': '', 'ы': 'y', 'э': 'e',
+}
+
+
+def make_slug(text: str) -> str:
+    """Transliterate Cyrillic + Latin text into a URL-safe ASCII slug."""
+    text = (text or '').lower().strip()
+    result = []
+    for ch in text:
+        if ch in _CYRILLIC_MAP:
+            result.append(_CYRILLIC_MAP[ch])
+        elif 'a' <= ch <= 'z' or '0' <= ch <= '9':
+            result.append(ch)
+        elif ch in ' -_':
+            result.append('-')
+    slug = re.sub(r'-+', '-', ''.join(result)).strip('-')
+    return slug[:80]
 
 
 class Database:
@@ -437,6 +464,22 @@ class Database:
         );
         """)
 
+        # ── Product & category slugs (SEO URLs) ──────────────────
+        await self.execute("""
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS slug TEXT;
+        """)
+        await self.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS products_slug_uq
+        ON products (slug) WHERE slug IS NOT NULL;
+        """)
+        await self.execute("""
+        ALTER TABLE site_categories ADD COLUMN IF NOT EXISTS slug TEXT;
+        """)
+        await self.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS site_categories_slug_uq
+        ON site_categories (slug) WHERE slug IS NOT NULL;
+        """)
+
         # ── SEO per category ─────────────────────────────────────
         await self.execute("""
         CREATE TABLE IF NOT EXISTS seo_categories (
@@ -550,7 +593,7 @@ class Database:
                 id, category, category_key, brand, model, price, stock_qty,
                 warranty_months, photo_url, description, availability_status,
                 current_price, old_price, is_sale, stock_status,
-                boiler_volume_liters, specifications_json
+                boiler_volume_liters, specifications_json, slug
             FROM products
             WHERE COALESCE(is_active, TRUE) = TRUE
               AND deleted_at IS NULL
@@ -649,7 +692,8 @@ class Database:
                 current_price, old_price, is_sale, stock_status,
                 boiler_volume_liters, boiler_ten_type,
                 model_group,
-                specifications_json
+                specifications_json,
+                slug
             FROM products
             WHERE id = $1
             """,
@@ -1528,6 +1572,72 @@ class Database:
         )
         return {r["product_id"] for r in rows}
 
+    async def get_product_by_slug(self, slug: str):
+        return await self.fetchrow(
+            """
+            SELECT
+                id, category, brand, model, price, stock_qty,
+                purchase_price, purchase_currency, sku, warranty_months,
+                photo_url, description, specs, is_active, deleted_at,
+                current_price, old_price, is_sale, stock_status,
+                boiler_volume_liters, boiler_ten_type,
+                model_group, specifications_json, slug
+            FROM products
+            WHERE slug = $1
+            """,
+            slug,
+        )
+
+    async def get_site_category_by_slug(self, slug: str):
+        return await self.fetchrow(
+            "SELECT id, name_ru, name_uk, emoji, slug FROM site_categories WHERE slug = $1",
+            slug,
+        )
+
+    async def ensure_all_slugs(self):
+        """Generate URL slugs for all products and site_categories that don't have one yet."""
+        # Products
+        rows = await self.fetch(
+            "SELECT id, brand, model FROM products WHERE slug IS NULL OR slug = ''"
+        )
+        for row in rows:
+            base = make_slug(f"{row['brand'] or ''}-{row['model'] or ''}")
+            slug = base or f"product-{row['id']}"
+            existing = await self.fetchrow(
+                "SELECT id FROM products WHERE slug = $1 AND id != $2", slug, row["id"]
+            )
+            if existing:
+                slug = f"{slug}-{row['id']}"
+            try:
+                await self.execute("UPDATE products SET slug = $1 WHERE id = $2", slug, row["id"])
+            except Exception as e:
+                print(f"[slug] product {row['id']} conflict: {e}")
+                await self.execute(
+                    "UPDATE products SET slug = $1 WHERE id = $2",
+                    f"product-{row['id']}", row["id"],
+                )
+        # Site categories
+        rows = await self.fetch(
+            "SELECT id, name_ru FROM site_categories WHERE slug IS NULL OR slug = ''"
+        )
+        for row in rows:
+            slug = make_slug(row["name_ru"] or "") or f"category-{row['id']}"
+            existing = await self.fetchrow(
+                "SELECT id FROM site_categories WHERE slug = $1 AND id != $2", slug, row["id"]
+            )
+            if existing:
+                slug = f"{slug}-{row['id']}"
+            try:
+                await self.execute(
+                    "UPDATE site_categories SET slug = $1 WHERE id = $2", slug, row["id"]
+                )
+            except Exception as e:
+                print(f"[slug] category {row['id']} conflict: {e}")
+                await self.execute(
+                    "UPDATE site_categories SET slug = $1 WHERE id = $2",
+                    f"category-{row['id']}", row["id"],
+                )
+
     async def get_auto_seo_templates(self) -> dict:
         """Return dict with 4 auto SEO template strings (empty string if not set in DB)."""
         keys = [
@@ -1721,7 +1831,7 @@ class Database:
     async def list_active_site_categories(self):
         return await self.fetch(
             """
-            SELECT id, name_ru, name_uk, emoji, sort_order
+            SELECT id, name_ru, name_uk, emoji, sort_order, slug
             FROM site_categories
             WHERE is_active = TRUE
             ORDER BY sort_order ASC, id ASC
@@ -1732,7 +1842,7 @@ class Database:
     async def get_site_category_by_name(self, name_ru: str):
         return await self.fetchrow(
             """
-            SELECT id
+            SELECT id, name_ru, name_uk, emoji, slug
             FROM site_categories
             WHERE name_ru = $1
             """,

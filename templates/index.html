@@ -10,6 +10,11 @@
     {% if seo_effective and not seo_effective.indexable %}
     <meta name="robots" content="noindex, follow">
     {% endif %}
+    {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{% if seo_effective and seo_effective.meta_title %}{{ seo_effective.meta_title | e }}{% else %}{{ (site_title or 'Technovlada') | e }}{% endif %}">
+    {% if seo_effective and seo_effective.meta_description %}<meta property="og:description" content="{{ seo_effective.meta_description | e }}">{% endif %}
+    {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
     <link rel="stylesheet" href="/static/style.css">
     {% if site_design %}
     <style>

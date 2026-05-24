@@ -34,7 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
-from app.db import db
+from app.db import db, make_slug
 from app.i18n import TRANSLATIONS
 from app.categories import (
     CATEGORY_KEYS,
@@ -8039,6 +8039,20 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "indexable": True,
         }
 
+    # ── Canonical URL ────────────────────────────────────────────
+    _site_base = _seo_base_url(request)
+    if request.url.path.startswith("/category/"):
+        canonical_url = f"{_site_base}{request.url.path}"
+    elif category:
+        _cat_for_slug = await db.get_site_category_by_name(category)
+        _cat_slug = (_cat_for_slug.get("slug") if _cat_for_slug else None) or ""
+        if _cat_slug:
+            canonical_url = f"{_site_base}/category/{_cat_slug}"
+        else:
+            canonical_url = f"{_site_base}/?category={quote(category, safe='')}"
+    else:
+        canonical_url = f"{_site_base}/"
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -8076,6 +8090,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "active_banners": active_banners,
             "seo_index": seo_index,
             "seo_effective": seo_effective,
+            "canonical_url": canonical_url,
         }
     )
 
@@ -8332,12 +8347,27 @@ def _build_product_seo(product, seo_row, site_title: str, auto_templates: dict =
     }
 
 
-@web_app.get("/product/{product_id}", response_class=HTMLResponse)
-async def product_page(request: Request, product_id: int):
-    product = await db.get_product_by_id(product_id)
-
-    if not product:
-        return HTMLResponse("Товар не найден", status_code=404)
+@web_app.get("/product/{slug}", response_class=HTMLResponse)
+async def product_page(request: Request, slug: str):
+    # Legacy numeric ID → 301 redirect to slug URL
+    if slug.isdigit():
+        product_id = int(slug)
+        p = await db.get_product_by_id(product_id)
+        if not p:
+            return HTMLResponse("Товар не найден", status_code=404)
+        prod_slug = (p.get("slug") or "").strip()
+        if prod_slug:
+            qs = str(request.url.query)
+            target = f"/product/{prod_slug}" + (f"?{qs}" if qs else "")
+            return RedirectResponse(target, status_code=301)
+        # Slug not yet generated — render directly as fallback
+        product = p
+        product_id = p["id"]
+    else:
+        product = await db.get_product_by_slug(slug)
+        if not product:
+            return HTMLResponse("Товар не найден", status_code=404)
+        product_id = product["id"]
 
     if not product.get("is_active", True) or product.get("deleted_at") is not None:
         return HTMLResponse("Товар недоступен", status_code=404)
@@ -8413,6 +8443,7 @@ async def product_page(request: Request, product_id: int):
                 site_title,
                 await db.get_auto_seo_templates(),
             ),
+            "canonical_url": f"{_seo_base_url(request)}/product/{(product.get('slug') or '').strip() or slug}",
         }
     )
 
@@ -8518,10 +8549,35 @@ def _xml_escape(s: str) -> str:
     )
 
 
+@web_app.get("/category/{slug}", response_class=HTMLResponse)
+async def category_slug_page(
+    request: Request, slug: str,
+    q: str = "", brand: str = "", page: int = 1,
+    price_min: str = "", price_max: str = "",
+    in_stock: str = "", volume: str = "", sort: str = "",
+):
+    cat_row = await db.get_site_category_by_slug(slug)
+    if not cat_row:
+        return HTMLResponse("Категорія не знайдена", status_code=404)
+    return await site_home(
+        request=request,
+        category=cat_row["name_ru"],
+        q=q, brand=brand, page=page,
+        price_min=price_min, price_max=price_max,
+        in_stock=in_stock, volume=volume, sort=sort,
+    )
+
+
 @web_app.get("/sitemap.xml")
 async def sitemap_xml(request: Request):
     base = _seo_base_url(request)
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # Ensure all slugs are generated before building sitemap
+    try:
+        await db.ensure_all_slugs()
+    except Exception as e:
+        print(f"[sitemap] ensure_all_slugs failed: {e}")
 
     urls: list[tuple[str, str, str]] = []  # (loc, changefreq, priority)
     urls.append((f"{base}/", "daily", "1.0"))
@@ -8538,11 +8594,16 @@ async def sitemap_xml(request: Request):
     for cat in categories:
         try:
             name_ru = cat["name_ru"] if not isinstance(cat, dict) else cat.get("name_ru")
+            cat_slug = cat["slug"] if not isinstance(cat, dict) else cat.get("slug")
         except Exception:
             name_ru = None
+            cat_slug = None
         if not name_ru:
             continue
-        urls.append((f"{base}/?category={quote(str(name_ru), safe='')}", "weekly", "0.8"))
+        if cat_slug:
+            urls.append((f"{base}/category/{cat_slug}", "weekly", "0.8"))
+        else:
+            urls.append((f"{base}/?category={quote(str(name_ru), safe='')}", "weekly", "0.8"))
 
     # Товары
     try:
@@ -8555,13 +8616,18 @@ async def sitemap_xml(request: Request):
     for p in products:
         try:
             pid = p["id"] if not isinstance(p, dict) else p.get("id")
+            p_slug = p["slug"] if not isinstance(p, dict) else p.get("slug")
         except Exception:
             pid = None
+            p_slug = None
         if not pid:
             continue
         if pid in noindex_ids:
             continue
-        urls.append((f"{base}/product/{pid}", "weekly", "0.7"))
+        if p_slug:
+            urls.append((f"{base}/product/{p_slug}", "weekly", "0.7"))
+        else:
+            urls.append((f"{base}/product/{pid}", "weekly", "0.7"))
 
     parts = ['<?xml version="1.0" encoding="UTF-8"?>',
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
@@ -8686,6 +8752,10 @@ async def _on_startup():
 
     await db.connect()
     await db.init_schema()
+    try:
+        await db.ensure_all_slugs()
+    except Exception as e:
+        print(f"[startup] ensure_all_slugs failed: {e}")
 
     if LOCAL_POLLING:
         await bot.delete_webhook(drop_pending_updates=True)
