@@ -1404,6 +1404,7 @@ seo_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📂 Категории SEO")],
         [KeyboardButton(text="🗺 Sitemap")],
         [KeyboardButton(text="🤖 Robots.txt")],
+        [KeyboardButton(text="ℹ️ SEO Підказка")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
@@ -3182,6 +3183,27 @@ def _seo_field_label(field: str) -> str:
     return labels.get(field, field)
 
 
+def _seo_field_hint(field: str) -> str:
+    hints = {
+        "meta_title": "📏 <i>Рекомендовано 50–60 символів (до 70)</i>",
+        "meta_description": "📏 <i>Рекомендовано 120–160 символів (до 180)</i>",
+        "h1": "💡 <i>Один заголовок на сторінку, включайте ключовий запит</i>",
+        "seo_text": "📏 <i>Рекомендовано від 300 символів</i>",
+    }
+    return hints.get(field, "")
+
+
+def _seo_length_warning(field: str, value: str) -> str:
+    if not value:
+        return ""
+    length = len(value)
+    if field == "meta_title" and length > 70:
+        return f"\n⚠️ <b>Заголовок занадто довгий:</b> {length} символів (рекомендовано до 70)"
+    if field == "meta_description" and length > 180:
+        return f"\n⚠️ <b>Опис занадто довгий:</b> {length} символів (рекомендовано до 180)"
+    return ""
+
+
 def _seo_main_inline_kb() -> InlineKeyboardMarkup:
     fields = ["meta_title", "meta_description", "h1", "seo_text"]
     rows = [
@@ -3360,10 +3382,12 @@ async def seo_cat_edit_start(callback: CallbackQuery, state: FSMContext):
     cat_id = int(parts[1])
     field = parts[2]
     label = _seo_field_label(field)
+    hint = _seo_field_hint(field)
     await state.set_state(SeoCategoryState.waiting_for_value)
     await state.update_data(seo_cat_id=cat_id, seo_field=field)
+    hint_line = f"\n{hint}" if hint else ""
     await callback.message.answer(
-        f"✏️ Введите новое значение для <b>{label}</b>\n"
+        f"✏️ Введите новое значение для <b>{label}</b>{hint_line}\n"
         f"Отправьте «-» чтобы очистить поле.",
         parse_mode="HTML",
     )
@@ -3383,7 +3407,8 @@ async def seo_cat_edit_save(message: Message, state: FSMContext):
     value = "" if raw == "-" else raw
     await db.upsert_category_seo_field(cat_id, field, value)
     await state.clear()
-    await message.answer("✅ Сохранено.")
+    warning = _seo_length_warning(field, value)
+    await message.answer(f"✅ Сохранено.{warning}", parse_mode="HTML")
     cats = await db.list_site_categories()
     cat = next((c for c in cats if c["id"] == cat_id), None)
     if cat:
@@ -3483,10 +3508,12 @@ async def seo_prod_edit_start(callback: CallbackQuery, state: FSMContext):
         return
     field = parts[2]
     label = _seo_field_label(field)
+    hint = _seo_field_hint(field)
     await state.set_state(SeoProductState.waiting_for_value)
     await state.update_data(seo_product_id=product_id, seo_field=field)
+    hint_line = f"\n{hint}" if hint else ""
     await callback.message.answer(
-        f"✏️ Введите новое значение для <b>{label}</b>\n"
+        f"✏️ Введите новое значение для <b>{label}</b>{hint_line}\n"
         f"Отправьте «-» чтобы очистить поле.",
         parse_mode="HTML",
     )
@@ -3506,7 +3533,8 @@ async def seo_prod_edit_save(message: Message, state: FSMContext):
     value = "" if raw == "-" else raw
     await db.upsert_product_seo_field(product_id, field, value)
     await state.clear()
-    await message.answer("✅ Сохранено.")
+    warning = _seo_length_warning(field, value)
+    await message.answer(f"✅ Сохранено.{warning}", parse_mode="HTML")
     product = await db.get_product_by_id(product_id)
     seo = await db.get_product_seo(product_id)
     await message.answer(
@@ -3534,14 +3562,44 @@ async def seo_robots_handler(message: Message):
     await message.answer(f"🤖 Robots.txt доступен по адресу:\n<code>{url}</code>", parse_mode="HTML")
 
 
+@router.message(lambda m: m.text == "ℹ️ SEO Підказка")
+async def seo_hint_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    text = (
+        "ℹ️ <b>SEO Підказка</b>\n\n"
+        "🔤 <b>Title (мета-заголовок)</b>\n"
+        "Назва сторінки у вкладці браузера та у рядку пошукової видачі.\n"
+        "📏 Рекомендовано: <b>50–60 символів</b>. До 70 — допустимо.\n\n"
+        "📄 <b>Description (мета-опис)</b>\n"
+        "Короткий опис під заголовком у результатах пошуку.\n"
+        "📏 Рекомендовано: <b>120–160 символів</b>. До 180 — допустимо.\n\n"
+        "📌 <b>H1</b>\n"
+        "Головний заголовок на сторінці — <b>один</b> на сторінку.\n"
+        "Має відображати суть сторінки. Бажано включати ключовий запит.\n\n"
+        "📝 <b>SEO-текст</b>\n"
+        "Текст внизу сторінки для пошукових роботів та відвідувачів.\n"
+        "📏 Рекомендовано: <b>від 300 символів</b>.\n\n"
+        "✅ <b>Як писати без переспаму</b>\n"
+        "• Кожне ключове слово — не більше 2–3 разів у тексті\n"
+        "• Текст має бути природним і корисним для людини\n"
+        "• Не дублюйте title і H1 дослівно\n"
+        "• Уникайте повторів типу «купити купити купити» — це спам\n"
+        "• Title і description — унікальні для кожної сторінки"
+    )
+    await message.answer(text, parse_mode="HTML")
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith("seo_ef:"))
 async def seo_edit_field_start(callback: CallbackQuery, state: FSMContext):
     _, page_key, field = callback.data.split(":")
     label = _seo_field_label(field)
+    hint = _seo_field_hint(field)
     await state.set_state(SeoMainState.waiting_for_value)
     await state.update_data(seo_page_key=page_key, seo_field=field)
+    hint_line = f"\n{hint}" if hint else ""
     await callback.message.answer(
-        f"✏️ Введите новое значение для <b>{label}</b>\n"
+        f"✏️ Введите новое значение для <b>{label}</b>{hint_line}\n"
         f"Отправьте «-» чтобы очистить поле.",
         parse_mode="HTML",
     )
@@ -3572,7 +3630,8 @@ async def seo_edit_field_save(message: Message, state: FSMContext):
 
     await db.set_seo_page_field(page_key, field, value)
     await state.clear()
-    await message.answer("✅ Сохранено.")
+    warning = _seo_length_warning(field, value)
+    await message.answer(f"✅ Сохранено.{warning}", parse_mode="HTML")
     await _send_seo_main_card(message)
 
 
