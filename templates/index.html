@@ -153,19 +153,19 @@
         {% for b in active_banners %}
             <div class="bnr-slide" role="group" aria-label="Баннер {{ loop.index }} из {{ _bc }}">
                 <div class="bnr-inner">
-                    {% if b.title or b.subtitle or b.button_text %}
+                    {% if b.title or b.subtitle %}
                     <div class="bnr-text">
                         {% if b.title %}<h2 class="bnr-title">{{ b.title }}</h2>{% endif %}
                         {% if b.subtitle %}<p class="bnr-subtitle">{{ b.subtitle }}</p>{% endif %}
-                        {% if b.button_text %}
-                        <a href="{{ b.button_link or '#catalog' }}" class="bnr-cta">{{ b.button_text }}</a>
-                        {% endif %}
                     </div>
                     {% endif %}
                     {% if b.image_url %}
                     <div class="bnr-img-col">
                         <img src="{{ b.image_url }}" alt="{{ b.title or '' }}" class="bnr-img" loading="lazy">
                     </div>
+                    {% endif %}
+                    {% if b.button_text %}
+                    <a href="{{ b.button_link or '#catalog' }}" class="bnr-cta">{{ b.button_text }}</a>
                     {% endif %}
                 </div>
             </div>
