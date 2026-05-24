@@ -3038,12 +3038,51 @@ async def bnr_edit_field_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(BannersEditState.waiting_for_value)
     label = _BANNER_FIELD_LABELS[field]
     hint = " (число)" if field == "sort_order" else ""
-    await callback.message.answer(
-        f"✏️ Редактирование баннера #{banner_id}\n"
-        f"Поле: {label}{hint}\n"
-        "Отправьте новое значение или «-» чтобы очистить:"
-    )
+    if field == "image_url":
+        prompt = (
+            f"✏️ Редактирование баннера #{banner_id}\n"
+            f"Поле: {label}\n"
+            "Отправьте фото (бот загрузит в облако) или URL изображения.\n"
+            "«-» — очистить."
+        )
+    else:
+        prompt = (
+            f"✏️ Редактирование баннера #{banner_id}\n"
+            f"Поле: {label}{hint}\n"
+            "Отправьте новое значение или «-» чтобы очистить:"
+        )
+    await callback.message.answer(prompt)
     await callback.answer()
+
+
+@router.message(BannersEditState.waiting_for_value, lambda m: m.photo)
+async def bnr_edit_field_photo(message: Message, state: FSMContext):
+    """Принимает фото при редактировании поля image_url баннера."""
+    data = await state.get_data()
+    banner_id = data.get("bnr_edit_id")
+    field = data.get("bnr_edit_field")
+
+    if not banner_id or field != "image_url":
+        # Фото отправлено не в режиме image_url — игнорируем
+        await message.answer("Сейчас ожидается текстовое значение, а не фото. Отправьте текст или «-».")
+        return
+
+    # Largest photo size
+    photo = message.photo[-1]
+    try:
+        secure_url = await save_telegram_photo(message.bot, photo.file_id)
+    except Exception as e:
+        print(f"[bnr_edit_photo] upload failed: {e}")
+        await message.answer(
+            "⚠️ Не удалось загрузить фото (Cloudinary недоступен или ошибка соединения).\n"
+            "Попробуйте ещё раз или отправьте URL изображения."
+        )
+        return
+
+    await db.update_banner_field(banner_id, "image_url", secure_url)
+    await state.clear()
+    await message.answer("✅ Фото баннера обновлено.")
+    await _send_banner_card(message, banner_id)
 
 
 @router.message(BannersEditState.waiting_for_value)
@@ -3056,7 +3095,7 @@ async def bnr_edit_field_save(message: Message, state: FSMContext):
         await message.answer("Ошибка состояния.")
         return
 
-    raw = message.text.strip()
+    raw = (message.text or "").strip()
     if raw == "-":
         value = "" if field != "sort_order" else 100
     elif field == "sort_order":
@@ -3065,12 +3104,20 @@ async def bnr_edit_field_save(message: Message, state: FSMContext):
         except ValueError:
             await message.answer("Введите целое число:")
             return
+    elif field == "image_url":
+        if not raw.startswith("http"):
+            await message.answer(
+                "Отправьте URL изображения (начинается с http…), "
+                "фото-файл или «-» чтобы очистить:"
+            )
+            return
+        value = raw
     else:
         value = raw
 
     await db.update_banner_field(banner_id, field, value)
     await state.clear()
-    await message.answer(f"✅ Сохранено.")
+    await message.answer("✅ Сохранено.")
     await _send_banner_card(message, banner_id)
 
 
