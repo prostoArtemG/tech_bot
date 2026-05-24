@@ -3278,7 +3278,7 @@ button:hover {
         left: unset;
         transform: none;
         justify-self: center;
-        width: 170px;
+        width: 78%;
         min-width: unset;
         height: 44px;
         padding: 0 20px;
@@ -3304,12 +3304,24 @@ button:hover {
     }
     .bnr-cta:active { transform: scale(.97); }
     .bnr-arrow { display: none; }
-    .bnr-dots { bottom: 10px; z-index: 4; }
+    /* dots: taken out of absolute flow → appear naturally below CTA */
+    .bnr-dots {
+        position: static;
+        left: unset;
+        bottom: unset;
+        transform: none;
+        justify-content: center;
+        width: 100%;
+        margin-top: 16px;
+        padding-bottom: 14px;
+        z-index: 4;
+    }
 }
 @media (max-width: 400px) {
     .bnr-inner { padding: 12px 12px 14px; row-gap: 6px; }
     .bnr-text { padding: 14px 14px 10px; border-radius: 18px; }
     .bnr-img-col { transform: translateY(-8px); }
-    .bnr-cta { width: 155px; height: 40px; font-size: 13px; margin-top: -6px; }
+    .bnr-cta { width: 78%; height: 40px; font-size: 13px; margin-top: -6px; }
     .bnr-img { max-height: 150px; }
+    .bnr-dots { margin-top: 12px; padding-bottom: 12px; }
 }
