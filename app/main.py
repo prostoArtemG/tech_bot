@@ -1194,6 +1194,10 @@ class SeoProductState(StatesGroup):
     waiting_for_value = State()
 
 
+class AutoSeoState(StatesGroup):
+    waiting_for_value = State()
+
+
 class SitePagesState(StatesGroup):
     waiting_for_text = State()
 
@@ -1404,6 +1408,7 @@ seo_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📂 Категории SEO")],
         [KeyboardButton(text="🗺 Sitemap")],
         [KeyboardButton(text="🤖 Robots.txt")],
+        [KeyboardButton(text="⚙️ Авто SEO")],
         [KeyboardButton(text="ℹ️ SEO Підказка")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -3183,6 +3188,21 @@ def _seo_field_label(field: str) -> str:
     return labels.get(field, field)
 
 
+DEFAULT_AUTO_SEO_TEMPLATES = {
+    "seo_tpl_product_title": "{product_name} купити у Запоріжжі — {site_title}",
+    "seo_tpl_product_desc": "{product_name} за ціною {price} грн. Гарантія {warranty} міс. Замовлення онлайн, консультація.",
+    "seo_tpl_category_title": "{category_name} купити у Запоріжжі — {site_title}",
+    "seo_tpl_category_desc": "{category_name}. Ціни, гарантія, доставка.",
+}
+
+
+def _apply_seo_template(template: str, vars_dict: dict) -> str:
+    """Replace {variable} placeholders with values from vars_dict."""
+    for key, value in vars_dict.items():
+        template = template.replace(f"{{{key}}}", str(value) if value else "")
+    return template.strip()
+
+
 def _seo_field_hint(field: str) -> str:
     hints = {
         "meta_title": "📏 <i>Рекомендовано 50–60 символів (до 70)</i>",
@@ -3588,6 +3608,102 @@ async def seo_hint_handler(message: Message):
         "• Title і description — унікальні для кожної сторінки"
     )
     await message.answer(text, parse_mode="HTML")
+
+
+# ===== Auto SEO Templates =====
+
+_AUTO_SEO_LABEL_MAP = {
+    "seo_tpl_product_title": "📦 Title товару",
+    "seo_tpl_product_desc": "📦 Description товару",
+    "seo_tpl_category_title": "📂 Title категорії",
+    "seo_tpl_category_desc": "📂 Description категорії",
+}
+
+_AUTO_SEO_VARS_LINE = (
+    "\n\n🔧 <b>Доступні змінні:</b>\n"
+    "<code>{product_name}</code> <code>{category_name}</code> "
+    "<code>{price}</code> <code>{brand}</code> "
+    "<code>{warranty}</code> <code>{site_title}</code>"
+)
+
+
+async def _send_auto_seo_card(target, edit: bool = False):
+    tpls = await db.get_auto_seo_templates()
+
+    def _tv(key):
+        val = (tpls.get(key) or "").strip()
+        if not val:
+            default = DEFAULT_AUTO_SEO_TEMPLATES.get(key, "")
+            return f"<i>{default}</i> <i>(за замовчуванням)</i>"
+        return val[:120] + ("…" if len(val) > 120 else "")
+
+    text = (
+        "⚙️ <b>Авто SEO — шаблони</b>\n\n"
+        f"📦 <b>Title товару:</b>\n{_tv('seo_tpl_product_title')}\n\n"
+        f"📦 <b>Description товару:</b>\n{_tv('seo_tpl_product_desc')}\n\n"
+        f"📂 <b>Title категорії:</b>\n{_tv('seo_tpl_category_title')}\n\n"
+        f"📂 <b>Description категорії:</b>\n{_tv('seo_tpl_category_desc')}\n\n"
+        "🔧 <b>Змінні:</b> <code>{product_name}</code> <code>{category_name}</code> "
+        "<code>{price}</code> <code>{brand}</code> <code>{warranty}</code> <code>{site_title}</code>"
+    )
+    rows = [
+        [InlineKeyboardButton(text="✏️ Title товару", callback_data="auto_seo_ef:seo_tpl_product_title")],
+        [InlineKeyboardButton(text="✏️ Description товару", callback_data="auto_seo_ef:seo_tpl_product_desc")],
+        [InlineKeyboardButton(text="✏️ Title категорії", callback_data="auto_seo_ef:seo_tpl_category_title")],
+        [InlineKeyboardButton(text="✏️ Description категорії", callback_data="auto_seo_ef:seo_tpl_category_desc")],
+        [InlineKeyboardButton(text="❌ Закрыть", callback_data="seo_close")],
+    ]
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    if edit and hasattr(target, "edit_text"):
+        try:
+            await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            return
+        except Exception:
+            pass
+    await target.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.message(lambda m: m.text == "⚙️ Авто SEO")
+async def auto_seo_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await _send_auto_seo_card(message)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("auto_seo_ef:"))
+async def auto_seo_edit_start(callback: CallbackQuery, state: FSMContext):
+    key = callback.data.split(":", 1)[1]
+    if key not in _AUTO_SEO_LABEL_MAP:
+        await callback.answer("Невідомий ключ", show_alert=True)
+        return
+    label = _AUTO_SEO_LABEL_MAP[key]
+    default = DEFAULT_AUTO_SEO_TEMPLATES.get(key, "")
+    await state.set_state(AutoSeoState.waiting_for_value)
+    await state.update_data(auto_seo_key=key)
+    default_line = f"\n\n💡 <i>Поточний за замовчуванням:</i>\n<code>{default}</code>" if default else ""
+    await callback.message.answer(
+        f"✏️ Введіть новий шаблон для <b>{label}</b>{default_line}{_AUTO_SEO_VARS_LINE}\n\n"
+        f"Відправте «-» щоб скинути до стандартного.",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(AutoSeoState.waiting_for_value)
+async def auto_seo_edit_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    key = data.get("auto_seo_key")
+    if not key or key not in _AUTO_SEO_LABEL_MAP:
+        await state.clear()
+        await message.answer("Помилка стану.")
+        return
+    raw = (message.text or "").strip()
+    value = "" if raw == "-" else raw
+    await db.set_setting(key, value)
+    await state.clear()
+    status = "✅ Шаблон збережено." if value else "✅ Шаблон скинуто до стандартного."
+    await message.answer(status)
+    await _send_auto_seo_card(message)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("seo_ef:"))
@@ -7897,14 +8013,19 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     # Build effective SEO: category overrides main page when a category is selected
     if category:
         _cat_row = await db.get_site_category_by_name(category)
-        _auto_title = f"{category} купити в Запоріжжі — {site_title}"
+        _auto_tpls = await db.get_auto_seo_templates()
+        _tpl_title = _auto_tpls.get("seo_tpl_category_title") or DEFAULT_AUTO_SEO_TEMPLATES["seo_tpl_category_title"]
+        _tpl_desc = _auto_tpls.get("seo_tpl_category_desc") or DEFAULT_AUTO_SEO_TEMPLATES["seo_tpl_category_desc"]
+        _cat_vars = {"category_name": category, "site_title": site_title}
+        _auto_title = _apply_seo_template(_tpl_title, _cat_vars)
+        _auto_desc = _apply_seo_template(_tpl_desc, _cat_vars)
         if _cat_row:
             _cat_seo = await db.get_category_seo(_cat_row["id"])
         else:
             _cat_seo = None
         seo_effective = {
             "meta_title": (_cat_seo["meta_title"] if _cat_seo and _cat_seo["meta_title"] else _auto_title),
-            "meta_description": (_cat_seo["meta_description"] if _cat_seo and _cat_seo["meta_description"] else ""),
+            "meta_description": (_cat_seo["meta_description"] if _cat_seo and _cat_seo["meta_description"] else _auto_desc),
             "h1": (_cat_seo["h1"] if _cat_seo and _cat_seo["h1"] else category),
             "seo_text": (_cat_seo["seo_text"] if _cat_seo and _cat_seo["seo_text"] else ""),
             "indexable": (bool(_cat_seo["indexable"]) if _cat_seo is not None else True),
@@ -8177,7 +8298,7 @@ def _collect_product_variants(current, candidates):
     return variants
 
 
-def _build_product_seo(product, seo_row, site_title: str) -> dict:
+def _build_product_seo(product, seo_row, site_title: str, auto_templates: dict = None) -> dict:
     """Build effective SEO dict for a product page, falling back to auto-templates."""
     product_name = f"{product.get('brand') or ''} {product.get('model') or ''}".strip()
     try:
@@ -8185,11 +8306,23 @@ def _build_product_seo(product, seo_row, site_title: str) -> dict:
         _price_str = f"{_price_val:.0f}"
     except Exception:
         _price_str = ""
-    auto_title = f"{product_name} купити в Запоріжжі — {site_title or 'Technovlada'}"
-    auto_desc = (
-        f"{product_name} за ціною {_price_str} грн. "
-        f"Замовлення онлайн, консультація, гарантія."
-    )
+    brand = str(product.get("brand") or "")
+    warranty = str(product.get("warranty_months") or "")
+
+    tpls = auto_templates or {}
+    _default_site = site_title or "Technovlada"
+    vars_dict = {
+        "product_name": product_name,
+        "price": _price_str,
+        "brand": brand,
+        "warranty": warranty,
+        "site_title": _default_site,
+    }
+    tpl_title = tpls.get("seo_tpl_product_title") or DEFAULT_AUTO_SEO_TEMPLATES["seo_tpl_product_title"]
+    tpl_desc = tpls.get("seo_tpl_product_desc") or DEFAULT_AUTO_SEO_TEMPLATES["seo_tpl_product_desc"]
+    auto_title = _apply_seo_template(tpl_title, vars_dict)
+    auto_desc = _apply_seo_template(tpl_desc, vars_dict)
+
     return {
         "meta_title": (seo_row["meta_title"] if seo_row and seo_row["meta_title"] else auto_title),
         "meta_description": (seo_row["meta_description"] if seo_row and seo_row["meta_description"] else auto_desc),
@@ -8274,7 +8407,12 @@ async def product_page(request: Request, product_id: int):
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
             "site_design": await get_site_design(),
-            "seo_product": _build_product_seo(product, await db.get_product_seo(product_id), site_title),
+            "seo_product": _build_product_seo(
+                product,
+                await db.get_product_seo(product_id),
+                site_title,
+                await db.get_auto_seo_templates(),
+            ),
         }
     )
 

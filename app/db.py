@@ -1528,6 +1528,19 @@ class Database:
         )
         return {r["product_id"] for r in rows}
 
+    async def get_auto_seo_templates(self) -> dict:
+        """Return dict with 4 auto SEO template strings (empty string if not set in DB)."""
+        keys = [
+            "seo_tpl_product_title",
+            "seo_tpl_product_desc",
+            "seo_tpl_category_title",
+            "seo_tpl_category_desc",
+        ]
+        result = {}
+        for key in keys:
+            result[key] = await self.get_setting(key) or ""
+        return result
+
     async def get_top_site_products(self, limit: int = 10):
         return await self.fetch(
             """
