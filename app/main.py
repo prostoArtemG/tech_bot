@@ -1186,6 +1186,10 @@ class SeoMainState(StatesGroup):
     waiting_for_value = State()
 
 
+class SeoCategoryState(StatesGroup):
+    waiting_for_value = State()
+
+
 class SitePagesState(StatesGroup):
     waiting_for_text = State()
 
@@ -3225,7 +3229,163 @@ async def seo_main_page_handler(message: Message):
 async def seo_categories_handler(message: Message):
     if not (is_system_admin(message.from_user.id) or await is_admin(message)):
         return
-    await message.answer("⚙️ SEO категорий — в разработке.")
+    cats = await db.list_active_site_categories()
+    if not cats:
+        await message.answer("Категорий сайта пока нет.")
+        return
+    rows = []
+    for cat in cats:
+        rows.append([InlineKeyboardButton(
+            text=f"{cat.get('emoji', '📦')} {cat['name_ru']}",
+            callback_data=f"seo_cat_open:{cat['id']}"
+        )])
+    rows.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="seo_close")])
+    await message.answer(
+        "📂 <b>SEO категорий — выберите категорию:</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        parse_mode="HTML",
+    )
+
+
+def _seo_cat_card_text(cat_name: str, seo) -> str:
+    def _v(val):
+        return val if val else "—"
+    indexable = seo["indexable"] if seo is not None else True
+    idx_icon = "✅" if indexable else "🚫"
+    idx_label = "Да" if indexable else "Нет"
+    seo_text_preview = ""
+    if seo and seo["seo_text"]:
+        seo_text_preview = seo["seo_text"][:80] + ("…" if len(seo["seo_text"]) > 80 else "")
+    return (
+        f"📂 <b>SEO: {cat_name}</b>\n\n"
+        f"🔤 <b>meta title:</b> {_v(seo['meta_title'] if seo else '')}\n"
+        f"📄 <b>meta description:</b> {_v(seo['meta_description'] if seo else '')}\n"
+        f"📌 <b>H1:</b> {_v(seo['h1'] if seo else '')}\n"
+        f"📝 <b>SEO-текст:</b> {_v(seo_text_preview)}\n"
+        f"{idx_icon} <b>Индексация:</b> {idx_label}\n"
+    )
+
+
+def _seo_cat_inline_kb(cat_id: int, seo) -> InlineKeyboardMarkup:
+    fields = ["meta_title", "meta_description", "h1", "seo_text"]
+    rows = [
+        [InlineKeyboardButton(
+            text=f"✏️ {_seo_field_label(f)}",
+            callback_data=f"seo_cat_ef:{cat_id}:{f}"
+        )]
+        for f in fields
+    ]
+    indexable = seo["indexable"] if seo is not None else True
+    idx_text = "🚫 Выключить индексацию" if indexable else "✅ Включить индексацию"
+    rows.append([InlineKeyboardButton(text=idx_text, callback_data=f"seo_cat_idx:{cat_id}")])
+    rows.append([InlineKeyboardButton(text="◀️ К списку", callback_data="seo_cat_list")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(lambda c: c.data == "seo_cat_list")
+async def seo_cat_list_callback(callback: CallbackQuery):
+    cats = await db.list_active_site_categories()
+    if not cats:
+        await callback.answer("Категорий нет", show_alert=False)
+        return
+    rows = []
+    for cat in cats:
+        rows.append([InlineKeyboardButton(
+            text=f"{cat.get('emoji', '📦')} {cat['name_ru']}",
+            callback_data=f"seo_cat_open:{cat['id']}"
+        )])
+    rows.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="seo_close")])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    try:
+        await callback.message.edit_text(
+            "📂 <b>SEO категорий — выберите категорию:</b>",
+            reply_markup=kb, parse_mode="HTML"
+        )
+    except Exception:
+        await callback.message.answer(
+            "📂 <b>SEO категорий — выберите категорию:</b>",
+            reply_markup=kb, parse_mode="HTML"
+        )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_cat_open:"))
+async def seo_cat_open_callback(callback: CallbackQuery):
+    cat_id = int(callback.data.split(":")[1])
+    cats = await db.list_site_categories()
+    cat = next((c for c in cats if c["id"] == cat_id), None)
+    if not cat:
+        await callback.answer("Категория не найдена", show_alert=True)
+        return
+    seo = await db.get_category_seo(cat_id)
+    text = _seo_cat_card_text(cat["name_ru"], seo)
+    kb = _seo_cat_inline_kb(cat_id, seo)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_cat_idx:"))
+async def seo_cat_idx_callback(callback: CallbackQuery):
+    cat_id = int(callback.data.split(":")[1])
+    new_val = await db.toggle_category_seo_indexable(cat_id)
+    cats = await db.list_site_categories()
+    cat = next((c for c in cats if c["id"] == cat_id), None)
+    if not cat:
+        await callback.answer("Категория не найдена", show_alert=True)
+        return
+    seo = await db.get_category_seo(cat_id)
+    text = _seo_cat_card_text(cat["name_ru"], seo)
+    kb = _seo_cat_inline_kb(cat_id, seo)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    idx_label = "включена" if new_val else "выключена"
+    await callback.answer(f"Индексация {idx_label}", show_alert=False)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_cat_ef:"))
+async def seo_cat_edit_start(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    cat_id = int(parts[1])
+    field = parts[2]
+    label = _seo_field_label(field)
+    await state.set_state(SeoCategoryState.waiting_for_value)
+    await state.update_data(seo_cat_id=cat_id, seo_field=field)
+    await callback.message.answer(
+        f"✏️ Введите новое значение для <b>{label}</b>\n"
+        f"Отправьте «-» чтобы очистить поле.",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(SeoCategoryState.waiting_for_value)
+async def seo_cat_edit_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    cat_id = data.get("seo_cat_id")
+    field = data.get("seo_field")
+    if not cat_id or not field:
+        await state.clear()
+        await message.answer("Ошибка состояния.")
+        return
+    raw = (message.text or "").strip()
+    value = "" if raw == "-" else raw
+    await db.upsert_category_seo_field(cat_id, field, value)
+    await state.clear()
+    await message.answer("✅ Сохранено.")
+    cats = await db.list_site_categories()
+    cat = next((c for c in cats if c["id"] == cat_id), None)
+    if cat:
+        seo = await db.get_category_seo(cat_id)
+        await message.answer(
+            _seo_cat_card_text(cat["name_ru"], seo),
+            reply_markup=_seo_cat_inline_kb(cat_id, seo),
+            parse_mode="HTML",
+        )
 
 
 @router.message(lambda m: m.text == "🗺 Sitemap")
@@ -7547,6 +7707,30 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     active_banners = await db.list_active_banners()
     seo_index = await db.get_seo_page("index")
 
+    # Build effective SEO: category overrides main page when a category is selected
+    if category:
+        _cat_row = await db.get_site_category_by_name(category)
+        _auto_title = f"{category} купити в Запоріжжі — {site_title}"
+        if _cat_row:
+            _cat_seo = await db.get_category_seo(_cat_row["id"])
+        else:
+            _cat_seo = None
+        seo_effective = {
+            "meta_title": (_cat_seo["meta_title"] if _cat_seo and _cat_seo["meta_title"] else _auto_title),
+            "meta_description": (_cat_seo["meta_description"] if _cat_seo and _cat_seo["meta_description"] else ""),
+            "h1": (_cat_seo["h1"] if _cat_seo and _cat_seo["h1"] else category),
+            "seo_text": (_cat_seo["seo_text"] if _cat_seo and _cat_seo["seo_text"] else ""),
+            "indexable": (bool(_cat_seo["indexable"]) if _cat_seo is not None else True),
+        }
+    else:
+        seo_effective = {
+            "meta_title": seo_index.get("meta_title") or "",
+            "meta_description": seo_index.get("meta_description") or "",
+            "h1": seo_index.get("h1") or "",
+            "seo_text": seo_index.get("seo_text") or "",
+            "indexable": True,
+        }
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -7583,6 +7767,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "site_design": site_design,
             "active_banners": active_banners,
             "seo_index": seo_index,
+            "seo_effective": seo_effective,
         }
     )
 

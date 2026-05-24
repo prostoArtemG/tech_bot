@@ -437,6 +437,20 @@ class Database:
         );
         """)
 
+        # ── SEO per category ─────────────────────────────────────
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS seo_categories (
+            id SERIAL PRIMARY KEY,
+            site_category_id INTEGER NOT NULL UNIQUE REFERENCES site_categories(id) ON DELETE CASCADE,
+            meta_title TEXT NOT NULL DEFAULT '',
+            meta_description TEXT NOT NULL DEFAULT '',
+            h1 TEXT NOT NULL DEFAULT '',
+            seo_text TEXT NOT NULL DEFAULT '',
+            indexable BOOLEAN NOT NULL DEFAULT TRUE,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
     async def add_product(
         self,
         category: str,
@@ -1423,6 +1437,41 @@ class Database:
         if field not in allowed:
             raise ValueError(f"Invalid SEO field: {field}")
         await self.set_setting(f"seo_{page_key}_{field}", value)
+
+    # ── SEO per site category ──────────────────────────────────────────────────
+    async def get_category_seo(self, site_category_id: int):
+        return await self.fetchrow(
+            "SELECT * FROM seo_categories WHERE site_category_id = $1",
+            site_category_id,
+        )
+
+    async def upsert_category_seo_field(self, site_category_id: int, field: str, value: str):
+        allowed = {"meta_title", "meta_description", "h1", "seo_text"}
+        if field not in allowed:
+            raise ValueError(f"Invalid SEO field: {field}")
+        await self.execute(
+            f"""
+            INSERT INTO seo_categories (site_category_id, {field}, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (site_category_id) DO UPDATE
+            SET {field} = EXCLUDED.{field}, updated_at = NOW()
+            """,
+            site_category_id,
+            value,
+        )
+
+    async def toggle_category_seo_indexable(self, site_category_id: int) -> bool:
+        row = await self.fetchrow(
+            """
+            INSERT INTO seo_categories (site_category_id, indexable, updated_at)
+            VALUES ($1, FALSE, NOW())
+            ON CONFLICT (site_category_id) DO UPDATE
+            SET indexable = NOT seo_categories.indexable, updated_at = NOW()
+            RETURNING indexable
+            """,
+            site_category_id,
+        )
+        return bool(row and row["indexable"])
 
     async def get_top_site_products(self, limit: int = 10):
         return await self.fetch(
