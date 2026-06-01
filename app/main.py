@@ -1428,6 +1428,16 @@ site_colors_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+directories_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📁 Группы товаров")],
+        [KeyboardButton(text="🔧 Фильтры")],
+        [KeyboardButton(text="📋 Значения")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True
+)
+
 
 site_banner_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -1917,6 +1927,9 @@ async def get_main_menu_for_user(message: Message):
                 ],
                 [
                     KeyboardButton(text="❌ Сброс"),
+                ],
+                [
+                    KeyboardButton(text="⚙️ Справочники"),
                 ],
             ],
             resize_keyboard=True
@@ -4225,6 +4238,80 @@ async def site_menu_handler(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer("Раздел сайта:", reply_markup=site_kb)
+
+
+@router.message(lambda m: m.text == "⚙️ Справочники")
+async def directories_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer("Справочники:", reply_markup=directories_kb)
+
+
+@router.message(lambda m: m.text == "📁 Группы товаров")
+async def directories_product_groups_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    rows = await db.list_product_groups()
+    if not rows:
+        await message.answer("📁 Групп пока нет.", reply_markup=directories_kb)
+        return
+    lines = []
+    for r in rows:
+        brand = r["brand"] or ""
+        cat = r["category_key"] or ""
+        desc = r["description"] or ""
+        line = f"• <b>{r['name']}</b>"
+        if brand:
+            line += f" | {brand}"
+        if cat:
+            line += f" | 📂 {cat}"
+        if desc:
+            line += f"\n  <i>{desc}</i>"
+        lines.append(line)
+    text = "📁 <b>Группы товаров</b> ({}):\n\n{}".format(len(rows), "\n".join(lines))
+    await message.answer(text, parse_mode="HTML", reply_markup=directories_kb)
+
+
+@router.message(lambda m: m.text == "🔧 Фильтры")
+async def directories_filter_fields_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    # Получаем все уникальные category_key из filter_fields
+    all_rows = await db.fetch(
+        "SELECT id, category_key, field_key, label_ru, field_type, unit, is_active "
+        "FROM filter_fields ORDER BY category_key, sort_order ASC, id ASC"
+    )
+    if not all_rows:
+        await message.answer("🔧 Фильтров пока нет.", reply_markup=directories_kb)
+        return
+    # Группируем по category_key
+    by_cat: dict = {}
+    for r in all_rows:
+        key = r["category_key"] or "(без категории)"
+        by_cat.setdefault(key, [])
+        unit = f" ({r['unit']}) " if r["unit"] else " "
+        active = "✅" if r["is_active"] else "❌"
+        by_cat[key].append(f"  {active} {r['field_key']} — {r['label_ru']}{unit}[{r['field_type']}]")
+    lines = []
+    for cat, fields in by_cat.items():
+        lines.append(f"\n📂 <b>{cat}</b>")
+        lines.extend(fields)
+    text = "🔧 <b>Фильтры</b> ({}):{}".format(len(all_rows), "\n".join(lines))
+    await message.answer(text, parse_mode="HTML", reply_markup=directories_kb)
+
+
+@router.message(lambda m: m.text == "📋 Значения")
+async def directories_filter_values_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer(
+        "📋 Чтобы посмотреть значения, сначала выберите фильтр в разделе 🔧 Фильтры.",
+        reply_markup=directories_kb
+    )
 
 
 @router.message(lambda m: m.text == "📞 Контакты сайта")
