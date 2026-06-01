@@ -4325,11 +4325,14 @@ async def add_product_group_start(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     await state.clear()
-    await state.set_state(AddProductGroupState.waiting_for_category_key)
+    await state.set_state(AddProductGroupState.waiting_for_name)
+    cats = categories_for_lang("uk")
+    cat_list = "\n".join(f"  {c['emoji']} {c['name']}" for c in cats)
     await message.answer(
-        "📂 Введите <b>category_key</b> группы\n"
-        "<i>(например: boilers, water_heaters, pumps)</i>\n\n"
-        "❌ Для отмены нажмите ⬅️ Назад.",
+        "📁 Введіть <b>назву категорії</b> для нової групи\n"
+        "<i>(наприклад: Бойлери або Бойлеры)</i>\n\n"
+        f"Допустимі категорії:\n{cat_list}\n\n"
+        "❌ Для скасування натисніть ⬅️ Назад.",
         parse_mode="HTML",
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="⬅️ Назад")]],
@@ -4338,59 +4341,53 @@ async def add_product_group_start(message: Message, state: FSMContext):
     )
 
 
-@router.message(AddProductGroupState.waiting_for_category_key)
-async def add_product_group_category_key(message: Message, state: FSMContext):
-    if message.text == "⬅️ Назад":
-        await state.clear()
-        await message.answer("Отменено.", reply_markup=directories_kb)
-        return
-    raw = (message.text or "").strip()
-    if not raw or " " in raw:
-        await message.answer(
-            "⚠️ category_key не должен быть пустым или содержать пробелы.\n"
-            "Введите одно слово, например: <code>boilers</code>",
-            parse_mode="HTML",
-        )
-        return
-    await state.update_data(category_key=raw)
-    await state.set_state(AddProductGroupState.waiting_for_name)
-    await message.answer(
-        f"✅ category_key: <code>{raw}</code>\n\n"
-        "📝 Теперь введите <b>название группы</b>:",
-        parse_mode="HTML",
-    )
-
-
 @router.message(AddProductGroupState.waiting_for_name)
 async def add_product_group_name(message: Message, state: FSMContext):
     if message.text == "⬅️ Назад":
         await state.clear()
-        await message.answer("Отменено.", reply_markup=directories_kb)
+        await message.answer("Скасовано.", reply_markup=directories_kb)
         return
-    name = (message.text or "").strip()
-    if not name:
-        await message.answer("⚠️ Название не может быть пустым. Повторите:")
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("⚠️ Введіть назву категорії:")
         return
-    data = await state.get_data()
-    category_key = data.get("category_key", "")
-    await db.create_product_group(category_key=category_key, name=name)
+    key = category_key(text)
+    if not key:
+        cats = categories_for_lang("uk")
+        cat_list = "\n".join(f"  {c['emoji']} {c['name']}" for c in cats)
+        await message.answer(
+            f"⚠️ Категорію «<b>{text}</b>» не розпізнано.\n\n"
+            f"Допустимі категорії:\n{cat_list}\n\n"
+            "Введіть ще раз:",
+            parse_mode="HTML",
+        )
+        return
+    # Перевіряємо, чи вже є група з таким category_key
+    existing = await db.list_product_groups()
+    for g in existing:
+        if g["category_key"] == key:
+            await message.answer(
+                f"⚠️ Група для категорії «<b>{category_label(key, 'uk')}</b>» вже існує.",
+                parse_mode="HTML",
+                reply_markup=directories_kb,
+            )
+            await state.clear()
+            return
+    name = category_label(key, "uk")
+    await db.create_product_group(category_key=key, name=name)
     await state.clear()
-    # Показываем обновлённый список групп
+    # Оновлений список груп
     rows = await db.list_product_groups()
     lines = []
     for r in rows:
-        brand = r["brand"] or ""
         cat = r["category_key"] or ""
-        line = f"• <b>{r['name']}</b>"
-        if brand:
-            line += f" | {brand}"
-        if cat:
-            line += f" | 📂 {cat}"
-        lines.append(line)
+        emoji = category_emoji(cat)
+        label = category_label(cat, "uk") if cat else r["name"]
+        lines.append(f"• {emoji} <b>{label}</b>")
     groups_text = "\n".join(lines) if lines else "—"
     await message.answer(
-        f"✅ Группа «<b>{name}</b>» добавлена.\n\n"
-        f"📁 <b>Группы товаров</b> ({len(rows)}):\n{groups_text}",
+        f"✅ Групу «<b>{name}</b>» додано.\n\n"
+        f"📁 <b>Групи товарів</b> ({len(rows)}):\n{groups_text}",
         parse_mode="HTML",
         reply_markup=directories_kb,
     )
