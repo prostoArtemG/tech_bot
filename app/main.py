@@ -1210,6 +1210,11 @@ class SiteProductPreviewState(StatesGroup):
     waiting_for_query = State()
 
 
+class AddProductGroupState(StatesGroup):
+    waiting_for_category_key = State()
+    waiting_for_name = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -1431,6 +1436,7 @@ site_colors_kb = ReplyKeyboardMarkup(
 directories_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📁 Группы товаров")],
+        [KeyboardButton(text="➕ Добавить группу")],
         [KeyboardButton(text="🔧 Фильтры")],
         [KeyboardButton(text="📋 Значения")],
         [KeyboardButton(text="⬅️ Назад")],
@@ -4311,6 +4317,82 @@ async def directories_filter_values_handler(message: Message, state: FSMContext)
     await message.answer(
         "📋 Чтобы посмотреть значения, сначала выберите фильтр в разделе 🔧 Фильтры.",
         reply_markup=directories_kb
+    )
+
+
+@router.message(lambda m: m.text == "➕ Добавить группу")
+async def add_product_group_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await state.set_state(AddProductGroupState.waiting_for_category_key)
+    await message.answer(
+        "📂 Введите <b>category_key</b> группы\n"
+        "<i>(например: boilers, water_heaters, pumps)</i>\n\n"
+        "❌ Для отмены нажмите ⬅️ Назад.",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(AddProductGroupState.waiting_for_category_key)
+async def add_product_group_category_key(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Отменено.", reply_markup=directories_kb)
+        return
+    raw = (message.text or "").strip()
+    if not raw or " " in raw:
+        await message.answer(
+            "⚠️ category_key не должен быть пустым или содержать пробелы.\n"
+            "Введите одно слово, например: <code>boilers</code>",
+            parse_mode="HTML",
+        )
+        return
+    await state.update_data(category_key=raw)
+    await state.set_state(AddProductGroupState.waiting_for_name)
+    await message.answer(
+        f"✅ category_key: <code>{raw}</code>\n\n"
+        "📝 Теперь введите <b>название группы</b>:",
+        parse_mode="HTML",
+    )
+
+
+@router.message(AddProductGroupState.waiting_for_name)
+async def add_product_group_name(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Отменено.", reply_markup=directories_kb)
+        return
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("⚠️ Название не может быть пустым. Повторите:")
+        return
+    data = await state.get_data()
+    category_key = data.get("category_key", "")
+    await db.create_product_group(category_key=category_key, name=name)
+    await state.clear()
+    # Показываем обновлённый список групп
+    rows = await db.list_product_groups()
+    lines = []
+    for r in rows:
+        brand = r["brand"] or ""
+        cat = r["category_key"] or ""
+        line = f"• <b>{r['name']}</b>"
+        if brand:
+            line += f" | {brand}"
+        if cat:
+            line += f" | 📂 {cat}"
+        lines.append(line)
+    groups_text = "\n".join(lines) if lines else "—"
+    await message.answer(
+        f"✅ Группа «<b>{name}</b>» добавлена.\n\n"
+        f"📁 <b>Группы товаров</b> ({len(rows)}):\n{groups_text}",
+        parse_mode="HTML",
+        reply_markup=directories_kb,
     )
 
 
