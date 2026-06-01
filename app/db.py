@@ -508,6 +508,87 @@ class Database:
         );
         """)
 
+        # ── Product groups ───────────────────────────────────────
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS product_groups (
+            id           SERIAL PRIMARY KEY,
+            category_key TEXT NOT NULL DEFAULT '',
+            brand        TEXT NOT NULL DEFAULT '',
+            name         TEXT NOT NULL DEFAULT '',
+            slug         TEXT,
+            description  TEXT NOT NULL DEFAULT '',
+            sort_order   INTEGER NOT NULL DEFAULT 100,
+            created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+        await self.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS product_groups_slug_uq
+        ON product_groups (slug) WHERE slug IS NOT NULL;
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS product_groups_category_key_idx
+        ON product_groups (category_key);
+        """)
+
+        # ── Filter fields (definition per category) ──────────────
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS filter_fields (
+            id           SERIAL PRIMARY KEY,
+            category_key TEXT NOT NULL DEFAULT '',
+            field_key    TEXT NOT NULL DEFAULT '',
+            label_ru     TEXT NOT NULL DEFAULT '',
+            label_uk     TEXT NOT NULL DEFAULT '',
+            field_type   TEXT NOT NULL DEFAULT 'select',
+            unit         TEXT NOT NULL DEFAULT '',
+            sort_order   INTEGER NOT NULL DEFAULT 100,
+            is_active    BOOLEAN NOT NULL DEFAULT TRUE
+        );
+        """)
+        await self.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS filter_fields_category_field_uq
+        ON filter_fields (category_key, field_key);
+        """)
+
+        # ── Filter values (lookup table for select-type fields) ───
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS filter_values (
+            id              SERIAL PRIMARY KEY,
+            filter_field_id INTEGER NOT NULL
+                            REFERENCES filter_fields(id) ON DELETE CASCADE,
+            value           TEXT NOT NULL DEFAULT '',
+            label_ru        TEXT NOT NULL DEFAULT '',
+            label_uk        TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 100
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS filter_values_field_idx
+        ON filter_values (filter_field_id);
+        """)
+
+        # ── Product ↔ filter values mapping ──────────────────────
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS product_filter_values (
+            id              SERIAL PRIMARY KEY,
+            product_id      INTEGER NOT NULL
+                            REFERENCES products(id) ON DELETE CASCADE,
+            filter_field_id INTEGER NOT NULL
+                            REFERENCES filter_fields(id) ON DELETE CASCADE,
+            value_text      TEXT,
+            filter_value_id INTEGER
+                            REFERENCES filter_values(id) ON DELETE SET NULL,
+            UNIQUE (product_id, filter_field_id)
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS product_filter_values_product_idx
+        ON product_filter_values (product_id);
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS product_filter_values_field_idx
+        ON product_filter_values (filter_field_id);
+        """)
+
     async def add_product(
         self,
         category: str,
