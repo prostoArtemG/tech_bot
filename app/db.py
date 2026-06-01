@@ -2910,5 +2910,103 @@ class Database:
     async def delete_all_site_brands(self):
         await self.execute("DELETE FROM site_brands")
 
+    # ── product_groups ───────────────────────────────────────────
+    async def list_product_groups(self):
+        return await self.fetch(
+            """
+            SELECT id, category_key, brand, name, slug, description, sort_order, created_at
+            FROM product_groups
+            ORDER BY sort_order ASC, id ASC
+            """
+        )
+
+    async def create_product_group(
+        self,
+        category_key: str,
+        name: str,
+        brand: str = '',
+        description: str = '',
+        sort_order: int = 100,
+    ):
+        row = await self.fetchrow(
+            """
+            INSERT INTO product_groups (category_key, brand, name, description, sort_order)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            category_key, brand, name, description, sort_order,
+        )
+        return int(row["id"]) if row else None
+
+    # ── filter_fields ────────────────────────────────────────────
+    async def list_filter_fields(self, category_key: str):
+        return await self.fetch(
+            """
+            SELECT id, category_key, field_key, label_ru, label_uk,
+                   field_type, unit, sort_order, is_active
+            FROM filter_fields
+            WHERE category_key = $1
+            ORDER BY sort_order ASC, id ASC
+            """,
+            category_key,
+        )
+
+    async def create_filter_field(
+        self,
+        category_key: str,
+        field_key: str,
+        label_ru: str,
+        label_uk: str = '',
+        field_type: str = 'select',
+        unit: str = '',
+        sort_order: int = 100,
+    ):
+        row = await self.fetchrow(
+            """
+            INSERT INTO filter_fields
+                (category_key, field_key, label_ru, label_uk, field_type, unit, sort_order)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (category_key, field_key) DO UPDATE
+                SET label_ru   = EXCLUDED.label_ru,
+                    label_uk   = EXCLUDED.label_uk,
+                    field_type = EXCLUDED.field_type,
+                    unit       = EXCLUDED.unit,
+                    sort_order = EXCLUDED.sort_order
+            RETURNING id
+            """,
+            category_key, field_key, label_ru, label_uk, field_type, unit, sort_order,
+        )
+        return int(row["id"]) if row else None
+
+    # ── filter_values ────────────────────────────────────────────
+    async def list_filter_values(self, filter_field_id: int):
+        return await self.fetch(
+            """
+            SELECT id, filter_field_id, value, label_ru, label_uk, sort_order
+            FROM filter_values
+            WHERE filter_field_id = $1
+            ORDER BY sort_order ASC, id ASC
+            """,
+            filter_field_id,
+        )
+
+    async def create_filter_value(
+        self,
+        filter_field_id: int,
+        value: str,
+        label_ru: str = '',
+        label_uk: str = '',
+        sort_order: int = 100,
+    ):
+        row = await self.fetchrow(
+            """
+            INSERT INTO filter_values (filter_field_id, value, label_ru, label_uk, sort_order)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            filter_field_id, value, label_ru, label_uk, sort_order,
+        )
+        return int(row["id"]) if row else None
+
 
 db = Database(DATABASE_URL)
