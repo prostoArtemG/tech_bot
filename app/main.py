@@ -1215,6 +1215,12 @@ class AddProductGroupState(StatesGroup):
     waiting_for_name = State()
 
 
+class AddFilterFieldState(StatesGroup):
+    waiting_for_group = State()
+    waiting_for_name = State()
+    waiting_for_type = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -1438,6 +1444,7 @@ directories_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📁 Группы товаров")],
         [KeyboardButton(text="➕ Добавить группу")],
         [KeyboardButton(text="🔧 Фильтры")],
+        [KeyboardButton(text="➕ Добавить фильтр")],
         [KeyboardButton(text="📋 Значения")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -4388,6 +4395,137 @@ async def add_product_group_name(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Групу «<b>{name}</b>» додано.\n\n"
         f"📁 <b>Групи товарів</b> ({len(rows)}):\n{groups_text}",
+        parse_mode="HTML",
+        reply_markup=directories_kb,
+    )
+
+
+_FILTER_KEY_MAP = {
+    "бренд": "brand", "brand": "brand",
+    "літраж": "volume", "литраж": "volume", "обʼєм": "volume", "объём": "volume", "объем": "volume",
+    "тип тена": "ten_type", "тип тэна": "ten_type",
+    "монтаж": "mount_type",
+    "форма": "shape",
+    "потужність": "power", "мощность": "power",
+    "площа": "area", "площадь": "area",
+    "btu": "btu",
+    "wi-fi": "wifi", "wifi": "wifi",
+    "інвертор": "inverter", "инвертор": "inverter",
+}
+
+
+def _resolve_field_key(label: str) -> str:
+    mapped = _FILTER_KEY_MAP.get(label.lower().strip())
+    if mapped:
+        return mapped
+    return make_slug(label)
+
+
+@router.message(lambda m: m.text == "➕ Добавить фильтр")
+async def add_filter_field_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    groups = await db.list_product_groups()
+    if not groups:
+        await message.answer(
+            "⚠️ Спочатку додайте групу товарів.",
+            reply_markup=directories_kb,
+        )
+        return
+    await state.set_state(AddFilterFieldState.waiting_for_group)
+    buttons = [[KeyboardButton(text=g["name"])] for g in groups]
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    await message.answer(
+        "📁 Оберіть групу товарів для фільтра:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(AddFilterFieldState.waiting_for_group)
+async def add_filter_field_group_selected(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=directories_kb)
+        return
+    groups = await db.list_product_groups()
+    matched = next((g for g in groups if g["name"] == message.text), None)
+    if not matched:
+        await message.answer("⚠️ Оберіть групу зі списку або натисніть ⬅️ Назад.")
+        return
+    await state.update_data(category_key=matched["category_key"], group_name=matched["name"])
+    await state.set_state(AddFilterFieldState.waiting_for_name)
+    await message.answer(
+        f"📂 Група: <b>{matched['name']}</b>\n\n"
+        "🔤 Введіть назву фільтра:\n"
+        "<i>наприклад: Бренд, Літраж, Тип ТЕНа, Монтаж</i>\n\n"
+        "❌ Для скасування натисніть ⬅️ Назад.",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(AddFilterFieldState.waiting_for_name)
+async def add_filter_field_name(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=directories_kb)
+        return
+    label = (message.text or "").strip()
+    if not label:
+        await message.answer("⚠️ Введіть назву фільтра:")
+        return
+    field_key = _resolve_field_key(label)
+    await state.update_data(label=label, field_key=field_key)
+    await state.set_state(AddFilterFieldState.waiting_for_type)
+    await message.answer(
+        f"🔑 field_key: <code>{field_key}</code>\n\n"
+        "📊 Оберіть тип фільтра:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="select"), KeyboardButton(text="range"), KeyboardButton(text="boolean")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(AddFilterFieldState.waiting_for_type)
+async def add_filter_field_type(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=directories_kb)
+        return
+    field_type = (message.text or "").strip().lower()
+    if field_type not in ("select", "range", "boolean"):
+        await message.answer("⚠️ Оберіть тип: select, range або boolean.")
+        return
+    data = await state.get_data()
+    cat_key = data["category_key"]
+    field_key = data["field_key"]
+    label = data["label"]
+    await db.create_filter_field(
+        category_key=cat_key,
+        field_key=field_key,
+        label_ru=label,
+        label_uk=label,
+        field_type=field_type,
+    )
+    await state.clear()
+    fields = await db.list_filter_fields(cat_key)
+    lines = [
+        f"• <b>{f['label_ru']}</b> | <code>{f['field_key']}</code> | {f['field_type']}"
+        for f in fields
+    ]
+    fields_text = "\n".join(lines) if lines else "—"
+    await message.answer(
+        f"✅ Фільтр «<b>{label}</b>» додано.\n\n"
+        f"🔧 <b>Фільтри групи «{data['group_name']}»</b> ({len(fields)}):\n{fields_text}",
         parse_mode="HTML",
         reply_markup=directories_kb,
     )
