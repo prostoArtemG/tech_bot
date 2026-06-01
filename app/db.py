@@ -3008,5 +3008,40 @@ class Database:
         )
         return int(row["id"]) if row else None
 
+    # ── product_filter_values ─────────────────────────────────────
+    async def upsert_product_filter_value(
+        self,
+        product_id: int,
+        filter_field_id: int,
+        value_text: str = None,
+        filter_value_id: int = None,
+    ):
+        await self.execute(
+            """
+            INSERT INTO product_filter_values
+                (product_id, filter_field_id, value_text, filter_value_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (product_id, filter_field_id) DO UPDATE
+                SET value_text      = EXCLUDED.value_text,
+                    filter_value_id = EXCLUDED.filter_value_id
+            """,
+            product_id, filter_field_id, value_text, filter_value_id,
+        )
+
+    async def get_product_filter_values(self, product_id: int):
+        return await self.fetch(
+            """
+            SELECT pfv.filter_field_id, pfv.value_text, pfv.filter_value_id,
+                   ff.label_ru AS field_label,
+                   fv.label_ru AS value_label
+            FROM product_filter_values pfv
+            JOIN filter_fields ff ON ff.id = pfv.filter_field_id
+            LEFT JOIN filter_values fv ON fv.id = pfv.filter_value_id
+            WHERE pfv.product_id = $1
+            ORDER BY ff.sort_order ASC, ff.id ASC
+            """,
+            product_id,
+        )
+
 
 db = Database(DATABASE_URL)
