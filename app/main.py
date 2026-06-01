@@ -1441,8 +1441,8 @@ site_colors_kb = ReplyKeyboardMarkup(
 
 directories_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="📁 Группы товаров")],
-        [KeyboardButton(text="➕ Добавить группу")],
+        [KeyboardButton(text="📁 Категории сайта")],
+        [KeyboardButton(text="➕ Настроить категорию")],
         [KeyboardButton(text="🔧 Фильтры")],
         [KeyboardButton(text="➕ Добавить фильтр")],
         [KeyboardButton(text="📋 Значения")],
@@ -4261,29 +4261,19 @@ async def directories_menu_handler(message: Message, state: FSMContext):
     await message.answer("Справочники:", reply_markup=directories_kb)
 
 
-@router.message(lambda m: m.text == "📁 Группы товаров")
+@router.message(lambda m: m.text == "📁 Категории сайта")
 async def directories_product_groups_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     await state.clear()
-    rows = await db.list_product_groups()
-    if not rows:
-        await message.answer("📁 Групп пока нет.", reply_markup=directories_kb)
-        return
+    cats = categories_for_lang("uk")
+    existing = await db.list_product_groups()
+    configured_keys = {g["category_key"] for g in existing}
     lines = []
-    for r in rows:
-        brand = r["brand"] or ""
-        cat = r["category_key"] or ""
-        desc = r["description"] or ""
-        line = f"• <b>{r['name']}</b>"
-        if brand:
-            line += f" | {brand}"
-        if cat:
-            line += f" | 📂 {cat}"
-        if desc:
-            line += f"\n  <i>{desc}</i>"
-        lines.append(line)
-    text = "📁 <b>Группы товаров</b> ({}):\n\n{}".format(len(rows), "\n".join(lines))
+    for c in cats:
+        status = "✅" if c["key"] in configured_keys else "➖"
+        lines.append(f"{status} {c['emoji']} <b>{c['name']}</b>")
+    text = "📁 <b>Категорії сайту</b>:\n\n" + "\n".join(lines)
     await message.answer(text, parse_mode="HTML", reply_markup=directories_kb)
 
 
@@ -4327,24 +4317,18 @@ async def directories_filter_values_handler(message: Message, state: FSMContext)
     )
 
 
-@router.message(lambda m: m.text == "➕ Добавить группу")
+@router.message(lambda m: m.text == "➕ Настроить категорию")
 async def add_product_group_start(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     await state.clear()
     await state.set_state(AddProductGroupState.waiting_for_name)
     cats = categories_for_lang("uk")
-    cat_list = "\n".join(f"  {c['emoji']} {c['name']}" for c in cats)
+    buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
     await message.answer(
-        "📁 Введіть <b>назву категорії</b> для нової групи\n"
-        "<i>(наприклад: Бойлери або Бойлеры)</i>\n\n"
-        f"Допустимі категорії:\n{cat_list}\n\n"
-        "❌ Для скасування натисніть ⬅️ Назад.",
-        parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
-            resize_keyboard=True,
-        ),
+        "📁 Оберіть категорію для налаштування:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
     )
 
 
@@ -4356,25 +4340,23 @@ async def add_product_group_name(message: Message, state: FSMContext):
         return
     text = (message.text or "").strip()
     if not text:
-        await message.answer("⚠️ Введіть назву категорії:")
+        await message.answer("⚠️ Оберіть категорію зі списку:")
         return
     key = category_key(text)
     if not key:
         cats = categories_for_lang("uk")
-        cat_list = "\n".join(f"  {c['emoji']} {c['name']}" for c in cats)
+        buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
         await message.answer(
-            f"⚠️ Категорію «<b>{text}</b>» не розпізнано.\n\n"
-            f"Допустимі категорії:\n{cat_list}\n\n"
-            "Введіть ще раз:",
-            parse_mode="HTML",
+            "⚠️ Категорію не розпізнано. Оберіть зі списку:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
         )
         return
-    # Перевіряємо, чи вже є група з таким category_key
     existing = await db.list_product_groups()
     for g in existing:
         if g["category_key"] == key:
             await message.answer(
-                f"⚠️ Група для категорії «<b>{category_label(key, 'uk')}</b>» вже існує.",
+                f"ℹ️ Категорія «<b>{category_label(key, 'uk')}</b>» вже налаштована.",
                 parse_mode="HTML",
                 reply_markup=directories_kb,
             )
@@ -4383,18 +4365,16 @@ async def add_product_group_name(message: Message, state: FSMContext):
     name = category_label(key, "uk")
     await db.create_product_group(category_key=key, name=name)
     await state.clear()
-    # Оновлений список груп
-    rows = await db.list_product_groups()
+    cats = categories_for_lang("uk")
+    updated = await db.list_product_groups()
+    configured_keys = {g["category_key"] for g in updated}
     lines = []
-    for r in rows:
-        cat = r["category_key"] or ""
-        emoji = category_emoji(cat)
-        label = category_label(cat, "uk") if cat else r["name"]
-        lines.append(f"• {emoji} <b>{label}</b>")
-    groups_text = "\n".join(lines) if lines else "—"
+    for c in cats:
+        status = "✅" if c["key"] in configured_keys else "➖"
+        lines.append(f"{status} {c['emoji']} <b>{c['name']}</b>")
     await message.answer(
-        f"✅ Групу «<b>{name}</b>» додано.\n\n"
-        f"📁 <b>Групи товарів</b> ({len(rows)}):\n{groups_text}",
+        f"✅ Категорію «<b>{name}</b>» налаштовано.\n\n"
+        "📁 <b>Категорії сайту</b>:\n\n" + "\n".join(lines),
         parse_mode="HTML",
         reply_markup=directories_kb,
     )
@@ -4426,18 +4406,12 @@ async def add_filter_field_start(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     await state.clear()
-    groups = await db.list_product_groups()
-    if not groups:
-        await message.answer(
-            "⚠️ Спочатку додайте групу товарів.",
-            reply_markup=directories_kb,
-        )
-        return
     await state.set_state(AddFilterFieldState.waiting_for_group)
-    buttons = [[KeyboardButton(text=g["name"])] for g in groups]
+    cats = categories_for_lang("uk")
+    buttons = [[KeyboardButton(text=c["name"])] for c in cats]
     buttons.append([KeyboardButton(text="⬅️ Назад")])
     await message.answer(
-        "📁 Оберіть групу товарів для фільтра:",
+        "📁 Оберіть категорію для фільтра:",
         reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
     )
 
@@ -4448,15 +4422,21 @@ async def add_filter_field_group_selected(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("Скасовано.", reply_markup=directories_kb)
         return
-    groups = await db.list_product_groups()
-    matched = next((g for g in groups if g["name"] == message.text), None)
-    if not matched:
-        await message.answer("⚠️ Оберіть групу зі списку або натисніть ⬅️ Назад.")
+    key = category_key(message.text)
+    if not key:
+        cats = categories_for_lang("uk")
+        buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            "⚠️ Оберіть категорію зі списку або натисніть ⬅️ Назад.",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
         return
-    await state.update_data(category_key=matched["category_key"], group_name=matched["name"])
+    group_name = category_label(key, "uk")
+    await state.update_data(category_key=key, group_name=group_name)
     await state.set_state(AddFilterFieldState.waiting_for_name)
     await message.answer(
-        f"📂 Група: <b>{matched['name']}</b>\n\n"
+        f"📂 Категорія: <b>{group_name}</b>\n\n"
         "🔤 Введіть назву фільтра:\n"
         "<i>наприклад: Бренд, Літраж, Тип ТЕНа, Монтаж</i>\n\n"
         "❌ Для скасування натисніть ⬅️ Назад.",
