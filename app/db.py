@@ -3030,54 +3030,6 @@ class Database:
         )
         return {r["product_id"]: int(r["cnt"]) for r in rows}
 
-    async def get_filter_fields_with_values(self, category_key: str) -> list:
-        rows = await self.fetch(
-            """
-            SELECT ff.id AS field_id, ff.field_key, ff.label_ru, ff.label_uk,
-                   ff.field_type, ff.unit,
-                   fv.id AS value_id, fv.value AS value_key,
-                   fv.label_ru AS val_ru, fv.label_uk AS val_uk
-            FROM filter_fields ff
-            LEFT JOIN filter_values fv ON fv.filter_field_id = ff.id
-            WHERE ff.category_key = $1 AND ff.is_active = TRUE
-            ORDER BY ff.sort_order ASC, ff.id ASC, fv.sort_order ASC, fv.id ASC
-            """,
-            category_key,
-        )
-        fields: dict = {}
-        for r in rows:
-            fid = r["field_id"]
-            if fid not in fields:
-                fields[fid] = {
-                    "field_id": fid,
-                    "field_key": r["field_key"] or "",
-                    "label_ru": r["label_ru"] or "",
-                    "label_uk": r["label_uk"] or "",
-                    "field_type": r["field_type"] or "select",
-                    "unit": r["unit"] or "",
-                    "values": [],
-                }
-            if r["value_id"] is not None:
-                fields[fid]["values"].append({
-                    "value_id": r["value_id"],
-                    "value_key": r["value_key"] or "",
-                    "label_ru": r["val_ru"] or r["value_key"] or "",
-                    "label_uk": r["val_uk"] or r["val_ru"] or r["value_key"] or "",
-                })
-        return list(fields.values())
-
-    async def get_product_filter_values_for_category(self, category_key: str):
-        return await self.fetch(
-            """
-            SELECT pfv.product_id, pfv.filter_field_id,
-                   pfv.filter_value_id, pfv.value_text
-            FROM product_filter_values pfv
-            JOIN filter_fields ff ON ff.id = pfv.filter_field_id
-            WHERE ff.category_key = $1
-            """,
-            category_key,
-        )
-
     async def upsert_product_filter_value(
         self,
         product_id: int,

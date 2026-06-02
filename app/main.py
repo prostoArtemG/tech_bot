@@ -8421,107 +8421,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
     dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
-    # ── filter_fields/filter_values (select & boolean) ──────────────────────
-    _ff_used = False
-    if target_key_dyn:
-        try:
-            _ff_fields = await db.get_filter_fields_with_values(target_key_dyn)
-            _ff_sel = [f for f in _ff_fields if f["field_type"] in ("select", "boolean")]
-        except Exception as _e:
-            print(f"[site] get_filter_fields_with_values failed: {_e}")
-            _ff_sel = []
-        if _ff_sel:
-            _ff_used = True
-            qp = request.query_params
-            try:
-                _pfv_rows = await db.get_product_filter_values_for_category(target_key_dyn)
-            except Exception as _e:
-                print(f"[site] get_product_filter_values_for_category failed: {_e}")
-                _pfv_rows = []
-            # index: product_id → {field_id: (filter_value_id, value_text)}
-            _pfv_idx: dict = {}
-            for _r in _pfv_rows:
-                _pid2 = _r["product_id"]
-                if _pid2 not in _pfv_idx:
-                    _pfv_idx[_pid2] = {}
-                _pfv_idx[_pid2][_r["filter_field_id"]] = (
-                    _r["filter_value_id"], _r["value_text"]
-                )
-            for _ff in _ff_sel:
-                _fkey = _ff["field_key"]
-                _ftype = _ff["field_type"]
-                _fid = _ff["field_id"]
-                _fvals = _ff["values"]
-                if _ftype == "boolean" and not _fvals:
-                    # boolean without preset values — match by value_text
-                    _present: set = set()
-                    for _pvals in _pfv_idx.values():
-                        if _fid in _pvals:
-                            _, _vtxt = _pvals[_fid]
-                            if _vtxt:
-                                _present.add(_vtxt.strip().lower())
-                    _opts_render = [
-                        o for o in [
-                            {"value": "yes", "label_ru": "Так", "label_uk": "Так"},
-                            {"value": "no",  "label_ru": "Ні",  "label_uk": "Ні"},
-                        ] if o["value"] in _present
-                    ]
-                    if not _opts_render:
-                        continue
-                    _raw = qp.getlist(_fkey) if hasattr(qp, "getlist") else []
-                    _sel = [v.strip() for v in _raw if v.strip()]
-                    if _sel:
-                        dyn_selected[_fkey] = _sel
-                        _wanted_txt = {s.lower() for s in _sel}
-                        def _match_bool(p, _fid=_fid, _w=_wanted_txt, _idx=_pfv_idx):
-                            _entry = _idx.get(p["id"], {}).get(_fid)
-                            return _entry is not None and (_entry[1] or "").strip().lower() in _w
-                        products = [p for p in products if _match_bool(p)]
-                        for _s in _sel:
-                            dyn_query_extras.append((_fkey, _s))
-                else:
-                    # select (or boolean with preset filter_values)
-                    _vkey_to_id = {v["value_key"]: v["value_id"] for v in _fvals}
-                    _assigned_vids: set = set()
-                    for _pvals in _pfv_idx.values():
-                        if _fid in _pvals:
-                            _vid, _ = _pvals[_fid]
-                            if _vid is not None:
-                                _assigned_vids.add(_vid)
-                    _opts_render = [
-                        {
-                            "value": v["value_key"],
-                            "label_ru": v["label_ru"] or v["value_key"],
-                            "label_uk": v["label_uk"] or v["label_ru"] or v["value_key"],
-                        }
-                        for v in _fvals
-                        if v["value_id"] in _assigned_vids
-                    ]
-                    if not _opts_render:
-                        continue
-                    _raw = qp.getlist(_fkey) if hasattr(qp, "getlist") else []
-                    _sel = [v.strip() for v in _raw if v.strip()]
-                    if _sel:
-                        dyn_selected[_fkey] = _sel
-                        _wanted_vids = {_vkey_to_id[s] for s in _sel if s in _vkey_to_id}
-                        if _wanted_vids:
-                            def _match_sel(p, _fid=_fid, _w=_wanted_vids, _idx=_pfv_idx):
-                                _entry = _idx.get(p["id"], {}).get(_fid)
-                                return _entry is not None and _entry[0] in _w
-                            products = [p for p in products if _match_sel(p)]
-                        for _s in _sel:
-                            dyn_query_extras.append((_fkey, _s))
-                dyn_attrs.append({
-                    "attribute_key": _fkey,
-                    "name_ru": _ff["label_ru"],
-                    "name_ua": _ff["label_uk"] or _ff["label_ru"],
-                    "type": _ftype,
-                    "unit": _ff["unit"] or "",
-                    "render_kind": "checkbox",
-                })
-                dyn_options[_fkey] = _opts_render
-    # ── OLD fallback (category_attributes) ──────────────────────────────────
-    if not _ff_used and target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines", "hoods", "microwaves", "gas_stoves"):
+    if target_key_dyn in ("boilers", "air_conditioners", "refrigerators", "washing_machines", "hoods", "microwaves", "gas_stoves"):
         try:
             dyn_attrs = await db.get_category_attributes(target_key_dyn, only_filterable=True)
         except Exception as e:
@@ -8531,9 +8431,9 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     # Расширяем discrete-набор переопределениями для текущей категории.
     discrete_keys_effective = DISCRETE_NUMBER_KEYS | DISCRETE_NUMBER_KEYS_BY_CATEGORY.get(target_key_dyn, set())
 
-    products_for_options = list(products) if (dyn_attrs and not _ff_used) else []
+    products_for_options = list(products) if dyn_attrs else []
 
-    if dyn_attrs and not _ff_used:
+    if dyn_attrs:
         qp = request.query_params
         for attr in dyn_attrs:
             key = attr["attribute_key"]
