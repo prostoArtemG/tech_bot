@@ -3009,6 +3009,27 @@ class Database:
         return int(row["id"]) if row else None
 
     # ── product_filter_values ─────────────────────────────────────
+    async def count_filter_fields(self, category_key: str) -> int:
+        row = await self.fetchrow(
+            "SELECT COUNT(*) AS cnt FROM filter_fields WHERE category_key = $1",
+            category_key,
+        )
+        return int(row["cnt"]) if row else 0
+
+    async def get_filled_filter_counts(self, product_ids: list) -> dict:
+        if not product_ids:
+            return {}
+        rows = await self.fetch(
+            """
+            SELECT product_id, COUNT(*) AS cnt
+            FROM product_filter_values
+            WHERE product_id = ANY($1::int[])
+            GROUP BY product_id
+            """,
+            product_ids,
+        )
+        return {r["product_id"]: int(r["cnt"]) for r in rows}
+
     async def upsert_product_filter_value(
         self,
         product_id: int,

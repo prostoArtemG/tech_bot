@@ -1228,6 +1228,8 @@ class AddFilterValueState(StatesGroup):
 
 
 class SetProductFilterState(StatesGroup):
+    waiting_for_category = State()
+    waiting_for_status = State()
     waiting_for_product = State()
     waiting_for_filter = State()
     waiting_for_value = State()
@@ -4648,16 +4650,132 @@ async def set_product_filter_start(message: Message, state: FSMContext):
     if not products:
         await message.answer("📦 Товарів ще немає.", reply_markup=directories_kb)
         return
-    await state.set_state(SetProductFilterState.waiting_for_product)
+    by_cat: dict = {}
+    for p in products:
+        key = category_key(p["category"])
+        if key:
+            by_cat[key] = by_cat.get(key, 0) + 1
+    if not by_cat:
+        await message.answer("⚠️ Товари без розпізнаної категорії.", reply_markup=directories_kb)
+        return
+    cats = categories_for_lang("uk")
     buttons = []
-    for p in products[:30]:
-        label = f"{p['brand']} {p['model']}".strip()
-        buttons.append([KeyboardButton(text=label)])
+    for cat in cats:
+        k = cat["key"]
+        if k in by_cat:
+            label = f"{cat['emoji']} {cat['name']} ({by_cat[k]})"
+            buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="⬅️ Назад")])
-    total = len(products)
-    shown = min(total, 30)
+    await state.set_state(SetProductFilterState.waiting_for_category)
     await message.answer(
-        f"📦 Оберіть товар ({shown} з {total}):",
+        "📂 Оберіть категорію:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(SetProductFilterState.waiting_for_category)
+async def set_product_filter_category(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=directories_kb)
+        return
+    text = (message.text or "").strip()
+    selected_key = None
+    cats = categories_for_lang("uk")
+    for cat in cats:
+        if text.startswith(f"{cat['emoji']} {cat['name']}"):
+            selected_key = cat["key"]
+            break
+    if not selected_key:
+        await message.answer("⚠️ Оберіть категорію зі списку або натисніть ⬅️ Назад.")
+        return
+    all_products = await db.list_products()
+    products_cat = [p for p in all_products if category_key(p["category"]) == selected_key]
+    if not products_cat:
+        await message.answer("📦 У цій категорії немає товарів.", reply_markup=directories_kb)
+        await state.clear()
+        return
+    total_filters = await db.count_filter_fields(selected_key)
+    if total_filters == 0:
+        await message.answer(
+            f"⚠️ Фільтри для категорії «{category_label(selected_key, 'uk')}» ще не налаштовані.",
+            reply_markup=directories_kb,
+        )
+        await state.clear()
+        return
+    product_ids = [p["id"] for p in products_cat]
+    filled_counts = await db.get_filled_filter_counts(product_ids)
+    products_no: list = []
+    products_partial: list = []
+    products_complete: list = []
+    for p in products_cat:
+        lbl = f"{p['brand']} {p['model']}".strip() or f"ID {p['id']}"
+        fc = filled_counts.get(p["id"], 0)
+        item = {"id": p["id"], "label": lbl}
+        if fc == 0:
+            products_no.append(item)
+        elif fc >= total_filters:
+            products_complete.append(item)
+        else:
+            products_partial.append(item)
+    await state.update_data(
+        category_key=selected_key,
+        total_filters=total_filters,
+        products_no=products_no,
+        products_partial=products_partial,
+        products_complete=products_complete,
+    )
+    await state.set_state(SetProductFilterState.waiting_for_status)
+    buttons = []
+    if products_no:
+        buttons.append([KeyboardButton(text=f"⚪ Без фільтрів ({len(products_no)})")])
+    if products_partial:
+        buttons.append([KeyboardButton(text=f"🟡 Частково ({len(products_partial)})")])
+    if products_complete:
+        buttons.append([KeyboardButton(text=f"✅ Готові ({len(products_complete)})")])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    total = len(products_cat)
+    await message.answer(
+        f"📂 <b>{category_label(selected_key, 'uk')}</b> — {total} товар(ів):\n\n"
+        f"⚪ Без фільтрів: {len(products_no)}\n"
+        f"🟡 Частково: {len(products_partial)}\n"
+        f"✅ Готові: {len(products_complete)}",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(SetProductFilterState.waiting_for_status)
+async def set_product_filter_status(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=directories_kb)
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    if "⚪" in text:
+        products_list = data.get("products_no", [])
+        status_label = "⚪ Без фільтрів"
+    elif "🟡" in text:
+        products_list = data.get("products_partial", [])
+        status_label = "🟡 Частково"
+    elif "✅" in text:
+        products_list = data.get("products_complete", [])
+        status_label = "✅ Готові"
+    else:
+        await message.answer("⚠️ Оберіть статус зі списку або натисніть ⬅️ Назад.")
+        return
+    if not products_list:
+        await message.answer("⚠️ Товарів у цій групі немає.", reply_markup=directories_kb)
+        await state.clear()
+        return
+    await state.update_data(products_list=products_list, selected_status=status_label)
+    await state.set_state(SetProductFilterState.waiting_for_product)
+    buttons = [[KeyboardButton(text=p["label"])] for p in products_list[:30]]
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    shown = min(len(products_list), 30)
+    await message.answer(
+        f"{status_label} — оберіть товар ({shown} з {len(products_list)}):",
         reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
     )
 
@@ -4668,36 +4786,23 @@ async def set_product_filter_product(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("Скасовано.", reply_markup=directories_kb)
         return
-    products = await db.list_products()
-    matched = next(
-        (p for p in products if f"{p['brand']} {p['model']}".strip() == message.text),
-        None,
-    )
+    data = await state.get_data()
+    products_list = data.get("products_list", [])
+    matched = next((p for p in products_list if p["label"] == message.text), None)
     if not matched:
-        await message.answer("⚠️ Оберіть товар зі списку або натисніть ⬅️ Назад.")
-        return
-    cat = matched["category"] or ""
-    key = category_key(cat)
-    if not key:
+        buttons = [[KeyboardButton(text=p["label"])] for p in products_list[:30]]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
         await message.answer(
-            f"⚠️ Категорія товару «{cat}» не розпізнана. Фільтри недоступні.",
-            reply_markup=directories_kb,
+            "⚠️ Оберіть товар зі списку або натисніть ⬅️ Назад.",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
         )
-        await state.clear()
         return
+    key = data["category_key"]
     fields = await db.list_filter_fields(key)
-    if not fields:
-        await message.answer(
-            f"⚠️ Для категорії «{category_label(key, 'uk')}» фільтри ще не налаштовані.",
-            reply_markup=directories_kb,
-        )
-        await state.clear()
-        return
-    product_name = f"{matched['brand']} {matched['model']}".strip()
+    product_name = matched["label"]
     await state.update_data(
         product_id=matched["id"],
         product_name=product_name,
-        category_key=key,
     )
     await state.set_state(SetProductFilterState.waiting_for_filter)
     buttons = [[KeyboardButton(text=f["label_ru"])] for f in fields]
