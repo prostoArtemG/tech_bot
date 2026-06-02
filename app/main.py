@@ -4479,11 +4479,16 @@ async def add_filter_field_name(message: Message, state: FSMContext):
     await state.set_state(AddFilterFieldState.waiting_for_type)
     await message.answer(
         f"🔑 field_key: <code>{field_key}</code>\n\n"
-        "📊 Оберіть тип фільтра:",
+        "Оберіть, як покупець буде вибирати цей фільтр:\n\n"
+        "📋 <b>Список варіантів</b> — бренд, літраж, колір, тип ТЕНа\n"
+        "🔢 <b>Число / діапазон</b> — потужність, площа, ціна\n"
+        "✅ <b>Так / Ні</b> — Wi-Fi, інвертор, захист від перегріву",
         parse_mode="HTML",
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="select"), KeyboardButton(text="range"), KeyboardButton(text="boolean")],
+                [KeyboardButton(text="📋 Список варіантів")],
+                [KeyboardButton(text="🔢 Число / діапазон")],
+                [KeyboardButton(text="✅ Так / Ні")],
                 [KeyboardButton(text="⬅️ Назад")],
             ],
             resize_keyboard=True,
@@ -4497,9 +4502,16 @@ async def add_filter_field_type(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("Скасовано.", reply_markup=directories_kb)
         return
-    field_type = (message.text or "").strip().lower()
-    if field_type not in ("select", "range", "boolean"):
-        await message.answer("⚠️ Оберіть тип: select, range або boolean.")
+    _TYPE_MAP = {
+        "📋 список варіантів": "select",
+        "🔢 число / діапазон": "range",
+        "✅ так / ні": "boolean",
+    }
+    field_type = _TYPE_MAP.get((message.text or "").strip().lower())
+    if not field_type:
+        await message.answer(
+            "⚠️ Оберіть тип зі списку або натисніть ⬅️ Назад."
+        )
         return
     data = await state.get_data()
     cat_key = data["category_key"]
