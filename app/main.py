@@ -1215,10 +1215,10 @@ class AddProductGroupState(StatesGroup):
     waiting_for_name = State()
 
 
-class AddFilterFieldState(StatesGroup):
-    waiting_for_group = State()
-    waiting_for_name = State()
-    waiting_for_type = State()
+class CategoryViewState(StatesGroup):
+    waiting_for_category = State()
+    waiting_for_action = State()
+    waiting_for_filter_name = State()
 
 
 class AddFilterValueState(StatesGroup):
@@ -1458,7 +1458,6 @@ directories_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📁 Категории сайта")],
         [KeyboardButton(text="➕ Настроить категорию")],
         [KeyboardButton(text="🔧 Фильтры")],
-        [KeyboardButton(text="➕ Добавить фильтр")],
         [KeyboardButton(text="📋 Значения")],
         [KeyboardButton(text="➕ Добавить значение")],
         [KeyboardButton(text="🧩 Фільтри товару")],
@@ -4282,15 +4281,157 @@ async def directories_product_groups_handler(message: Message, state: FSMContext
     if not await require_admin(message):
         return
     await state.clear()
+    await state.set_state(CategoryViewState.waiting_for_category)
     cats = categories_for_lang("uk")
-    existing = await db.list_product_groups()
-    configured_keys = {g["category_key"] for g in existing}
-    lines = []
-    for c in cats:
-        status = "✅" if c["key"] in configured_keys else "➖"
-        lines.append(f"{status} {c['emoji']} <b>{c['name']}</b>")
-    text = "📁 <b>Категорії сайту</b>:\n\n" + "\n".join(lines)
-    await message.answer(text, parse_mode="HTML", reply_markup=directories_kb)
+    buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    await message.answer(
+        "📁 Оберіть категорію:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+async def _show_category_card(message: Message, state: FSMContext, cat_key: str):
+    """Показывает карточку категории с фильтрами и кнопками действий."""
+    cat_name = category_label(cat_key, "uk")
+    fields = await db.list_filter_fields(cat_key)
+    if fields:
+        filter_lines = "\n".join(f"  • {f['label_ru']}" for f in fields)
+        filters_text = f"\n\n🔧 <b>Фільтри</b>:\n{filter_lines}"
+    else:
+        filters_text = "\n\n🔧 <b>Фільтри</b>: ще немає"
+    cat_emoji = next(
+        (c["emoji"] for c in categories_for_lang("uk") if c["key"] == cat_key), ""
+    )
+    text = (
+        f"📂 <b>Категорія: {cat_emoji} {cat_name}</b>"
+        f"{filters_text}"
+    )
+    await state.update_data(cat_key=cat_key, cat_name=cat_name)
+    await state.set_state(CategoryViewState.waiting_for_action)
+    cat_view_kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="➕ Добавить фильтр")],
+            [KeyboardButton(text="➕ Добавить значение")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ],
+        resize_keyboard=True,
+    )
+    await message.answer(text, parse_mode="HTML", reply_markup=cat_view_kb)
+
+
+@router.message(CategoryViewState.waiting_for_category)
+async def category_view_category_selected(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("Справочники:", reply_markup=directories_kb)
+        return
+    key = category_key(message.text)
+    if not key:
+        cats = categories_for_lang("uk")
+        buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            "⚠️ Оберіть категорію зі списку або натисніть ⬅️ Назад.",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
+        return
+    await _show_category_card(message, state, key)
+
+
+@router.message(CategoryViewState.waiting_for_action)
+async def category_view_action(message: Message, state: FSMContext):
+    data = await state.get_data()
+    cat_key_val = data.get("cat_key", "")
+    cat_name_val = data.get("cat_name", "")
+
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await state.set_state(CategoryViewState.waiting_for_category)
+        cats = categories_for_lang("uk")
+        buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            "📁 Оберіть категорію:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
+        return
+
+    if message.text == "➕ Добавить фильтр":
+        await state.set_state(CategoryViewState.waiting_for_filter_name)
+        await message.answer(
+            f"📂 Категорія: <b>{cat_name_val}</b>\n\n"
+            "🔤 Введіть назву фільтра, яку побачить покупець на сайті:\n"
+            "<i>наприклад: Бренд, Літраж, Тип ТЕНа, Монтаж</i>",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if message.text == "➕ Добавить значение":
+        fields = await db.list_filter_fields(cat_key_val)
+        if not fields:
+            cat_view_kb = ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="➕ Добавить фильтр")],
+                    [KeyboardButton(text="➕ Добавить значение")],
+                    [KeyboardButton(text="⬅️ Назад")],
+                ],
+                resize_keyboard=True,
+            )
+            await message.answer(
+                f"⚠️ Спочатку додайте фільтр для категорії «{cat_name_val}».",
+                reply_markup=cat_view_kb,
+            )
+            return
+        await state.update_data(category_key=cat_key_val, category_name=cat_name_val)
+        await state.set_state(AddFilterValueState.waiting_for_field)
+        buttons = [[KeyboardButton(text=f["label_ru"])] for f in fields]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            f"🔧 Категорія: <b>{cat_name_val}</b>\n\nОберіть фільтр:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
+        return
+
+    # Неизвестное действие — напомнить кнопки
+    cat_view_kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="➕ Добавить фильтр")],
+            [KeyboardButton(text="➕ Добавить значение")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ],
+        resize_keyboard=True,
+    )
+    await message.answer("Оберіть дію:", reply_markup=cat_view_kb)
+
+
+@router.message(CategoryViewState.waiting_for_filter_name)
+async def category_view_filter_name(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        data = await state.get_data()
+        await _show_category_card(message, state, data.get("cat_key", ""))
+        return
+    label = (message.text or "").strip()
+    if not label:
+        await message.answer("⚠️ Введіть назву фільтра:")
+        return
+    data = await state.get_data()
+    cat_key_val = data["cat_key"]
+    field_key = _resolve_field_key(label)
+    await db.create_filter_field(
+        category_key=cat_key_val,
+        field_key=field_key,
+        label_ru=label,
+        label_uk=label,
+        field_type="select",
+    )
+    await message.answer(f"✅ Фільтр «<b>{label}</b>» додано.", parse_mode="HTML")
+    await _show_category_card(message, state, cat_key_val)
 
 
 @router.message(lambda m: m.text == "🔧 Фильтры")
@@ -4415,128 +4556,6 @@ def _resolve_field_key(label: str) -> str:
     if mapped:
         return mapped
     return make_slug(label)
-
-
-@router.message(lambda m: m.text == "➕ Добавить фильтр")
-async def add_filter_field_start(message: Message, state: FSMContext):
-    if not await require_admin(message):
-        return
-    await state.clear()
-    await state.set_state(AddFilterFieldState.waiting_for_group)
-    cats = categories_for_lang("uk")
-    buttons = [[KeyboardButton(text=c["name"])] for c in cats]
-    buttons.append([KeyboardButton(text="⬅️ Назад")])
-    await message.answer(
-        "📁 Оберіть категорію для фільтра:",
-        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
-    )
-
-
-@router.message(AddFilterFieldState.waiting_for_group)
-async def add_filter_field_group_selected(message: Message, state: FSMContext):
-    if message.text == "⬅️ Назад":
-        await state.clear()
-        await message.answer("Скасовано.", reply_markup=directories_kb)
-        return
-    key = category_key(message.text)
-    if not key:
-        cats = categories_for_lang("uk")
-        buttons = [[KeyboardButton(text=c["name"])] for c in cats]
-        buttons.append([KeyboardButton(text="⬅️ Назад")])
-        await message.answer(
-            "⚠️ Оберіть категорію зі списку або натисніть ⬅️ Назад.",
-            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
-        )
-        return
-    group_name = category_label(key, "uk")
-    await state.update_data(category_key=key, group_name=group_name)
-    await state.set_state(AddFilterFieldState.waiting_for_name)
-    await message.answer(
-        f"📂 Категорія: <b>{group_name}</b>\n\n"
-        "🔤 Введіть назву фільтра:\n"
-        "<i>наприклад: Бренд, Літраж, Тип ТЕНа, Монтаж</i>\n\n"
-        "❌ Для скасування натисніть ⬅️ Назад.",
-        parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
-            resize_keyboard=True,
-        ),
-    )
-
-
-@router.message(AddFilterFieldState.waiting_for_name)
-async def add_filter_field_name(message: Message, state: FSMContext):
-    if message.text == "⬅️ Назад":
-        await state.clear()
-        await message.answer("Скасовано.", reply_markup=directories_kb)
-        return
-    label = (message.text or "").strip()
-    if not label:
-        await message.answer("⚠️ Введіть назву фільтра:")
-        return
-    field_key = _resolve_field_key(label)
-    await state.update_data(label=label, field_key=field_key)
-    await state.set_state(AddFilterFieldState.waiting_for_type)
-    await message.answer(
-        f"🔑 field_key: <code>{field_key}</code>\n\n"
-        "Оберіть, як покупець буде вибирати цей фільтр:\n\n"
-        "📋 <b>Список варіантів</b> — бренд, літраж, колір, тип ТЕНа\n"
-        "🔢 <b>Число / діапазон</b> — потужність, площа, ціна\n"
-        "✅ <b>Так / Ні</b> — Wi-Fi, інвертор, захист від перегріву",
-        parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="📋 Список варіантів")],
-                [KeyboardButton(text="🔢 Число / діапазон")],
-                [KeyboardButton(text="✅ Так / Ні")],
-                [KeyboardButton(text="⬅️ Назад")],
-            ],
-            resize_keyboard=True,
-        ),
-    )
-
-
-@router.message(AddFilterFieldState.waiting_for_type)
-async def add_filter_field_type(message: Message, state: FSMContext):
-    if message.text == "⬅️ Назад":
-        await state.clear()
-        await message.answer("Скасовано.", reply_markup=directories_kb)
-        return
-    _TYPE_MAP = {
-        "📋 список варіантів": "select",
-        "🔢 число / діапазон": "range",
-        "✅ так / ні": "boolean",
-    }
-    field_type = _TYPE_MAP.get((message.text or "").strip().lower())
-    if not field_type:
-        await message.answer(
-            "⚠️ Оберіть тип зі списку або натисніть ⬅️ Назад."
-        )
-        return
-    data = await state.get_data()
-    cat_key = data["category_key"]
-    field_key = data["field_key"]
-    label = data["label"]
-    await db.create_filter_field(
-        category_key=cat_key,
-        field_key=field_key,
-        label_ru=label,
-        label_uk=label,
-        field_type=field_type,
-    )
-    await state.clear()
-    fields = await db.list_filter_fields(cat_key)
-    lines = [
-        f"• <b>{f['label_ru']}</b> | <code>{f['field_key']}</code> | {f['field_type']}"
-        for f in fields
-    ]
-    fields_text = "\n".join(lines) if lines else "—"
-    await message.answer(
-        f"✅ Фільтр «<b>{label}</b>» додано.\n\n"
-        f"🔧 <b>Фільтри групи «{data['group_name']}»</b> ({len(fields)}):\n{fields_text}",
-        parse_mode="HTML",
-        reply_markup=directories_kb,
-    )
 
 
 @router.message(lambda m: m.text == "➕ Добавить значение")
