@@ -4300,6 +4300,37 @@ async def _show_category_card(message: Message, state: FSMContext, cat_key: str)
     cat_emoji = next(
         (c["emoji"] for c in categories_for_lang("uk") if c["key"] == cat_key), ""
     )
+    total_filters = len(fields)
+
+    # Прогресс заполнения товаров
+    products = await db.fetch(
+        """
+        SELECT id, brand, model FROM products
+        WHERE category_key = $1
+          AND COALESCE(is_active, TRUE) = TRUE
+          AND deleted_at IS NULL
+        """,
+        cat_key,
+    )
+    product_ids = [p["id"] for p in products]
+    has_incomplete = False
+    if total_filters > 0 and product_ids:
+        filled_counts = await db.get_filled_filter_counts(product_ids)
+        none_count = sum(1 for pid in product_ids if filled_counts.get(pid, 0) == 0)
+        ready_count = sum(1 for pid in product_ids if filled_counts.get(pid, 0) >= total_filters)
+        partial_count = len(product_ids) - none_count - ready_count
+        has_incomplete = (none_count + partial_count) > 0
+        progress_text = (
+            f"\n\n🧩 <b>Товари</b> ({len(product_ids)}):\n"
+            f"  ⚪ Без фільтрів: <b>{none_count}</b>\n"
+            f"  🟡 Частково: <b>{partial_count}</b>\n"
+            f"  ✅ Готові: <b>{ready_count}</b>"
+        )
+    elif product_ids:
+        progress_text = f"\n\n🧩 <b>Товари</b>: {len(product_ids)} (фільтри не налаштовано)"
+    else:
+        progress_text = "\n\n🧩 <b>Товари</b>: немає"
+
     if fields:
         field_ids = [f["id"] for f in fields]
         count_rows = await db.fetch(
@@ -4309,7 +4340,6 @@ async def _show_category_card(message: Message, state: FSMContext, cat_key: str)
         )
         counts = {r["filter_field_id"]: r["cnt"] for r in count_rows}
         filters_text = f"\n\n🔧 <b>Фільтри</b> ({len(fields)}) — натисніть щоб відкрити:"
-        # каждый фильтр — отдельная кнопка с количеством значений
         filter_buttons = [
             [KeyboardButton(text=f"{f['label_ru']} ({counts.get(f['id'], 0)} знач.)")]
             for f in fields
@@ -4317,14 +4347,18 @@ async def _show_category_card(message: Message, state: FSMContext, cat_key: str)
     else:
         filters_text = "\n\n🔧 <b>Фільтри</b>: ще немає"
         filter_buttons = []
-    text = f"📂 <b>Категорія: {cat_emoji} {cat_name}</b>{filters_text}"
+
+    text = f"📂 <b>Категорія: {cat_emoji} {cat_name}</b>{progress_text}{filters_text}"
     await state.update_data(cat_key=cat_key, cat_name=cat_name)
     await state.set_state(CategoryViewState.waiting_for_action)
-    keyboard = filter_buttons + [
+    action_buttons = [
         [KeyboardButton(text="➕ Добавить фильтр")],
         [KeyboardButton(text="🤖 Автозаповнення")],
-        [KeyboardButton(text="⬅️ Назад")],
     ]
+    if has_incomplete:
+        action_buttons.append([KeyboardButton(text="⚠️ Показати незаповнені")])
+    action_buttons.append([KeyboardButton(text="⬅️ Назад")])
+    keyboard = filter_buttons + action_buttons
     await message.answer(
         text, parse_mode="HTML",
         reply_markup=ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True),
@@ -4526,10 +4560,49 @@ async def category_view_action(message: Message, state: FSMContext):
         )
         return
 
+    if message.text == "⚠️ Показати незаповнені":
+        fields = await db.list_filter_fields(cat_key_val)
+        total_filters = len(fields)
+        products = await db.fetch(
+            """
+            SELECT id, brand, model FROM products
+            WHERE category_key = $1
+              AND COALESCE(is_active, TRUE) = TRUE
+              AND deleted_at IS NULL
+            """,
+            cat_key_val,
+        )
+        if not products or total_filters == 0:
+            await message.answer("✅ Усі товари повністю заповнені.")
+            return
+        product_ids = [p["id"] for p in products]
+        filled_counts = await db.get_filled_filter_counts(product_ids)
+        incomplete = [
+            p for p in products
+            if filled_counts.get(p["id"], 0) < total_filters
+        ]
+        if not incomplete:
+            await message.answer("✅ Усі товари повністю заповнені.")
+            return
+        lines = []
+        for p in incomplete:
+            filled = filled_counts.get(p["id"], 0)
+            name = f"{p['brand'] or ''} {p['model'] or ''}".strip() or f"ID {p['id']}"
+            lines.append(f"  • {name} — {filled}/{total_filters}")
+        text = (
+            f"⚠️ <b>Незаповнені товари — {cat_name_val}</b> ({len(incomplete)}):\n\n"
+            + "\n".join(lines)
+        )
+        # Телеграм ограничивает сообщения до 4096 символов
+        if len(text) > 4000:
+            text = text[:4000] + "\n..."
+        await message.answer(text, parse_mode="HTML")
+        return
+
     # Проверяем, нажата ли кнопка фильтра (формат: "Назва (N знач.)")
     fields = await db.list_filter_fields(cat_key_val)
     matched_field = None
-    for f in fields:
+    if fields:
         field_ids = [ff["id"] for ff in fields]
         count_rows = await db.fetch(
             "SELECT filter_field_id, COUNT(*) AS cnt FROM filter_values "
@@ -4537,10 +4610,11 @@ async def category_view_action(message: Message, state: FSMContext):
             field_ids,
         )
         counts = {r["filter_field_id"]: r["cnt"] for r in count_rows}
-        btn_text = f"{f['label_ru']} ({counts.get(f['id'], 0)} знач.)"
-        if message.text == btn_text:
-            matched_field = f
-            break
+        for f in fields:
+            btn_text = f"{f['label_ru']} ({counts.get(f['id'], 0)} знач.)"
+            if message.text == btn_text:
+                matched_field = f
+                break
     if matched_field:
         await _show_filter_card(message, state, matched_field["id"], matched_field["label_ru"], cat_key_val, cat_name_val)
         return
