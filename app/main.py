@@ -1219,6 +1219,7 @@ class CategoryViewState(StatesGroup):
     waiting_for_category = State()
     waiting_for_action = State()
     waiting_for_filter_name = State()
+    waiting_for_incomplete_product = State()
 
 
 class FilterCardState(StatesGroup):
@@ -4561,42 +4562,7 @@ async def category_view_action(message: Message, state: FSMContext):
         return
 
     if message.text == "⚠️ Показати незаповнені":
-        fields = await db.list_filter_fields(cat_key_val)
-        total_filters = len(fields)
-        products = await db.fetch(
-            """
-            SELECT id, brand, model FROM products
-            WHERE category_key = $1
-              AND COALESCE(is_active, TRUE) = TRUE
-              AND deleted_at IS NULL
-            """,
-            cat_key_val,
-        )
-        if not products or total_filters == 0:
-            await message.answer("✅ Усі товари повністю заповнені.")
-            return
-        product_ids = [p["id"] for p in products]
-        filled_counts = await db.get_filled_filter_counts(product_ids)
-        incomplete = [
-            p for p in products
-            if filled_counts.get(p["id"], 0) < total_filters
-        ]
-        if not incomplete:
-            await message.answer("✅ Усі товари повністю заповнені.")
-            return
-        lines = []
-        for p in incomplete:
-            filled = filled_counts.get(p["id"], 0)
-            name = f"{p['brand'] or ''} {p['model'] or ''}".strip() or f"ID {p['id']}"
-            lines.append(f"  • {name} — {filled}/{total_filters}")
-        text = (
-            f"⚠️ <b>Незаповнені товари — {cat_name_val}</b> ({len(incomplete)}):\n\n"
-            + "\n".join(lines)
-        )
-        # Телеграм ограничивает сообщения до 4096 символов
-        if len(text) > 4000:
-            text = text[:4000] + "\n..."
-        await message.answer(text, parse_mode="HTML")
+        await _show_incomplete_products(message, state, cat_key_val, cat_name_val)
         return
 
     # Проверяем, нажата ли кнопка фильтра (формат: "Назва (N знач.)")
@@ -4707,6 +4673,108 @@ async def filter_card_add_value(message: Message, state: FSMContext):
     )
     await message.answer(f"✅ Значення «<b>{value}</b>» додано.", parse_mode="HTML")
     await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+
+
+async def _show_incomplete_products(
+    message: Message, state: FSMContext, cat_key: str, cat_name: str
+):
+    """Показывает незаполненные товары категории как кнопки."""
+    fields = await db.list_filter_fields(cat_key)
+    total_filters = len(fields)
+    products = await db.fetch(
+        """
+        SELECT id, brand, model FROM products
+        WHERE category_key = $1
+          AND COALESCE(is_active, TRUE) = TRUE
+          AND deleted_at IS NULL
+        """,
+        cat_key,
+    )
+    if not products or total_filters == 0:
+        await message.answer("✅ Усі товари повністю заповнені.")
+        return
+    product_ids = [p["id"] for p in products]
+    filled_counts = await db.get_filled_filter_counts(product_ids)
+    incomplete = [
+        {
+            "id": p["id"],
+            "label": (f"{p['brand'] or ''} {p['model'] or ''}".strip() or f"ID {p['id']}"),
+            "filled": filled_counts.get(p["id"], 0),
+        }
+        for p in products
+        if filled_counts.get(p["id"], 0) < total_filters
+    ]
+    if not incomplete:
+        await message.answer("✅ Усі товари повністьо заповнені.")
+        return
+    await state.update_data(
+        cat_key=cat_key,
+        cat_name=cat_name,
+        incomplete_products=incomplete,
+        total_filters=total_filters,
+    )
+    await state.set_state(CategoryViewState.waiting_for_incomplete_product)
+    buttons = [[KeyboardButton(text=p["label"])] for p in incomplete[:30]]
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    shown = min(len(incomplete), 30)
+    await message.answer(
+        f"⚠️ <b>Незаповнені товари — {cat_name}</b> ({shown} з {len(incomplete)}):\n"
+        "Натисніть для заповнення:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(CategoryViewState.waiting_for_incomplete_product)
+async def category_incomplete_product_selected(message: Message, state: FSMContext):
+    data = await state.get_data()
+    cat_key = data.get("cat_key", "")
+    cat_name = data.get("cat_name", "")
+    total_filters = data.get("total_filters", 0)
+    incomplete = data.get("incomplete_products", [])
+
+    if message.text == "⬅️ Назад":
+        await _show_category_card(message, state, cat_key)
+        return
+
+    matched = next((p for p in incomplete if p["label"] == message.text), None)
+    if not matched:
+        buttons = [[KeyboardButton(text=p["label"])] for p in incomplete[:30]]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            "⚠️ Оберіть товар зі списку або натисніть ⬅️ Назад.",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
+        return
+
+    # Определяем незаполненные фильтры для этого товара
+    all_fields = await db.list_filter_fields(cat_key)
+    pfv = await db.get_product_filter_values(matched["id"])
+    filled_field_ids = {r["filter_field_id"] for r in pfv}
+    unfilled = [f for f in all_fields if f["id"] not in filled_field_ids]
+
+    if not unfilled:
+        await message.answer(f"✅ Товар «{matched['label']}» вже повністю заповнено.")
+        await _show_incomplete_products(message, state, cat_key, cat_name)
+        return
+
+    await state.update_data(
+        product_id=matched["id"],
+        product_name=matched["label"],
+        category_key=cat_key,
+        return_to_cat_key=cat_key,
+        unfilled_field_ids=[f["id"] for f in unfilled],
+    )
+    await state.set_state(SetProductFilterState.waiting_for_filter)
+    buttons = [[KeyboardButton(text=f["label_ru"])] for f in unfilled]
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    await message.answer(
+        f"📦 <b>{matched['label']}</b>\n📂 {cat_name}\n\n"
+        f"Незаповнені фільтри ({len(unfilled)} з {total_filters}):\n"
+        "Оберіть фільтр для заповнення:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
 
 
 @router.message(CategoryViewState.waiting_for_filter_name)
@@ -4996,15 +5064,29 @@ async def set_product_filter_product(message: Message, state: FSMContext):
 
 @router.message(SetProductFilterState.waiting_for_filter)
 async def set_product_filter_field(message: Message, state: FSMContext):
-    if message.text == "⬅️ Назад":
-        await state.clear()
-        await message.answer("Скасовано.", reply_markup=directories_kb)
-        return
     data = await state.get_data()
+    return_key = data.get("return_to_cat_key")
+
+    if message.text == "⬅️ Назад":
+        if return_key:
+            # Возвращаемся к списку незаполненных товаров
+            cat_name = data.get("cat_name", category_label(return_key, "uk"))
+            await _show_incomplete_products(message, state, return_key, cat_name)
+        else:
+            await state.clear()
+            await message.answer("Скасовано.", reply_markup=directories_kb)
+        return
+
     fields = await db.list_filter_fields(data["category_key"])
     matched = next((f for f in fields if f["label_ru"] == message.text), None)
     if not matched:
-        buttons = [[KeyboardButton(text=f["label_ru"])] for f in fields]
+        # Показываем только незаполненные, если пришли из карточки категории
+        unfilled_ids = data.get("unfilled_field_ids")
+        if unfilled_ids and return_key:
+            show_fields = [f for f in fields if f["id"] in unfilled_ids]
+        else:
+            show_fields = fields
+        buttons = [[KeyboardButton(text=f["label_ru"])] for f in show_fields]
         buttons.append([KeyboardButton(text="⬅️ Назад")])
         await message.answer(
             "⚠️ Оберіть фільтр зі списку або натисніть ⬅️ Назад.",
@@ -5041,15 +5123,23 @@ async def set_product_filter_field(message: Message, state: FSMContext):
 
 @router.message(SetProductFilterState.waiting_for_value)
 async def set_product_filter_value(message: Message, state: FSMContext):
+    data = await state.get_data()
+    return_key = data.get("return_to_cat_key")
+
     if message.text == "⬅️ Назад":
-        await state.clear()
-        await message.answer("Скасовано.", reply_markup=directories_kb)
+        if return_key:
+            cat_name = data.get("cat_name", category_label(return_key, "uk"))
+            await _show_incomplete_products(message, state, return_key, cat_name)
+        else:
+            await state.clear()
+            await message.answer("Скасовано.", reply_markup=directories_kb)
         return
+
     value = (message.text or "").strip()
     if not value:
         await message.answer("⚠️ Введіть значення:")
         return
-    data = await state.get_data()
+
     filter_field_id = data["filter_field_id"]
     product_id = data["product_id"]
     field_label = data["field_label"]
@@ -5071,19 +5161,27 @@ async def set_product_filter_value(message: Message, state: FSMContext):
         value_text=value_text,
         filter_value_id=filter_value_id,
     )
-    await state.clear()
-    saved = await db.get_product_filter_values(product_id)
-    lines = []
-    for s in saved:
-        label = s["value_label"] or s["value_text"] or "—"
-        lines.append(f"• <b>{s['field_label']}</b>: {label}")
-    saved_text = "\n".join(lines) if lines else "—"
     await message.answer(
-        f"✅ Фільтр «<b>{field_label}</b>» збережено.\n\n"
-        f"📦 <b>{data['product_name']}</b> — поточні фільтри:\n{saved_text}",
+        f"✅ Фільтр «<b>{field_label}</b>» збережено.",
         parse_mode="HTML",
-        reply_markup=directories_kb,
     )
+    if return_key:
+        # Возвращаемся к списку незаполненных (обновлённый)
+        cat_name = data.get("cat_name", category_label(return_key, "uk"))
+        await _show_incomplete_products(message, state, return_key, cat_name)
+    else:
+        await state.clear()
+        saved = await db.get_product_filter_values(product_id)
+        lines = []
+        for s in saved:
+            label = s["value_label"] or s["value_text"] or "—"
+            lines.append(f"• <b>{s['field_label']}</b>: {label}")
+        saved_text = "\n".join(lines) if lines else "—"
+        await message.answer(
+            f"📦 <b>{data['product_name']}</b> — поточні фільтри:\n{saved_text}",
+            parse_mode="HTML",
+            reply_markup=directories_kb,
+        )
 
 
 @router.message(lambda m: m.text == "📞 Контакты сайта")
