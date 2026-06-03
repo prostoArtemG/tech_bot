@@ -4350,6 +4350,104 @@ async def category_view_category_selected(message: Message, state: FSMContext):
     await _show_category_card(message, state, key)
 
 
+async def _autofill_category_filters(cat_key: str) -> dict:
+    """Автоматически заполняет product_filter_values по текстовым полям товаров.
+    Не перезаписывает уже заполненные значения.
+    Возвращает dict: filled, skipped, undefined, no_products (bool), no_fields (bool).
+    """
+    import json as _json
+
+    # 1. Товары категории с полными текстовыми полями
+    products = await db.fetch(
+        """
+        SELECT id, brand, model, description, specs, specifications_json
+        FROM products
+        WHERE category_key = $1
+          AND COALESCE(is_active, TRUE) = TRUE
+          AND deleted_at IS NULL
+        """,
+        cat_key,
+    )
+    if not products:
+        return {"filled": 0, "skipped": 0, "undefined": 0, "no_products": True}
+
+    # 2. Фильтры + значения категории
+    fields_with_values = await db.get_filter_fields_with_values(cat_key)
+    if not fields_with_values:
+        return {"filled": 0, "skipped": 0, "undefined": 0, "no_fields": True}
+
+    # 3. Уже заполненные product_filter_values — не перезаписывать
+    existing_pfv = await db.get_product_filter_values_for_category(cat_key)
+    already_filled = {(r["product_id"], r["filter_field_id"]) for r in existing_pfv}
+
+    filled = 0
+    skipped = 0
+    undefined = 0
+
+    for product in products:
+        # Строим корпус для поиска
+        corpus_parts = []
+        for field_name in ("brand", "model", "description", "specs"):
+            corpus_parts.append(str(product[field_name] or "").lower())
+        spec_json = product["specifications_json"] or {}
+        if isinstance(spec_json, str):
+            try:
+                spec_json = _json.loads(spec_json)
+            except Exception:
+                spec_json = {}
+        for k, v in (spec_json.items() if isinstance(spec_json, dict) else []):
+            corpus_parts.append(str(k).lower())
+            corpus_parts.append(str(v).lower())
+        corpus = " ".join(corpus_parts)
+
+        for field in fields_with_values:
+            field_id = field["field_id"]
+            values = field["values"]
+
+            # Уже заполнено — пропускаем
+            if (product["id"], field_id) in already_filled:
+                skipped += 1
+                continue
+
+            if not values:
+                undefined += 1
+                continue
+
+            # Ищем значение в корпусе
+            matched_value = None
+            for v in values:
+                search_terms = [
+                    str(v.get("label_ru") or "").lower().strip(),
+                    str(v.get("label_uk") or "").lower().strip(),
+                    str(v.get("value_key") or "").lower().strip(),
+                ]
+                for term in search_terms:
+                    if term and term in corpus:
+                        matched_value = v
+                        break
+                if matched_value:
+                    break
+
+            if matched_value:
+                await db.execute(
+                    """
+                    INSERT INTO product_filter_values
+                        (product_id, filter_field_id, value_text, filter_value_id)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (product_id, filter_field_id) DO NOTHING
+                    """,
+                    product["id"],
+                    field_id,
+                    matched_value.get("label_ru") or matched_value.get("value_key") or "",
+                    matched_value["value_id"],
+                )
+                filled += 1
+            else:
+                undefined += 1
+
+    return {"filled": filled, "skipped": skipped, "undefined": undefined}
+
+
 @router.message(CategoryViewState.waiting_for_action)
 async def category_view_action(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -4387,7 +4485,7 @@ async def category_view_action(message: Message, state: FSMContext):
         if not fields:
             await message.answer(
                 f"⚠️ Для категорії «{cat_name_val}» ще немає фільтрів.\n"
-                "Спочатку додайте фільтри, а потім налаштуйте значення.",
+                "Спочатку додайте фільтри та їхні значення.",
                 reply_markup=ReplyKeyboardMarkup(
                     keyboard=[
                         [KeyboardButton(text="➕ Добавить фильтр")],
@@ -4399,10 +4497,23 @@ async def category_view_action(message: Message, state: FSMContext):
             )
             return
         await message.answer(
-            f"🤖 <b>Автозаповнення — {cat_name_val}</b>\n\n"
-            "Ця функція автоматично призначить значення фільтрів товарам категорії "
-            "на основі їхніх характеристик.\n\n"
-            "⏳ Функція в розробці. Незабаром буде доступна.",
+            f"🤖 <b>Автозаповнення — {cat_name_val}</b>\n\nЗапускаємо...",
+            parse_mode="HTML",
+        )
+        result = await _autofill_category_filters(cat_key_val)
+        if result.get("no_products"):
+            report = "⚠️ Товарів у цій категорії не знайдено."
+        elif result.get("no_fields"):
+            report = "⚠️ Фільтри або значення ще не налаштовано."
+        else:
+            report = (
+                f"🤖 <b>Автозаповнення завершено</b>\n\n"
+                f"✅ Заповнено: <b>{result['filled']}</b>\n"
+                f"⏭️ Пропущено вже заповнених: <b>{result['skipped']}</b>\n"
+                f"⚠️ Не визначено: <b>{result['undefined']}</b>"
+            )
+        await message.answer(
+            report,
             parse_mode="HTML",
             reply_markup=ReplyKeyboardMarkup(
                 keyboard=[
