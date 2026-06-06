@@ -4779,34 +4779,43 @@ async def _normalize_boiler_filter_values() -> dict:
         fid = field["id"]
         all_vals = await db.list_filter_values(fid)
 
-        # Кэш: canonical_label → fv_id (для поиска целевого ID)
-        by_label: dict = {
-            (v["label_ru"] or v["value"] or "").strip(): v["id"]
-            for v in all_vals
-        }
+        # Кэш: canonical_value → fv_id (только для строк, у которых value уже каноническое)
+        # Использовать label_ru в качестве ключа нельзя — может быть "Мокрий" у строки value="wet"
+        canonical_set = set(_NORM.values())
+        by_canon: dict = {}
+        for _v in all_vals:
+            _vk = (_v["value"] or "").strip()
+            if _vk in canonical_set:
+                by_canon[_vk] = _v["id"]
 
         for v in all_vals:
-            val_key   = (v["value"]    or "").strip()
-            val_label = (v["label_ru"] or val_key).strip()
+            val_key      = (v["value"]    or "").strip()
+            val_label    = (v["label_ru"] or val_key).strip()
+            val_label_uk = (v["label_uk"] or val_label).strip()
 
-            # Ищем каноническое значение по value-ключу, потом по label
-            canonical = _NORM.get(val_key.lower()) or _NORM.get(val_label.lower())
+            # Ищем каноническое значение по value-ключу, label_ru или label_uk
+            canonical = (
+                _NORM.get(val_key.lower())
+                or _NORM.get(val_label.lower())
+                or _NORM.get(val_label_uk.lower())
+            )
             if not canonical:
                 skipped += 1
                 continue
-            if val_label == canonical:
-                # Уже нормальное значение
+            # Пропускаем только если value-ключ уже каноническое.
+            # Случай value="wet", label_ru="Мокрий" — тоже нужно исправить!
+            if val_key == canonical:
                 skipped += 1
                 continue
 
             old_id = v["id"]
 
             # Найти или создать каноническое filter_value
-            if canonical in by_label:
-                canon_id = by_label[canonical]
+            if canonical in by_canon:
+                canon_id = by_canon[canonical]
             else:
                 canon_id = await db.create_filter_value(fid, canonical, canonical, canonical, 100)
-                by_label[canonical] = canon_id
+                by_canon[canonical] = canon_id
 
             # Перенести product_filter_values: old_id → canon_id
             await db.execute(
@@ -4817,7 +4826,7 @@ async def _normalize_boiler_filter_values() -> dict:
                 """,
                 canon_id, canonical, fid, old_id,
             )
-            # Также исправить value_text для записей без filter_value_id
+            # Исправить value_text для записей без filter_value_id — по val_key
             await db.execute(
                 """
                 UPDATE product_filter_values
@@ -4828,6 +4837,30 @@ async def _normalize_boiler_filter_values() -> dict:
                 """,
                 canon_id, canonical, fid, val_key,
             )
+            # и по label_ru (если отличается от val_key)
+            if val_label.lower() != val_key.lower():
+                await db.execute(
+                    """
+                    UPDATE product_filter_values
+                    SET filter_value_id = $1, value_text = $2
+                    WHERE filter_field_id = $3
+                      AND filter_value_id IS NULL
+                      AND LOWER(TRIM(value_text)) = LOWER($4)
+                    """,
+                    canon_id, canonical, fid, val_label,
+                )
+            # и по label_uk (если отличается от обоих)
+            if val_label_uk.lower() not in (val_key.lower(), val_label.lower()):
+                await db.execute(
+                    """
+                    UPDATE product_filter_values
+                    SET filter_value_id = $1, value_text = $2
+                    WHERE filter_field_id = $3
+                      AND filter_value_id IS NULL
+                      AND LOWER(TRIM(value_text)) = LOWER($4)
+                    """,
+                    canon_id, canonical, fid, val_label_uk,
+                )
 
             # Удалить старое filter_value (FK = ON DELETE SET NULL, записи уже перенесены)
             await db.execute("DELETE FROM filter_values WHERE id = $1", old_id)
