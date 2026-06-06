@@ -4360,6 +4360,8 @@ async def _show_category_card(message: Message, state: FSMContext, cat_key: str)
         action_buttons.append([KeyboardButton(text="⚠️ Показати незаповнені")])
     if cat_key in ("boilers", "air_conditioners"):
         action_buttons.append([KeyboardButton(text="🔄 Перенести старі фільтри")])
+    if cat_key == "boilers":
+        action_buttons.append([KeyboardButton(text="🧹 Нормалізувати значення")])
     action_buttons.append([KeyboardButton(text="⬅️ Назад")])
     keyboard = filter_buttons + action_buttons
     await message.answer(
@@ -4747,6 +4749,94 @@ async def _migrate_ac_filters() -> dict:
     return {"transferred": transferred, "already": already, "empty": empty}
 
 
+async def _normalize_boiler_filter_values() -> dict:
+    """Нормализует значения filter_values для boilers:
+    wet → Мокрий, dry → Сухий, vertical → Вертикальна, и т.д.
+    Переносит все product_filter_values со старых значений на канонические, затем удаляет дубликат.
+    """
+    CAT = "boilers"
+
+    # bad_lowercase → канонический UA-лейбл
+    _NORM = {
+        "wet":             "Мокрий",       "мокрий":        "Мокрий",       "мокрый":        "Мокрий",
+        "dry":             "Сухий",        "сухий":         "Сухий",        "сухой":         "Сухий",
+        "vertical":        "Вертикальна",  "вертикальна": "Вертикальна", "вертикальная":"Вертикальна",
+        "horizontal":      "Горизонтальна","горизонтальна":"Горизонтальна","горизонтальная":"Горизонтальна",
+        "universal":       "Універсальна", "універсальна":"Універсальна", "универсальная":"Універсальна",
+        "cylindrical":     "Циліндричний","циліндричний":"Циліндричний","цилиндрический":"Циліндричний",
+        "flat":            "Плоский",       "плоский":        "Плоский",
+        "cubic":           "Кубічний",      "кубічний":       "Кубічний",      "кубический":    "Кубічний",
+    }
+
+    fields = await db.list_filter_fields(CAT)
+    if not fields:
+        return {"no_fields": True}
+
+    normalized = 0
+    skipped = 0
+
+    for field in fields:
+        fid = field["id"]
+        all_vals = await db.list_filter_values(fid)
+
+        # Кэш: canonical_label → fv_id (для поиска целевого ID)
+        by_label: dict = {
+            (v["label_ru"] or v["value"] or "").strip(): v["id"]
+            for v in all_vals
+        }
+
+        for v in all_vals:
+            val_key   = (v["value"]    or "").strip()
+            val_label = (v["label_ru"] or val_key).strip()
+
+            # Ищем каноническое значение по value-ключу, потом по label
+            canonical = _NORM.get(val_key.lower()) or _NORM.get(val_label.lower())
+            if not canonical:
+                skipped += 1
+                continue
+            if val_label == canonical:
+                # Уже нормальное значение
+                skipped += 1
+                continue
+
+            old_id = v["id"]
+
+            # Найти или создать каноническое filter_value
+            if canonical in by_label:
+                canon_id = by_label[canonical]
+            else:
+                canon_id = await db.create_filter_value(fid, canonical, canonical, canonical, 100)
+                by_label[canonical] = canon_id
+
+            # Перенести product_filter_values: old_id → canon_id
+            await db.execute(
+                """
+                UPDATE product_filter_values
+                SET filter_value_id = $1, value_text = $2
+                WHERE filter_field_id = $3 AND filter_value_id = $4
+                """,
+                canon_id, canonical, fid, old_id,
+            )
+            # Также исправить value_text для записей без filter_value_id
+            await db.execute(
+                """
+                UPDATE product_filter_values
+                SET filter_value_id = $1, value_text = $2
+                WHERE filter_field_id = $3
+                  AND filter_value_id IS NULL
+                  AND LOWER(TRIM(value_text)) = LOWER($4)
+                """,
+                canon_id, canonical, fid, val_key,
+            )
+
+            # Удалить старое filter_value (FK = ON DELETE SET NULL, записи уже перенесены)
+            await db.execute("DELETE FROM filter_values WHERE id = $1", old_id)
+
+            normalized += 1
+
+    return {"normalized": normalized, "skipped": skipped}
+
+
 async def _autofill_category_filters(cat_key: str) -> dict:
     """Автоматически заполняет product_filter_values по текстовым полям товаров.
     Не перезаписывает уже заполненные значения.
@@ -4944,6 +5034,24 @@ async def category_view_action(message: Message, state: FSMContext):
                 f"✅ Перенесено: <b>{result['transferred']}</b>\n"
                 f"⏭️ Вже було: <b>{result['already']}</b>\n"
                 f"⚠️ Не знайдено: <b>{result.get('not_found', result.get('empty', 0))}</b>"
+            )
+        await message.answer(report, parse_mode="HTML")
+        await _show_category_card(message, state, cat_key_val)
+        return
+
+    if message.text == "🧹 Нормалізувати значення":
+        if cat_key_val != "boilers":
+            await _show_category_card(message, state, cat_key_val)
+            return
+        await message.answer("🧹 Нормалізуємо... Зачекайте.")
+        result = await _normalize_boiler_filter_values()
+        if result.get("no_fields"):
+            report = "⚠️ Фільтр-поля для boilers не знайдено."
+        else:
+            report = (
+                f"🧹 <b>Нормалізація завершена</b>\n\n"
+                f"✅ Нормалізовано значень: <b>{result['normalized']}</b>\n"
+                f"⏭️ Вже було нормальним: <b>{result['skipped']}</b>"
             )
         await message.answer(report, parse_mode="HTML")
         await _show_category_card(message, state, cat_key_val)
