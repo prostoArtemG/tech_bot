@@ -1912,17 +1912,24 @@ class Database:
         category_key: str,
         emoji: str = "📦",
         sort_order: int = 100,
-    ):
-        """Создаёт пользовательскую категорию с category_key и slug."""
-        await self.execute(
+    ) -> int | None:
+        """Создаёт пользовательскую категорию. Возвращает id (нового или существующего)."""
+        existing = await self.fetchrow(
+            "SELECT id FROM site_categories WHERE category_key = $1 LIMIT 1",
+            category_key,
+        )
+        if existing:
+            return existing["id"]
+        row = await self.fetchrow(
             """
             INSERT INTO site_categories
                 (name_ru, name_uk, emoji, category_key, slug, sort_order)
             VALUES ($1, $2, $3, $4, $4, $5)
-            ON CONFLICT (category_key) DO NOTHING
+            RETURNING id
             """,
             name_ru, name_uk, emoji, category_key, sort_order,
         )
+        return row["id"] if row else None
 
     async def list_custom_categories(self):
         """Возвращает пользовательские категории (с category_key, не из categories.py)."""

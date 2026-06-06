@@ -4566,10 +4566,16 @@ async def custom_category_emoji(message: Message, state: FSMContext):
         await message.answer("⚠️ Не вдалось згенерувати ключ. Спробуйте іншу назву.")
         return
 
-    await db.create_custom_category(
-        name_uk=name_uk, name_ru=name_ru,
-        category_key=cat_key_new, emoji=emoji,
-    )
+    try:
+        await db.create_custom_category(
+            name_uk=name_uk, name_ru=name_ru,
+            category_key=cat_key_new, emoji=emoji,
+        )
+    except Exception:
+        import traceback as _tb
+        _tb.print_exc()
+        await message.answer("⚠️ Помилка при збереженні категорії. Спробуйте ще раз.")
+        return
     await state.clear()
     await message.answer(
         f"✅ Категорія <b>{emoji} {name_uk}</b> створена!\n"
