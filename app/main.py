@@ -4358,6 +4358,8 @@ async def _show_category_card(message: Message, state: FSMContext, cat_key: str)
     ]
     if has_incomplete:
         action_buttons.append([KeyboardButton(text="⚠️ Показати незаповнені")])
+    if cat_key == "boilers":
+        action_buttons.append([KeyboardButton(text="🔄 Перенести старі фільтри")])
     action_buttons.append([KeyboardButton(text="⬅️ Назад")])
     keyboard = filter_buttons + action_buttons
     await message.answer(
@@ -4383,6 +4385,87 @@ async def category_view_category_selected(message: Message, state: FSMContext):
         )
         return
     await _show_category_card(message, state, key)
+
+
+async def _migrate_boiler_filters() -> dict:
+    """Переносит brand/volume/ten_type из полей таблицы products в систему фильтров.
+    Не перезаписывает уже заполненные вручную значения.
+    Возвращает dict: transferred, already, empty, no_products (bool).
+    """
+    CAT = "boilers"
+
+    # 1. Создаём или находим нужные filter_fields
+    brand_id = await db.create_filter_field(CAT, "brand",    "Бренд",   "Бренд",   "select", "",  10)
+    volume_id = await db.create_filter_field(CAT, "volume",  "Літраж",  "Літраж",  "select", "л", 20)
+    ten_id    = await db.create_filter_field(CAT, "ten_type", "Тип ТЕНа", "Тип ТЕНа", "select", "", 30)
+
+    # 2. Товары категории
+    products = await db.fetch(
+        """
+        SELECT id, brand, boiler_volume_liters, boiler_ten_type
+        FROM products
+        WHERE category_key = $1
+          AND COALESCE(is_active, TRUE) = TRUE
+          AND deleted_at IS NULL
+        """,
+        CAT,
+    )
+    if not products:
+        return {"no_products": True}
+
+    # 3. Кеш filter_values: {field_id: {value_str: fv_id}}
+    fv_cache: dict = {}
+    for fid in (brand_id, volume_id, ten_id):
+        fv_cache[fid] = {fv["value"]: fv["id"] for fv in await db.list_filter_values(fid)}
+
+    # 4. Уже заполненные пары (product_id, filter_field_id)
+    product_ids = [p["id"] for p in products]
+    existing_rows = await db.fetch(
+        """
+        SELECT product_id, filter_field_id FROM product_filter_values
+        WHERE product_id = ANY($1::int[])
+          AND filter_field_id = ANY($2::int[])
+        """,
+        product_ids,
+        [brand_id, volume_id, ten_id],
+    )
+    existing_set = {(r["product_id"], r["filter_field_id"]) for r in existing_rows}
+
+    transferred = 0
+    already = len(existing_set)
+    empty = 0
+
+    for p in products:
+        pid = p["id"]
+        vol = str(p["boiler_volume_liters"]) if p["boiler_volume_liters"] is not None else ""
+        mapping = [
+            (brand_id,  str(p["brand"] or "").strip()),
+            (volume_id, vol),
+            (ten_id,    str(p["boiler_ten_type"] or "").strip()),
+        ]
+        for fid, val in mapping:
+            if (pid, fid) in existing_set:
+                continue  # не трогаем уже заполненные
+            if not val:
+                empty += 1
+                continue
+            # Найти или создать filter_value
+            if val not in fv_cache[fid]:
+                new_id = await db.create_filter_value(fid, val, val, val, 100)
+                fv_cache[fid][val] = new_id
+            fv_id = fv_cache[fid][val]
+            await db.execute(
+                """
+                INSERT INTO product_filter_values
+                    (product_id, filter_field_id, filter_value_id, value_text)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (product_id, filter_field_id) DO NOTHING
+                """,
+                pid, fid, fv_id, val,
+            )
+            transferred += 1
+
+    return {"transferred": transferred, "already": already, "empty": empty}
 
 
 async def _autofill_category_filters(cat_key: str) -> dict:
@@ -4563,6 +4646,25 @@ async def category_view_action(message: Message, state: FSMContext):
 
     if message.text == "⚠️ Показати незаповнені":
         await _show_incomplete_products(message, state, cat_key_val, cat_name_val)
+        return
+
+    if message.text == "🔄 Перенести старі фільтри":
+        if cat_key_val != "boilers":
+            await _show_category_card(message, state, cat_key_val)
+            return
+        await message.answer("🔄 Переносимо фільтри... Зачекайте.")
+        result = await _migrate_boiler_filters()
+        if result.get("no_products"):
+            report = "⚠️ Товарів у категорії boilers не знайдено."
+        else:
+            report = (
+                f"🔄 <b>Перенесення фільтрів завершено</b>\n\n"
+                f"✅ Перенесено: <b>{result['transferred']}</b>\n"
+                f"⏭️ Вже було: <b>{result['already']}</b>\n"
+                f"⚠️ Пустих значень: <b>{result['empty']}</b>"
+            )
+        await message.answer(report, parse_mode="HTML")
+        await _show_category_card(message, state, cat_key_val)
         return
 
     # Проверяем, нажата ли кнопка фильтра (формат: "Назва (N знач.)")
