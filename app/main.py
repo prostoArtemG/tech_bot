@@ -4858,15 +4858,43 @@ async def _migrate_refrigerator_filters() -> dict:
                 return cls
         return ""
 
-    # 1. Создаём/обновляем filter_fields
-    brand_id   = await db.create_filter_field(CAT, "brand",        "Бренд",                   "Бренд",                   "select", "",  10)
-    type_id    = await db.create_filter_field(CAT, "type",         "Тип",                     "Тип",                     "select", "",  20)
-    volume_id  = await db.create_filter_field(CAT, "volume",       "Об\u02bcєм",               "Об\u02bcєм",               "select", "л", 30)
-    nofrost_id = await db.create_filter_field(CAT, "no_frost",     "No Frost",                "No Frost",                "select", "",  40)
-    chamber_id = await db.create_filter_field(CAT, "chambers",     "Кількість камер",          "Кількість камер",          "select", "",  50)
-    energy_id  = await db.create_filter_field(CAT, "energy_class", "Клас енергоспоживання",   "Клас енергоспоживання",   "select", "",  60)
+    def _get_height(p, spec: dict) -> str:
+        # 1. specifications_json по прямым ключам
+        for key in ("height", "height_cm"):
+            raw = spec.get(key)
+            if raw:
+                m = re.search(r"(\d{2,4})", str(raw))
+                if m:
+                    return f"{m.group(1)} см"
+        # 2. из строки dimensions/size: «ВхШхГ» или «500x600x1800»
+        for key in ("dimensions", "size"):
+            raw = str(spec.get(key) or "")
+            if raw:
+                # последнее из трёх чисел — обычно высота, но чаще первое
+                nums = re.findall(r"\d{2,4}", raw)
+                # формат «ВxШxГ»: первое число — высота
+                if len(nums) >= 3:
+                    h = int(nums[0])
+                    if 100 <= h <= 250:
+                        return f"{h} см"
+        # 3. regex в текстовом корпусе: число + "см" в диапазоне реальных высот
+        corpus = _build_corpus(p)
+        for m in re.finditer(r"\b(\d{3})\s*см\b", corpus, re.IGNORECASE):
+            h = int(m.group(1))
+            if 100 <= h <= 250:
+                return f"{h} см"
+        return ""
 
-    field_ids = [brand_id, type_id, volume_id, nofrost_id, chamber_id, energy_id]
+    # 1. Создаём/обновляем filter_fields
+    brand_id   = await db.create_filter_field(CAT, "brand",        "Бренд",                   "Бренд",                   "select", "",   10)
+    type_id    = await db.create_filter_field(CAT, "type",         "Тип",                     "Тип",                     "select", "",   20)
+    volume_id  = await db.create_filter_field(CAT, "volume",       "Об\u02bcєм",               "Об\u02bcєм",               "select", "л",  30)
+    nofrost_id = await db.create_filter_field(CAT, "no_frost",     "No Frost",                "No Frost",                "select", "",   40)
+    chamber_id = await db.create_filter_field(CAT, "chambers",     "Кількість камер",          "Кількість камер",          "select", "",   50)
+    energy_id  = await db.create_filter_field(CAT, "energy_class", "Клас енергоспоживання",   "Клас енергоспоживання",   "select", "",   60)
+    height_id  = await db.create_filter_field(CAT, "height",       "Висота",                  "Висота",                  "select", "см", 70)
+
+    field_ids = [brand_id, type_id, volume_id, nofrost_id, chamber_id, energy_id, height_id]
 
     # 2. Товары категории
     products = await db.fetch(
@@ -4914,6 +4942,7 @@ async def _migrate_refrigerator_filters() -> dict:
             (nofrost_id, _get_no_frost(p, spec)),
             (chamber_id, _get_chambers(p, spec)),
             (energy_id,  _get_energy_class(p, spec)),
+            (height_id,  _get_height(p, spec)),
         ]
         for fid, val in mapping:
             if (pid, fid) in existing_set:
