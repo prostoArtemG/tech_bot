@@ -479,6 +479,13 @@ class Database:
         CREATE UNIQUE INDEX IF NOT EXISTS site_categories_slug_uq
         ON site_categories (slug) WHERE slug IS NOT NULL;
         """)
+        await self.execute("""
+        ALTER TABLE site_categories ADD COLUMN IF NOT EXISTS category_key TEXT;
+        """)
+        await self.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS site_categories_cat_key_uq
+        ON site_categories (category_key) WHERE category_key IS NOT NULL;
+        """)
 
         # ── SEO per category ─────────────────────────────────────
         await self.execute("""
@@ -1898,11 +1905,44 @@ class Database:
             name_ru, name_uk, emoji, sort_order
         )
 
+    async def create_custom_category(
+        self,
+        name_uk: str,
+        name_ru: str,
+        category_key: str,
+        emoji: str = "📦",
+        sort_order: int = 100,
+    ):
+        """Создаёт пользовательскую категорию с category_key и slug."""
+        await self.execute(
+            """
+            INSERT INTO site_categories
+                (name_ru, name_uk, emoji, category_key, slug, sort_order)
+            VALUES ($1, $2, $3, $4, $4, $5)
+            ON CONFLICT (category_key) DO NOTHING
+            """,
+            name_ru, name_uk, emoji, category_key, sort_order,
+        )
+
+    async def list_custom_categories(self):
+        """Возвращает пользовательские категории (с category_key, не из categories.py)."""
+        from app.categories import CATEGORY_KEYS as _CKEYS
+        rows = await self.fetch(
+            """
+            SELECT id, name_ru, name_uk, emoji, sort_order, is_active, category_key
+            FROM site_categories
+            WHERE category_key IS NOT NULL
+            ORDER BY sort_order ASC, id ASC
+            """
+        )
+        # Исключаем категории, чей category_key совпадает с hardcoded
+        return [r for r in rows if r["category_key"] not in _CKEYS]
+
 
     async def list_site_categories(self):
         return await self.fetch(
             """
-            SELECT id, name_ru, name_uk, emoji, sort_order, is_active
+            SELECT id, name_ru, name_uk, emoji, sort_order, is_active, category_key
             FROM site_categories
             ORDER BY sort_order ASC, id ASC
             """
@@ -1912,7 +1952,7 @@ class Database:
     async def list_active_site_categories(self):
         return await self.fetch(
             """
-            SELECT id, name_ru, name_uk, emoji, sort_order, slug
+            SELECT id, name_ru, name_uk, emoji, sort_order, slug, category_key
             FROM site_categories
             WHERE is_active = TRUE
             ORDER BY sort_order ASC, id ASC

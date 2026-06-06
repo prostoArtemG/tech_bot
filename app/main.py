@@ -1222,6 +1222,12 @@ class CategoryViewState(StatesGroup):
     waiting_for_incomplete_product = State()
 
 
+class CustomCategoryState(StatesGroup):
+    waiting_for_name_uk = State()  # шаг 1: назва UA
+    waiting_for_name_ru = State()  # шаг 2: назва RU (или Enter чтобы = UA)
+    waiting_for_emoji   = State()  # шаг 3: emoji (или Enter чтобы = 📦)
+
+
 class FilterCardState(StatesGroup):
     waiting_for_action = State()          # карточка фильтра
     waiting_for_value = State()           # ввод нового значения
@@ -4283,6 +4289,32 @@ async def directories_menu_handler(message: Message, state: FSMContext):
     await message.answer("Справочники:", reply_markup=directories_kb)
 
 
+def _make_category_key(text: str) -> str:
+    """Генерирует ASCII-слаг из произвольного текста.
+    Транслитерирует кириллицу (украинскую/русскую), пробелы → _.
+    Пример: 'Електрочайники' → 'elektrochayniky'
+    """
+    import re as _re
+    _TR = {
+        "а": "a",  "б": "b",  "в": "v",  "г": "g",  "ґ": "g",  "д": "d",
+        "е": "e",  "є": "ye", "ж": "zh", "з": "z",  "и": "y",  "і": "i",
+        "ї": "yi", "й": "y",  "к": "k",  "л": "l",  "м": "m",  "н": "n",
+        "о": "o",  "п": "p",  "р": "r",  "с": "s",  "т": "t",  "у": "u",
+        "ф": "f",  "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+        "ь": "",   "ю": "yu", "я": "ya", "ъ": "",   "ы": "y",  "ё": "yo",
+    }
+    result = ""
+    for ch in text.lower().strip():
+        if ch in _TR:
+            result += _TR[ch]
+        elif ch.isascii() and ch.isalnum():
+            result += ch
+        elif ch in (" ", "-", "_", "/"):
+            result += "_"
+    result = _re.sub(r"_+", "_", result).strip("_")
+    return result[:50]
+
+
 @router.message(lambda m: m.text == "📁 Категории сайта")
 async def directories_product_groups_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
@@ -4290,7 +4322,12 @@ async def directories_product_groups_handler(message: Message, state: FSMContext
     await state.clear()
     await state.set_state(CategoryViewState.waiting_for_category)
     cats = categories_for_lang("uk")
+    custom_cats = await db.list_custom_categories()
     buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+    for cc in custom_cats:
+        btn_label = (cc["name_uk"] or cc["name_ru"] or cc["category_key"]).strip()
+        buttons.append([KeyboardButton(text=btn_label)])
+    buttons.append([KeyboardButton(text="➕ Додати категорію")])
     buttons.append([KeyboardButton(text="⬅️ Назад")])
     await message.answer(
         "📁 Оберіть категорію:",
@@ -4298,12 +4335,13 @@ async def directories_product_groups_handler(message: Message, state: FSMContext
     )
 
 
-async def _show_category_card(message: Message, state: FSMContext, cat_key: str):
+async def _show_category_card(message: Message, state: FSMContext, cat_key: str,
+                              display_name: str = "", emoji_override: str = ""):
     """Показывает карточку категории. Фильтры — как кнопки со счётчиками значений."""
-    cat_name = category_label(cat_key, "uk")
+    cat_name = display_name or category_label(cat_key, "uk")
     fields = await db.list_filter_fields(cat_key)
-    cat_emoji = next(
-        (c["emoji"] for c in categories_for_lang("uk") if c["key"] == cat_key), ""
+    cat_emoji = emoji_override or next(
+        (c["emoji"] for c in categories_for_lang("uk") if c["key"] == cat_key), "📦"
     )
     total_filters = len(fields)
 
@@ -4380,10 +4418,41 @@ async def category_view_category_selected(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("Справочники:", reply_markup=directories_kb)
         return
+    if message.text == "➕ Додати категорію":
+        await state.set_state(CustomCategoryState.waiting_for_name_uk)
+        await message.answer(
+            "🏷️ <b>Нова категорія</b> — крок 1/3\n\n"
+            "Введіть назву UA:\n"
+            "<i>наприклад: Електрочайники</i>",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
     key = category_key(message.text)
     if not key:
+        # Проверяем пользовательские категории (по label)
+        custom_cats = await db.list_custom_categories()
+        for cc in custom_cats:
+            btn_label = (cc["name_uk"] or cc["name_ru"] or "").strip()
+            if message.text == btn_label:
+                key = cc["category_key"]
+                await _show_category_card(
+                    message, state, key,
+                    display_name=btn_label,
+                    emoji_override=cc.get("emoji") or "📦",
+                )
+                return
+    if not key:
         cats = categories_for_lang("uk")
+        custom_cats = await db.list_custom_categories()
         buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+        for cc in custom_cats:
+            btn_label = (cc["name_uk"] or cc["name_ru"] or cc["category_key"]).strip()
+            buttons.append([KeyboardButton(text=btn_label)])
+        buttons.append([KeyboardButton(text="➕ Додати категорію")])
         buttons.append([KeyboardButton(text="⬅️ Назад")])
         await message.answer(
             "⚠️ Оберіть категорію зі списку або натисніть ⬅️ Назад.",
@@ -4391,6 +4460,126 @@ async def category_view_category_selected(message: Message, state: FSMContext):
         )
         return
     await _show_category_card(message, state, key)
+
+
+# ── CustomCategoryState handlers ─────────────────────────────────────────────
+
+@router.message(CustomCategoryState.waiting_for_name_uk)
+async def custom_category_name_uk(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await state.set_state(CategoryViewState.waiting_for_category)
+        cats = categories_for_lang("uk")
+        custom_cats = await db.list_custom_categories()
+        buttons = [[KeyboardButton(text=c["name"])] for c in cats]
+        for cc in custom_cats:
+            btn_label = (cc["name_uk"] or cc["name_ru"] or cc["category_key"]).strip()
+            buttons.append([KeyboardButton(text=btn_label)])
+        buttons.append([KeyboardButton(text="➕ Додати категорію")])
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            "📁 Оберіть категорію:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
+        return
+    name_uk = (message.text or "").strip()
+    if not name_uk:
+        await message.answer("⚠️ Введіть назву:")
+        return
+    await state.update_data(new_cat_name_uk=name_uk)
+    await state.set_state(CustomCategoryState.waiting_for_name_ru)
+    await message.answer(
+        f"🏷️ <b>Нова категорія</b> — крок 2/3\n\n"
+        f"UA: <b>{name_uk}</b>\n\n"
+        "Введіть назву RU або натисніть ⏭️ Пропустити (= UA):",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="⏭️ Пропустити")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(CustomCategoryState.waiting_for_name_ru)
+async def custom_category_name_ru(message: Message, state: FSMContext):
+    data = await state.get_data()
+    name_uk = data.get("new_cat_name_uk", "")
+    if message.text == "⬅️ Назад":
+        await state.set_state(CustomCategoryState.waiting_for_name_uk)
+        await message.answer(
+            "🏷️ <b>Нова категорія</b> — крок 1/3\n\nВведіть назву UA:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+    if message.text == "⏭️ Пропустити":
+        name_ru = name_uk
+    else:
+        name_ru = (message.text or "").strip() or name_uk
+    await state.update_data(new_cat_name_ru=name_ru)
+    await state.set_state(CustomCategoryState.waiting_for_emoji)
+    await message.answer(
+        f"🏷️ <b>Нова категорія</b> — крок 3/3\n\n"
+        f"UA: <b>{name_uk}</b>\n"
+        f"RU: <b>{name_ru}</b>\n\n"
+        "Введіть emoji або натисніть ⏭️ Пропустити (= 📦):",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="⏭️ Пропустити")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(CustomCategoryState.waiting_for_emoji)
+async def custom_category_emoji(message: Message, state: FSMContext):
+    data = await state.get_data()
+    name_uk = data.get("new_cat_name_uk", "")
+    name_ru = data.get("new_cat_name_ru", name_uk)
+    if message.text == "⬅️ Назад":
+        await state.set_state(CustomCategoryState.waiting_for_name_ru)
+        await message.answer(
+            f"🏷️ <b>Нова категорія</b> — крок 2/3\n\nUA: <b>{name_uk}</b>\n\nВведіть назву RU або ⏭️ Пропустити:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⏭️ Пропустити")], [KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+    if message.text == "⏭️ Пропустити":
+        emoji = "📦"
+    else:
+        emoji = (message.text or "").strip() or "📦"
+
+    cat_key_new = _make_category_key(name_uk)
+    if not cat_key_new:
+        await message.answer("⚠️ Не вдалось згенерувати ключ. Спробуйте іншу назву.")
+        return
+
+    await db.create_custom_category(
+        name_uk=name_uk, name_ru=name_ru,
+        category_key=cat_key_new, emoji=emoji,
+    )
+    await state.clear()
+    await message.answer(
+        f"✅ Категорія <b>{emoji} {name_uk}</b> створена!\n"
+        f"category_key: <code>{cat_key_new}</code>",
+        parse_mode="HTML",
+    )
+    await _show_category_card(
+        message, state, cat_key_new,
+        display_name=name_uk, emoji_override=emoji,
+    )
 
 
 async def _migrate_boiler_filters() -> dict:
@@ -9938,16 +10127,21 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
         nm_ru = (sc.get("name_ru") or "").strip()
         if not nm_ru:
             continue
+        sc_key = (sc.get("category_key") or "").strip()  # slug з БД, якщо є
         k = category_key(nm_ru)
         if k and k in seen_keys:
             continue
+        if sc_key and sc_key in seen_keys:
+            continue
+        eff_key = sc_key or k or nm_ru.lower()
         category_cards.append({
-            "key": k or nm_ru.lower(),
+            "key": eff_key,
             "name_ru": nm_ru,
             "name_uk": (sc.get("name_uk") or nm_ru),
             "emoji": sc.get("emoji") or "📦",
-            "filter_value": nm_ru,
+            "filter_value": eff_key,  # стабільний ключ/slug замість raw-назви
         })
+        seen_keys.add(eff_key)
 
     site_contacts = {
         "phone": await db.get_setting("site_phone") or "",
