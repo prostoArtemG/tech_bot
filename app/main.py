@@ -4358,7 +4358,7 @@ async def _show_category_card(message: Message, state: FSMContext, cat_key: str)
     ]
     if has_incomplete:
         action_buttons.append([KeyboardButton(text="⚠️ Показати незаповнені")])
-    if cat_key == "boilers":
+    if cat_key in ("boilers", "air_conditioners"):
         action_buttons.append([KeyboardButton(text="🔄 Перенести старі фільтри")])
     action_buttons.append([KeyboardButton(text="⬅️ Назад")])
     keyboard = filter_buttons + action_buttons
@@ -4450,6 +4450,182 @@ async def _migrate_boiler_filters() -> dict:
                 empty += 1
                 continue
             # Найти или создать filter_value
+            if val not in fv_cache[fid]:
+                new_id = await db.create_filter_value(fid, val, val, val, 100)
+                fv_cache[fid][val] = new_id
+            fv_id = fv_cache[fid][val]
+            await db.execute(
+                """
+                INSERT INTO product_filter_values
+                    (product_id, filter_field_id, filter_value_id, value_text)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (product_id, filter_field_id) DO NOTHING
+                """,
+                pid, fid, fv_id, val,
+            )
+            transferred += 1
+
+    return {"transferred": transferred, "already": already, "empty": empty}
+
+
+async def _migrate_ac_filters() -> dict:
+    """Переносит Бренд/Площа/BTU/Інвертор/Wi-Fi в систему фильтров для кондиционеров.
+    Извлекает значения из текстовых полей и specifications_json.
+    Не перезаписывает уже заполненные вручную значения.
+    """
+    import re, json as _json
+
+    CAT = "air_conditioners"
+
+    # Код модели AC → BTU / площадь
+    _BTU_FROM_CODE  = {"07": "7000 BTU",  "09": "9000 BTU",  "12": "12000 BTU",
+                       "18": "18000 BTU", "24": "24000 BTU", "36": "36000 BTU"}
+    _AREA_FROM_CODE = {"07": "20 м²",     "09": "25 м²",     "12": "35 м²",
+                       "18": "50 м²",     "24": "70 м²",     "36": "100 м²"}
+
+    def _parse_json(raw) -> dict:
+        if raw is None:
+            return {}
+        if isinstance(raw, str):
+            try:
+                return _json.loads(raw)
+            except Exception:
+                return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def _build_corpus(p) -> str:
+        parts = [
+            str(p["name"] or ""),
+            str(p["brand"] or ""),
+            str(p["model"] or ""),
+            str(p["description"] or ""),
+            str(p["specs"] or ""),
+        ]
+        spec = _parse_json(p["specifications_json"])
+        for k, v in spec.items():
+            parts.append(str(k))
+            parts.append(str(v or ""))
+        return " ".join(parts)
+
+    def _get_area(p, spec: dict) -> str:
+        raw = spec.get("room_area")
+        if raw:
+            m = re.search(r"(\d+(?:[.,]\d+)?)", str(raw))
+            if m:
+                n = float(m.group(1).replace(",", "."))
+                return f"{int(n) if n.is_integer() else n} м²"
+        corpus = _build_corpus(p)
+        m = re.search(r"(\d{2,3})\s*(?:м²|кв\.?м|m²)", corpus, re.IGNORECASE)
+        if m:
+            return f"{m.group(1)} м²"
+        # fallback: из кода модели
+        model = str(p["model"] or "")
+        for code, area in _AREA_FROM_CODE.items():
+            if re.search(r"[-/\s]" + code + r"(?=[A-Za-zА-ЯҐЄІЇа-яґєії])", model):
+                return area
+        return ""
+
+    def _get_btu(p, spec: dict) -> str:
+        corpus = _build_corpus(p)
+        m = re.search(r"\b(\d{4,5})\s*(?:BTU|btu)\b", corpus)
+        if m:
+            return f"{m.group(1)} BTU"
+        model = str(p["model"] or "")
+        for code, btu in _BTU_FROM_CODE.items():
+            if re.search(r"[-/\s]" + code + r"(?=[A-Za-zА-ЯҐЄІЇа-яґєії])", model):
+                return btu
+        return ""
+
+    def _get_inverter(p, spec: dict) -> str:
+        comp = str(spec.get("compressor_type") or "").lower()
+        if comp in ("inverter", "інверторний", "инверторный"):
+            return "Так"
+        if comp in ("non_inverter", "звичайний", "обычный"):
+            return "Ні"
+        inv = str(spec.get("inverter") or "").lower()
+        if inv in ("yes", "так", "да", "1", "true"):
+            return "Так"
+        if inv in ("no", "ні", "нет", "0", "false"):
+            return "Ні"
+        corpus = _build_corpus(p).lower()
+        if re.search(r"не\s*інвертор|не\s*инвертор|non.?inverter|неінвертор|неинвертор", corpus):
+            return "Ні"
+        if re.search(r"\bінвертор[\u0430-яґєії]*|\binverter\b|\bинвертор[а-яёъ]*", corpus):
+            return "Так"
+        return ""
+
+    def _get_wifi(p, spec: dict) -> str:
+        wifi = str(spec.get("wifi") or "").lower()
+        if wifi in ("yes", "так", "да", "1", "true"):
+            return "Так"
+        if wifi in ("no", "ні", "нет", "0", "false"):
+            return "Ні"
+        corpus = _build_corpus(p).lower()
+        if re.search(r"wi.?fi|wifi", corpus):
+            return "Так"
+        return ""
+
+    # 1. Создаём/обновляем filter_fields
+    brand_id    = await db.create_filter_field(CAT, "brand",    "Бренд",    "Бренд",    "select", "",    10)
+    area_id     = await db.create_filter_field(CAT, "area",     "Площа",    "Площа",    "select", "м²",  20)
+    btu_id      = await db.create_filter_field(CAT, "btu",      "BTU",      "BTU",      "select", "",    30)
+    inverter_id = await db.create_filter_field(CAT, "inverter", "Інвертор", "Інвертор", "select", "",    40)
+    wifi_id     = await db.create_filter_field(CAT, "wifi",     "Wi-Fi",    "Wi-Fi",    "select", "",    50)
+
+    # 2. Товары категории
+    products = await db.fetch(
+        """
+        SELECT id, name, brand, model, description, specs, specifications_json
+        FROM products
+        WHERE category_key = $1
+          AND COALESCE(is_active, TRUE) = TRUE
+          AND deleted_at IS NULL
+        """,
+        CAT,
+    )
+    if not products:
+        return {"no_products": True}
+
+    field_ids = [brand_id, area_id, btu_id, inverter_id, wifi_id]
+
+    # 3. Кеш filter_values: {field_id: {value_str: fv_id}}
+    fv_cache: dict = {}
+    for fid in field_ids:
+        fv_cache[fid] = {fv["value"]: fv["id"] for fv in await db.list_filter_values(fid)}
+
+    # 4. Уже заполненные пары (product_id, filter_field_id)
+    product_ids = [p["id"] for p in products]
+    existing_rows = await db.fetch(
+        """
+        SELECT product_id, filter_field_id FROM product_filter_values
+        WHERE product_id = ANY($1::int[])
+          AND filter_field_id = ANY($2::int[])
+        """,
+        product_ids,
+        field_ids,
+    )
+    existing_set = {(r["product_id"], r["filter_field_id"]) for r in existing_rows}
+
+    transferred = 0
+    already = len(existing_set)
+    empty = 0
+
+    for p in products:
+        pid = p["id"]
+        spec = _parse_json(p["specifications_json"])
+        mapping = [
+            (brand_id,    str(p["brand"] or "").strip()),
+            (area_id,     _get_area(p, spec)),
+            (btu_id,      _get_btu(p, spec)),
+            (inverter_id, _get_inverter(p, spec)),
+            (wifi_id,     _get_wifi(p, spec)),
+        ]
+        for fid, val in mapping:
+            if (pid, fid) in existing_set:
+                continue
+            if not val:
+                empty += 1
+                continue
             if val not in fv_cache[fid]:
                 new_id = await db.create_filter_value(fid, val, val, val, 100)
                 fv_cache[fid][val] = new_id
@@ -4649,19 +4825,22 @@ async def category_view_action(message: Message, state: FSMContext):
         return
 
     if message.text == "🔄 Перенести старі фільтри":
-        if cat_key_val != "boilers":
+        if cat_key_val not in ("boilers", "air_conditioners"):
             await _show_category_card(message, state, cat_key_val)
             return
         await message.answer("🔄 Переносимо фільтри... Зачекайте.")
-        result = await _migrate_boiler_filters()
+        if cat_key_val == "boilers":
+            result = await _migrate_boiler_filters()
+        else:
+            result = await _migrate_ac_filters()
         if result.get("no_products"):
-            report = "⚠️ Товарів у категорії boilers не знайдено."
+            report = f"⚠️ Товарів у категорії «{cat_name_val}» не знайдено."
         else:
             report = (
                 f"🔄 <b>Перенесення фільтрів завершено</b>\n\n"
                 f"✅ Перенесено: <b>{result['transferred']}</b>\n"
                 f"⏭️ Вже було: <b>{result['already']}</b>\n"
-                f"⚠️ Пустих значень: <b>{result['empty']}</b>"
+                f"⚠️ Не знайдено / пусто: <b>{result['empty']}</b>"
             )
         await message.answer(report, parse_mode="HTML")
         await _show_category_card(message, state, cat_key_val)
