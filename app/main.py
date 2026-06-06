@@ -4388,21 +4388,122 @@ async def category_view_category_selected(message: Message, state: FSMContext):
 
 
 async def _migrate_boiler_filters() -> dict:
-    """Переносит brand/volume/ten_type из полей таблицы products в систему фильтров.
-    Не перезаписывает уже заполненные вручную значения.
-    Возвращает dict: transferred, already, empty, no_products (bool).
+    """Переносит фильтры для бойлеров: бренд, літраж, тип ТЕН, форма, монтаж.
+    Для каждого фильтра проверяет раздельно: если уже заполнен — пропускает только его.
+    Ощупывает значения в колонках, specifications_json и текстовых полях.
     """
+    import re, json as _json
+
     CAT = "boilers"
 
-    # 1. Создаём или находим нужные filter_fields
-    brand_id = await db.create_filter_field(CAT, "brand",    "Бренд",   "Бренд",   "select", "",  10)
-    volume_id = await db.create_filter_field(CAT, "volume",  "Літраж",  "Літраж",  "select", "л", 20)
-    ten_id    = await db.create_filter_field(CAT, "ten_type", "Тип ТЕНа", "Тип ТЕНа", "select", "", 30)
+    _TEN_MAP = {
+        "сухий": "Сухий", "сухой": "Сухий", "dry": "Сухий",
+        "мокрий": "Мокрий", "мокрый": "Мокрий", "wet": "Мокрий",
+    }
+    _SHAPE_MAP = {
+        "циліндричний": "Циліндричний", "цилиндрический": "Циліндричний", "cylindrical": "Циліндричний",
+        "плоский": "Плоский", "flat": "Плоский",
+        "кубічний": "Кубічний", "кубический": "Кубічний", "cubic": "Кубічний",
+    }
+    _INSTALL_MAP = {
+        "горизонтальна": "Горизонтальна", "горизонтальная": "Горизонтальна", "horizontal": "Горизонтальна",
+        "вертикальна": "Вертикальна", "вертикальная": "Вертикальна", "vertical": "Вертикальна",
+        "універсальна": "Універсальна", "универсальная": "Універсальна", "universal": "Універсальна",
+    }
+
+    def _parse_json(raw) -> dict:
+        if raw is None:
+            return {}
+        if isinstance(raw, str):
+            try:
+                return _json.loads(raw)
+            except Exception:
+                return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def _corpus(p) -> str:
+        parts = [
+            str(p["name"] or ""), str(p["brand"] or ""), str(p["model"] or ""),
+            str(p["description"] or ""), str(p["specs"] or ""),
+        ]
+        spec = _parse_json(p["specifications_json"])
+        for k, v in spec.items():
+            parts.append(str(k))
+            parts.append(str(v or ""))
+        return " ".join(parts)
+
+    def _get_volume(p, spec: dict) -> str:
+        # 1. Dedicated column
+        if p["boiler_volume_liters"] is not None:
+            return f"{int(float(p['boiler_volume_liters']))} л"
+        # 2. specifications_json["volume"]
+        raw = spec.get("volume")
+        if raw:
+            m = re.search(r"(\d+)", str(raw))
+            if m:
+                return f"{m.group(1)} л"
+        # 3. Regex in text corpus
+        corp = _corpus(p)
+        for pat in (r"\b(\d{2,3})\s*л\b", r"\b(\d{2,3})\s*[Ll]\b"):
+            m = re.search(pat, corp, re.IGNORECASE)
+            if m:
+                return f"{m.group(1)} л"
+        return ""
+
+    def _get_ten_type(p, spec: dict) -> str:
+        # 1. Dedicated column
+        raw = str(p["boiler_ten_type"] or "").strip().lower()
+        if raw:
+            canon = _TEN_MAP.get(raw)
+            if canon:
+                return canon
+        # 2. specifications_json heater_type / ten_type
+        for key in ("heater_type", "ten_type"):
+            sv = str(spec.get(key) or "").strip().lower()
+            if sv:
+                canon = _TEN_MAP.get(sv)
+                if canon:
+                    return canon
+        # 3. Search text corpus
+        corp = _corpus(p).lower()
+        if re.search(r"\bсухий\b|\bсухой\b|\bdry\b|\bсухим\b", corp):
+            return "Сухий"
+        if re.search(r"\bмокрий\b|\bмокрый\b|\bwet\b|\bмокрим\b", corp):
+            return "Мокрий"
+        return ""
+
+    def _get_shape(p, spec: dict) -> str:
+        for key in ("tank_shape", "shape"):
+            sv = str(spec.get(key) or "").strip().lower()
+            if sv:
+                canon = _SHAPE_MAP.get(sv)
+                if canon:
+                    return canon
+        return ""
+
+    def _get_installation(p, spec: dict) -> str:
+        for key in ("installation", "mount"):
+            sv = str(spec.get(key) or "").strip().lower()
+            if sv:
+                canon = _INSTALL_MAP.get(sv)
+                if canon:
+                    return canon
+        return ""
+
+    # 1. Создаём/обновляем filter_fields
+    brand_id    = await db.create_filter_field(CAT, "brand",        "Бренд",    "Бренд",    "select", "",   10)
+    volume_id   = await db.create_filter_field(CAT, "volume",       "Літраж",   "Літраж",   "select", "л",  20)
+    ten_id      = await db.create_filter_field(CAT, "ten_type",     "Тип ТЕНа", "Тип ТЕНа", "select", "",   30)
+    shape_id    = await db.create_filter_field(CAT, "tank_shape",   "Форма",     "Форма",     "select", "",   40)
+    install_id  = await db.create_filter_field(CAT, "installation", "Монтаж",    "Монтаж",    "select", "",   50)
+
+    field_ids = [brand_id, volume_id, ten_id, shape_id, install_id]
 
     # 2. Товары категории
     products = await db.fetch(
         """
-        SELECT id, brand, boiler_volume_liters, boiler_ten_type
+        SELECT id, name, brand, model, description, specs,
+               boiler_volume_liters, boiler_ten_type, specifications_json
         FROM products
         WHERE category_key = $1
           AND COALESCE(is_active, TRUE) = TRUE
@@ -4415,7 +4516,7 @@ async def _migrate_boiler_filters() -> dict:
 
     # 3. Кеш filter_values: {field_id: {value_str: fv_id}}
     fv_cache: dict = {}
-    for fid in (brand_id, volume_id, ten_id):
+    for fid in field_ids:
         fv_cache[fid] = {fv["value"]: fv["id"] for fv in await db.list_filter_values(fid)}
 
     # 4. Уже заполненные пары (product_id, filter_field_id)
@@ -4427,29 +4528,31 @@ async def _migrate_boiler_filters() -> dict:
           AND filter_field_id = ANY($2::int[])
         """,
         product_ids,
-        [brand_id, volume_id, ten_id],
+        field_ids,
     )
     existing_set = {(r["product_id"], r["filter_field_id"]) for r in existing_rows}
 
     transferred = 0
-    already = len(existing_set)
-    empty = 0
+    already = 0
+    not_found = 0
 
     for p in products:
         pid = p["id"]
-        vol = str(p["boiler_volume_liters"]) if p["boiler_volume_liters"] is not None else ""
+        spec = _parse_json(p["specifications_json"])
         mapping = [
-            (brand_id,  str(p["brand"] or "").strip()),
-            (volume_id, vol),
-            (ten_id,    str(p["boiler_ten_type"] or "").strip()),
+            (brand_id,   str(p["brand"] or "").strip()),
+            (volume_id,  _get_volume(p, spec)),
+            (ten_id,     _get_ten_type(p, spec)),
+            (shape_id,   _get_shape(p, spec)),
+            (install_id, _get_installation(p, spec)),
         ]
         for fid, val in mapping:
             if (pid, fid) in existing_set:
-                continue  # не трогаем уже заполненные
-            if not val:
-                empty += 1
+                already += 1
                 continue
-            # Найти или создать filter_value
+            if not val:
+                not_found += 1
+                continue
             if val not in fv_cache[fid]:
                 new_id = await db.create_filter_value(fid, val, val, val, 100)
                 fv_cache[fid][val] = new_id
@@ -4465,7 +4568,7 @@ async def _migrate_boiler_filters() -> dict:
             )
             transferred += 1
 
-    return {"transferred": transferred, "already": already, "empty": empty}
+    return {"transferred": transferred, "already": already, "not_found": not_found}
 
 
 async def _migrate_ac_filters() -> dict:
@@ -4840,7 +4943,7 @@ async def category_view_action(message: Message, state: FSMContext):
                 f"🔄 <b>Перенесення фільтрів завершено</b>\n\n"
                 f"✅ Перенесено: <b>{result['transferred']}</b>\n"
                 f"⏭️ Вже було: <b>{result['already']}</b>\n"
-                f"⚠️ Не знайдено / пусто: <b>{result['empty']}</b>"
+                f"⚠️ Не знайдено: <b>{result.get('not_found', result.get('empty', 0))}</b>"
             )
         await message.answer(report, parse_mode="HTML")
         await _show_category_card(message, state, cat_key_val)
