@@ -4358,7 +4358,7 @@ async def _show_category_card(message: Message, state: FSMContext, cat_key: str)
     ]
     if has_incomplete:
         action_buttons.append([KeyboardButton(text="⚠️ Показати незаповнені")])
-    if cat_key in ("boilers", "air_conditioners"):
+    if cat_key in ("boilers", "air_conditioners", "refrigerators"):
         action_buttons.append([KeyboardButton(text="🔄 Перенести старі фільтри")])
     if cat_key == "boilers":
         action_buttons.append([KeyboardButton(text="🧹 Нормалізувати значення")])
@@ -4749,6 +4749,197 @@ async def _migrate_ac_filters() -> dict:
     return {"transferred": transferred, "already": already, "empty": empty}
 
 
+async def _migrate_refrigerator_filters() -> dict:
+    """Переносит Бренд/Тип/Об'єм/No Frost/Кількість камер/Клас енергоспоживання
+    в систему фильтров для холодильников.
+    Не перезаписывает уже заполненные вручную значения.
+    """
+    import re, json as _json
+
+    CAT = "refrigerators"
+
+    _TYPE_MAP = {
+        "side-by-side": "Side-by-Side", "сайд-бай-сайд": "Side-by-Side",
+        "side by side":  "Side-by-Side",
+        "french door":   "French Door",  "french-door":   "French Door",
+        "двокамерний":   "Двокамерний",  "двухкамерный":  "Двокамерний",
+        "однокамерний":  "Однокамерний", "однокамерный":  "Однокамерний",
+        "mini":          "Міні",         "мини":          "Міні",
+        "міні":          "Міні",
+    }
+    _ENERGY_ORDER = ["A+++", "A++", "A+", "A", "B", "C", "D", "E", "F", "G"]
+
+    def _parse_json(raw) -> dict:
+        if raw is None:
+            return {}
+        if isinstance(raw, str):
+            try:
+                return _json.loads(raw)
+            except Exception:
+                return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def _build_corpus(p) -> str:
+        parts = [
+            str(p["name"] or ""), str(p["brand"] or ""),
+            str(p["model"] or ""), str(p["description"] or ""),
+            str(p["specs"] or ""),
+        ]
+        spec = _parse_json(p["specifications_json"])
+        for k, v in spec.items():
+            parts.append(str(k))
+            parts.append(str(v or ""))
+        return " ".join(parts)
+
+    def _get_type(p, spec: dict) -> str:
+        raw = str(spec.get("type") or spec.get("fridge_type") or "").strip().lower()
+        if raw:
+            canon = _TYPE_MAP.get(raw)
+            if canon:
+                return canon
+        corpus = _build_corpus(p).lower()
+        for key, canon in _TYPE_MAP.items():
+            if key in corpus:
+                return canon
+        return ""
+
+    def _get_volume(p, spec: dict) -> str:
+        raw = spec.get("volume") or spec.get("total_volume") or spec.get("capacity")
+        if raw:
+            m = re.search(r"(\d{2,4})", str(raw))
+            if m:
+                return f"{m.group(1)} л"
+        corpus = _build_corpus(p)
+        m = re.search(r"\b(\d{2,4})\s*(?:л|L|liters?)\b", corpus, re.IGNORECASE)
+        if m:
+            return f"{m.group(1)} л"
+        return ""
+
+    def _get_no_frost(p, spec: dict) -> str:
+        nf = str(spec.get("no_frost") or spec.get("nofrost") or "").lower()
+        if nf in ("yes", "так", "да", "1", "true"):
+            return "Так"
+        if nf in ("no", "ні", "нет", "0", "false"):
+            return "Ні"
+        corpus = _build_corpus(p).lower()
+        if re.search(r"no[\s-]?frost|нофрост", corpus):
+            return "Так"
+        if re.search(r"крапл[еє]|капел|капельн", corpus):
+            return "Ні"
+        return ""
+
+    def _get_chambers(p, spec: dict) -> str:
+        raw = spec.get("chambers") or spec.get("num_chambers")
+        if raw is not None:
+            m = re.search(r"(\d)", str(raw))
+            if m:
+                return m.group(1)
+        corpus = _build_corpus(p).lower()
+        m = re.search(r"(\d)[\s-]?(?:камер|camera|chamber)", corpus)
+        if m:
+            return m.group(1)
+        if re.search(r"двокамерн|двухкамерн|double.?chamber", corpus):
+            return "2"
+        if re.search(r"однокамерн|single.?chamber", corpus):
+            return "1"
+        return ""
+
+    def _get_energy_class(p, spec: dict) -> str:
+        raw = str(spec.get("energy_class") or spec.get("energy_efficiency") or "").strip().upper()
+        if raw:
+            for cls in _ENERGY_ORDER:
+                if raw.startswith(cls):
+                    return cls
+        corpus = _build_corpus(p)
+        for cls in _ENERGY_ORDER:
+            if re.search(r"(?:клас[а-яА-ЯA-Za-z]*|class|efficiency)[\s:]*" + re.escape(cls), corpus, re.IGNORECASE):
+                return cls
+            if re.search(r"\b" + re.escape(cls) + r"\b", corpus):
+                return cls
+        return ""
+
+    # 1. Создаём/обновляем filter_fields
+    brand_id   = await db.create_filter_field(CAT, "brand",        "Бренд",                   "Бренд",                   "select", "",  10)
+    type_id    = await db.create_filter_field(CAT, "type",         "Тип",                     "Тип",                     "select", "",  20)
+    volume_id  = await db.create_filter_field(CAT, "volume",       "Об\u02bcєм",               "Об\u02bcєм",               "select", "л", 30)
+    nofrost_id = await db.create_filter_field(CAT, "no_frost",     "No Frost",                "No Frost",                "select", "",  40)
+    chamber_id = await db.create_filter_field(CAT, "chambers",     "Кількість камер",          "Кількість камер",          "select", "",  50)
+    energy_id  = await db.create_filter_field(CAT, "energy_class", "Клас енергоспоживання",   "Клас енергоспоживання",   "select", "",  60)
+
+    field_ids = [brand_id, type_id, volume_id, nofrost_id, chamber_id, energy_id]
+
+    # 2. Товары категории
+    products = await db.fetch(
+        """
+        SELECT id, name, brand, model, description, specs, specifications_json
+        FROM products
+        WHERE category_key = $1
+          AND COALESCE(is_active, TRUE) = TRUE
+          AND deleted_at IS NULL
+        """,
+        CAT,
+    )
+    if not products:
+        return {"no_products": True}
+
+    # 3. Кеш filter_values: {field_id: {value_str: fv_id}}
+    fv_cache: dict = {}
+    for fid in field_ids:
+        fv_cache[fid] = {fv["value"]: fv["id"] for fv in await db.list_filter_values(fid)}
+
+    # 4. Уже заполненные пары (product_id, filter_field_id)
+    product_ids = [p["id"] for p in products]
+    existing_rows = await db.fetch(
+        """
+        SELECT product_id, filter_field_id FROM product_filter_values
+        WHERE product_id = ANY($1::int[])
+          AND filter_field_id = ANY($2::int[])
+        """,
+        product_ids,
+        field_ids,
+    )
+    existing_set = {(r["product_id"], r["filter_field_id"]) for r in existing_rows}
+
+    transferred = 0
+    already = 0
+    not_found = 0
+
+    for p in products:
+        pid = p["id"]
+        spec = _parse_json(p["specifications_json"])
+        mapping = [
+            (brand_id,   str(p["brand"] or "").strip()),
+            (type_id,    _get_type(p, spec)),
+            (volume_id,  _get_volume(p, spec)),
+            (nofrost_id, _get_no_frost(p, spec)),
+            (chamber_id, _get_chambers(p, spec)),
+            (energy_id,  _get_energy_class(p, spec)),
+        ]
+        for fid, val in mapping:
+            if (pid, fid) in existing_set:
+                already += 1
+                continue
+            if not val:
+                not_found += 1
+                continue
+            if val not in fv_cache[fid]:
+                new_id = await db.create_filter_value(fid, val, val, val, 100)
+                fv_cache[fid][val] = new_id
+            fv_id = fv_cache[fid][val]
+            await db.execute(
+                """
+                INSERT INTO product_filter_values
+                    (product_id, filter_field_id, filter_value_id, value_text)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (product_id, filter_field_id) DO NOTHING
+                """,
+                pid, fid, fv_id, val,
+            )
+            transferred += 1
+
+    return {"transferred": transferred, "already": already, "not_found": not_found}
+
+
 async def _normalize_boiler_filter_values() -> dict:
     """Нормализует значения filter_values для boilers:
     wet → Мокрий, dry → Сухий, vertical → Вертикальна, и т.д.
@@ -5051,14 +5242,16 @@ async def category_view_action(message: Message, state: FSMContext):
         return
 
     if message.text == "🔄 Перенести старі фільтри":
-        if cat_key_val not in ("boilers", "air_conditioners"):
+        if cat_key_val not in ("boilers", "air_conditioners", "refrigerators"):
             await _show_category_card(message, state, cat_key_val)
             return
         await message.answer("🔄 Переносимо фільтри... Зачекайте.")
         if cat_key_val == "boilers":
             result = await _migrate_boiler_filters()
-        else:
+        elif cat_key_val == "air_conditioners":
             result = await _migrate_ac_filters()
+        else:
+            result = await _migrate_refrigerator_filters()
         if result.get("no_products"):
             report = f"⚠️ Товарів у категорії «{cat_name_val}» не знайдено."
         else:
