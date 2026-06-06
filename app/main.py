@@ -9223,10 +9223,13 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     dyn_range = {}     # attr_key → {min, max, current_min, current_max, unit} (range-режим)
     dyn_query_extras = []
     target_key_dyn = category_key(category) if category else ""
-    # ── TEST MODE: новая система фильтров (?new_filters=1) ────────────────
+    # ── Новая система фильтров (?new_filters=1 или авто для избранных категорий) ──
+    # _AUTO_NEW_FILTERS_CATS — категории, для которых новые фильтры активны автоматически
+    # (при наличии filter_fields; если их нет — fallback на старые).
+    _AUTO_NEW_FILTERS_CATS = {"boilers"}
     new_filters_mode = request.query_params.get("new_filters") == "1"
     _new_active = False
-    if new_filters_mode and target_key_dyn:
+    if (new_filters_mode or target_key_dyn in _AUTO_NEW_FILTERS_CATS) and target_key_dyn:
         try:
             _ff_fields = await db.get_filter_fields_with_values(target_key_dyn)
             _ff_sel = [f for f in _ff_fields if f["field_type"] in ("select", "boolean")]
