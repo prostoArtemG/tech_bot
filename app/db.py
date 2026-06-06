@@ -3008,6 +3008,39 @@ class Database:
         )
         return int(row["id"]) if row else None
 
+    async def update_filter_value(self, fv_id: int, value: str, label_ru: str, label_uk: str):
+        """Переименовывает filter_value и синхронизирует value_text в product_filter_values."""
+        await self.execute(
+            """
+            UPDATE filter_values
+            SET value = $2, label_ru = $3, label_uk = $4
+            WHERE id = $1
+            """,
+            fv_id, value, label_ru, label_uk,
+        )
+        await self.execute(
+            """
+            UPDATE product_filter_values
+            SET value_text = $2
+            WHERE filter_value_id = $1
+            """,
+            fv_id, value,
+        )
+
+    async def delete_filter_value(self, fv_id: int):
+        """Удаляет filter_value и очищает value_text в связанных product_filter_values."""
+        # Обнуляем value_text до удаления (пока filter_value_id ещё не NULL)
+        await self.execute(
+            """
+            UPDATE product_filter_values
+            SET value_text = NULL
+            WHERE filter_value_id = $1
+            """,
+            fv_id,
+        )
+        # FK ON DELETE SET NULL обнулит filter_value_id автоматически
+        await self.execute("DELETE FROM filter_values WHERE id = $1", fv_id)
+
     # ── product_filter_values ─────────────────────────────────────
     async def count_filter_fields(self, category_key: str) -> int:
         row = await self.fetchrow(

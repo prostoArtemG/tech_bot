@@ -1223,8 +1223,12 @@ class CategoryViewState(StatesGroup):
 
 
 class FilterCardState(StatesGroup):
-    waiting_for_action = State()  # карточка фильтра
-    waiting_for_value = State()   # ввод нового значения
+    waiting_for_action = State()          # карточка фильтра
+    waiting_for_value = State()           # ввод нового значения
+    waiting_for_rename_select = State()   # выбор значения для переименования
+    waiting_for_rename_input = State()    # ввод нового названия
+    waiting_for_delete_select = State()   # выбор значения для удаления
+    waiting_for_delete_confirm = State()  # подтверждение удаления
 
 
 class AddFilterValueState(StatesGroup):
@@ -5354,13 +5358,12 @@ async def _show_filter_card(message: Message, state: FSMContext, field_id: int, 
         filter_field_id=field_id, filter_label=field_label,
     )
     await state.set_state(FilterCardState.waiting_for_action)
-    filter_card_kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="➕ Додати значення")],
-            [KeyboardButton(text="⬅️ Назад до категорії")],
-        ],
-        resize_keyboard=True,
-    )
+    keyboard_rows = [[KeyboardButton(text="➕ Додати значення")]]
+    if values:
+        keyboard_rows.append([KeyboardButton(text="✏️ Перейменувати значення")])
+        keyboard_rows.append([KeyboardButton(text="🗑️ Видалити значення")])
+    keyboard_rows.append([KeyboardButton(text="⬅️ Назад до категорії")])
+    filter_card_kb = ReplyKeyboardMarkup(keyboard=keyboard_rows, resize_keyboard=True)
     await message.answer(text, parse_mode="HTML", reply_markup=filter_card_kb)
 
 
@@ -5388,6 +5391,42 @@ async def filter_card_action(message: Message, state: FSMContext):
                 keyboard=[[KeyboardButton(text="⬅️ Назад")]],
                 resize_keyboard=True,
             ),
+        )
+        return
+
+    if message.text == "✏️ Перейменувати значення":
+        values = await db.list_filter_values(field_id)
+        if not values:
+            await message.answer("⚠️ Немає значень для перейменування.")
+            await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+            return
+        opts = [{"id": v["id"], "label": (v["label_ru"] or v["value"] or str(v["id"]))} for v in values]
+        await state.update_data(fv_value_options=opts)
+        await state.set_state(FilterCardState.waiting_for_rename_select)
+        buttons = [[KeyboardButton(text=o["label"])] for o in opts[:30]]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            f"✏️ <b>Перейменувати значення</b> [фільтр: {field_label}]\n\nОберіть значення:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
+        return
+
+    if message.text == "🗑️ Видалити значення":
+        values = await db.list_filter_values(field_id)
+        if not values:
+            await message.answer("⚠️ Немає значень для видалення.")
+            await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+            return
+        opts = [{"id": v["id"], "label": (v["label_ru"] or v["value"] or str(v["id"]))} for v in values]
+        await state.update_data(fv_value_options=opts)
+        await state.set_state(FilterCardState.waiting_for_delete_select)
+        buttons = [[KeyboardButton(text=o["label"])] for o in opts[:30]]
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await message.answer(
+            f"🗑️ <b>Видалити значення</b> [фільтр: {field_label}]\n\nОберіть значення:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
         )
         return
 
@@ -5419,6 +5458,118 @@ async def filter_card_add_value(message: Message, state: FSMContext):
         label_uk=value,
     )
     await message.answer(f"✅ Значення «<b>{value}</b>» додано.", parse_mode="HTML")
+    await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+
+
+@router.message(FilterCardState.waiting_for_rename_select)
+async def filter_card_rename_select(message: Message, state: FSMContext):
+    data = await state.get_data()
+    field_id = data.get("filter_field_id")
+    field_label = data.get("filter_label", "")
+    cat_key = data.get("cat_key", "")
+    cat_name = data.get("cat_name", "")
+    opts = data.get("fv_value_options", [])
+
+    if message.text == "⬅️ Назад":
+        await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+        return
+
+    selected = (message.text or "").strip()
+    match = next((o for o in opts if o["label"] == selected), None)
+    if not match:
+        await message.answer("⚠️ Оберіть значення зі списку.")
+        return
+
+    await state.update_data(rename_fv_id=match["id"], rename_fv_label=selected)
+    await state.set_state(FilterCardState.waiting_for_rename_input)
+    await message.answer(
+        f"✏️ Поточне значення: <b>{selected}</b>\n\nВведіть нову назву:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(FilterCardState.waiting_for_rename_input)
+async def filter_card_rename_input(message: Message, state: FSMContext):
+    data = await state.get_data()
+    field_id = data.get("filter_field_id")
+    field_label = data.get("filter_label", "")
+    cat_key = data.get("cat_key", "")
+    cat_name = data.get("cat_name", "")
+    fv_id = data.get("rename_fv_id")
+    old_label = data.get("rename_fv_label", "")
+
+    if message.text == "⬅️ Назад":
+        await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+        return
+
+    new_name = (message.text or "").strip()
+    if not new_name:
+        await message.answer("⚠️ Введіть нову назву:")
+        return
+
+    await db.update_filter_value(fv_id, new_name, new_name, new_name)
+    await message.answer(
+        f"✅ Значення перейменовано:\n<b>{old_label}</b> → <b>{new_name}</b>",
+        parse_mode="HTML",
+    )
+    await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+
+
+@router.message(FilterCardState.waiting_for_delete_select)
+async def filter_card_delete_select(message: Message, state: FSMContext):
+    data = await state.get_data()
+    field_id = data.get("filter_field_id")
+    field_label = data.get("filter_label", "")
+    cat_key = data.get("cat_key", "")
+    cat_name = data.get("cat_name", "")
+    opts = data.get("fv_value_options", [])
+
+    if message.text == "⬅️ Назад":
+        await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
+        return
+
+    selected = (message.text or "").strip()
+    match = next((o for o in opts if o["label"] == selected), None)
+    if not match:
+        await message.answer("⚠️ Оберіть значення зі списку.")
+        return
+
+    await state.update_data(delete_fv_id=match["id"], delete_fv_label=selected)
+    await state.set_state(FilterCardState.waiting_for_delete_confirm)
+    await message.answer(
+        f"🗑️ Видалити значення <b>{selected}</b>?\n\n"
+        "⚠️ Це видалить значення з усіх товарів, де воно вказане.",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="✅ Так, видалити")],
+                [KeyboardButton(text="❌ Скасувати")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(FilterCardState.waiting_for_delete_confirm)
+async def filter_card_delete_confirm(message: Message, state: FSMContext):
+    data = await state.get_data()
+    field_id = data.get("filter_field_id")
+    field_label = data.get("filter_label", "")
+    cat_key = data.get("cat_key", "")
+    cat_name = data.get("cat_name", "")
+    fv_id = data.get("delete_fv_id")
+    fv_label = data.get("delete_fv_label", "")
+
+    if message.text == "✅ Так, видалити":
+        await db.delete_filter_value(fv_id)
+        await message.answer(
+            f"🗑️ Значення <b>{fv_label}</b> видалено.",
+            parse_mode="HTML",
+        )
     await _show_filter_card(message, state, field_id, field_label, cat_key, cat_name)
 
 
