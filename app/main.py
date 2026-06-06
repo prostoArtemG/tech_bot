@@ -9074,7 +9074,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
                     "name_ua": _ff["label_uk"] or _ff["label_ru"],
                     "type": _ftype,
                     "unit": _ff["unit"] or "",
-                    "render_kind": "checkbox",
+                    "render_kind": "dropdown" if _fkey == "brand" else "checkbox",
                 })
                 dyn_options[_fkey] = _opts_render
     # ── OLD (category_attributes) ─ runs only when new system is not active ──

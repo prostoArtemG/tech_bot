@@ -284,12 +284,14 @@
             </div>
             <div class="filters-panel-body">
             <div class="search-filters-row">
+                {% if not dyn_options.get('brand') %}
                 <select name="brand" class="brand-select" onchange="this.form.submit()">
                   <option value="" data-ru="Все бренды" data-uk="Усі бренди">Все бренды</option>
                   {% for b in brands %}
                   <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
                   {% endfor %}
                 </select>
+                {% endif %}
                 <input type="number" name="price_min" class="price-input"
                     data-placeholder-ru="Цена от"
                     data-placeholder-uk="Ціна від"
@@ -357,6 +359,22 @@
                                 {% endfor %}
                             </div>
                         </fieldset>
+                        {% endif %}
+                    {% elif rk == 'dropdown' %}
+                        {% set opts = dyn_options.get(attr.attribute_key) or [] %}
+                        {% if opts %}
+                        {% set selected_vals = dyn_selected.get(attr.attribute_key) or [] %}
+                        <div class="dyn-filter dyn-filter-dropdown" data-attr="{{ attr.attribute_key }}">
+                            <select name="{{ attr.attribute_key }}" class="brand-select" onchange="this.form.submit()">
+                                <option value="" data-ru="{{ attr.name_ru }}" data-uk="{{ attr.name_ua }}">{{ attr.name_ua }}</option>
+                                {% for opt in opts %}
+                                <option value="{{ opt.value }}"
+                                    {% if opt.value in selected_vals %}selected{% endif %}>
+                                    {{ opt.label_ru }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
                         {% endif %}
                     {% elif rk == 'range' %}
                         {% set rng = dyn_range.get(attr.attribute_key) %}
