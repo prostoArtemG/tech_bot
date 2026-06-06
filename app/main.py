@@ -1770,10 +1770,11 @@ async def edit_field_callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(f"Введите новое значение для поля: {field_titles[field]}")
 
     await callback.answer()
-def inline_categories_kb(lang: str = "ru"):
+async def inline_categories_kb(lang: str = "ru") -> InlineKeyboardMarkup:
     """Клавиатура категорий, локализованная по языку пользователя.
 
-    Callback: add_category:<key> (стабильный ключ из app.categories).
+    Включает hardcoded категории из categories.py + пользовательские из БД.
+    Callback: add_category:<key>.
     """
     rows: list[list[InlineKeyboardButton]] = []
     items = categories_for_lang(lang)
@@ -1786,6 +1787,19 @@ def inline_categories_kb(lang: str = "ru"):
                 callback_data=f"add_category:{c['key']}",
             )
             for c in pair
+        ])
+    # Пользовательские категории (из справочников)
+    try:
+        custom_cats = await db.list_custom_categories()
+    except Exception:
+        custom_cats = []
+    for cc in custom_cats:
+        cc_label = (cc["name_uk"] if lang == "uk" else cc["name_ru"]) or cc["name_uk"] or cc["category_key"]
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{cc.get('emoji') or '📦'} {cc_label}",
+                callback_data=f"add_category:{cc['category_key']}",
+            )
         ])
     rows.append([
         InlineKeyboardButton(
@@ -4114,7 +4128,7 @@ async def global_menu_buttons_handler(message: Message, state: FSMContext):
         await state.clear()
         await state.set_state(AddProductState.waiting_for_category)
         _lang = await _user_lang(message.from_user.id)
-        await message.answer(await t(message, "enter_search"), reply_markup=inline_categories_kb(_lang))
+        await message.answer(await t(message, "enter_search"), reply_markup=await inline_categories_kb(_lang))
         return
 
     if text == "🌐 Сайт":
@@ -6812,7 +6826,7 @@ async def add_product_start_handler(message: Message, state: FSMContext):
     _lang = await _user_lang(message.from_user.id)
     await message.answer(
         "Выберите категорию:" if _lang == "ru" else "Оберіть категорію:",
-        reply_markup=inline_categories_kb(_lang)
+        reply_markup=await inline_categories_kb(_lang)
     )
 
 
@@ -6846,7 +6860,19 @@ async def add_category_callback(callback: CallbackQuery, state: FSMContext):
     # raw может быть и ключом (boilers), и легаси-текстом (Бойлер). Храним канон.
     category = category_canonical_ru(raw) or raw
     lang = await _user_lang(callback.from_user.id)
-    display = category_label(category, lang) or category
+    display = category_label(category, lang)
+    if not display:
+        # Попытка найти пользовательскую категорию
+        try:
+            custom_cats = await db.list_custom_categories()
+            for _cc in custom_cats:
+                if _cc["category_key"] == raw:
+                    display = ((_cc["name_uk"] if lang == "uk" else _cc["name_ru"])
+                               or _cc["name_uk"] or raw)
+                    break
+        except Exception:
+            pass
+    display = display or category
 
     await state.update_data(category=category)
     await state.set_state(AddProductState.waiting_for_brand)
@@ -7095,7 +7121,7 @@ async def add_product_brand_handler(message: Message, state: FSMContext):
         _lang = await _user_lang(message.from_user.id)
         await message.answer(
             "Выберите категорию:" if _lang == "ru" else "Оберіть категорію:",
-            reply_markup=inline_categories_kb(_lang),
+            reply_markup=await inline_categories_kb(_lang),
         )
         return
 
