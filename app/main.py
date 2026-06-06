@@ -9226,7 +9226,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     # ── Новая система фильтров (?new_filters=1 или авто для избранных категорий) ──
     # _AUTO_NEW_FILTERS_CATS — категории, для которых новые фильтры активны автоматически
     # (при наличии filter_fields; если их нет — fallback на старые).
-    _AUTO_NEW_FILTERS_CATS = {"boilers"}
+    _AUTO_NEW_FILTERS_CATS = {"boilers", "air_conditioners"}
     new_filters_mode = request.query_params.get("new_filters") == "1"
     _new_active = False
     if (new_filters_mode or target_key_dyn in _AUTO_NEW_FILTERS_CATS) and target_key_dyn:
