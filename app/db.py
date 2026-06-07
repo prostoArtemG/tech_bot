@@ -3530,5 +3530,47 @@ class Database:
         )
         return row["id"] if row else None
 
+    async def v2_list_products_by_category(self, category_id: int) -> list:
+        return await self.fetch(
+            """
+            SELECT p.id, p.category_id, p.category_brand_id, p.model, p.price,
+                   p.is_active, b.name AS brand_name
+            FROM v2_products p
+            JOIN v2_category_brands b ON b.id = p.category_brand_id
+            WHERE p.category_id = $1 AND p.deleted_at IS NULL
+            ORDER BY b.name ASC, p.model ASC
+            """,
+            category_id,
+        )
+
+    async def v2_create_product(
+        self,
+        category_id: int,
+        brand_id: int,
+        model: str,
+        price: float,
+    ) -> int | None:
+        row = await self.fetchrow(
+            """
+            INSERT INTO v2_products (category_id, category_brand_id, model, price)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id
+            """,
+            category_id, brand_id, model, price,
+        )
+        return row["id"] if row else None
+
+    async def v2_get_product_by_id(self, product_id: int):
+        return await self.fetchrow(
+            """
+            SELECT p.id, p.category_id, p.category_brand_id, p.model, p.price,
+                   p.is_active, b.name AS brand_name
+            FROM v2_products p
+            JOIN v2_category_brands b ON b.id = p.category_brand_id
+            WHERE p.id = $1
+            """,
+            product_id,
+        )
+
 
 db = Database(DATABASE_URL)

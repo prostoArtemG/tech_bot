@@ -1446,6 +1446,13 @@ class V2FilterValueState(StatesGroup):
     waiting_for_value = State()
 
 
+class V2ProductState(StatesGroup):
+    browsing          = State()  # список товарів
+    waiting_for_brand = State()  # вибір бренду
+    waiting_for_model = State()  # введення моделі
+    waiting_for_price = State()  # введення ціни
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -4950,7 +4957,10 @@ async def v2_category_card_handler(message: Message, state: FSMContext):
         return
 
     if text == "🛍 Товари":
-        await message.answer("🚧 У розробці.")
+        if not category_id:
+            await message.answer("⚠️ Категорію не знайдено.")
+            return
+        await _v2_show_category_products(message, state, int(category_id))
         return
 
 
@@ -5258,6 +5268,190 @@ async def v2_category_brand_name(message: Message, state: FSMContext):
         return
     await message.answer(f"✅ Бренд <b>{name}</b> додано!", parse_mode="HTML")
     await _v2_show_category_brands(message, state, int(category_id))
+
+
+# ── v2: Товари категорії ─────────────────────────────────────────────────────
+
+async def _v2_show_category_products(message: Message, state: FSMContext, category_id: int):
+    """Показує товари категорії через ReplyKeyboard."""
+    products = await db.v2_list_products_by_category(category_id)
+    buttons = []
+    buttons.append([KeyboardButton(text="➕ Додати товар")])
+    for p in products:
+        label = f"{p['brand_name']} — {p['model']}"
+        buttons.append([KeyboardButton(text=label)])
+    buttons.append([KeyboardButton(text="⬅️ Назад до категорії")])
+    header = "🛍 <b>Товари категорії</b>" + (
+        f"\n\nВсього: {len(products)}" if products else "\n\n<i>Поки немає жодного товару.</i>"
+    )
+    await state.update_data(v2_products_cat_id=category_id)
+    await state.set_state(V2ProductState.browsing)
+    await message.answer(
+        header,
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(V2ProductState.browsing)
+async def v2_product_browsing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_products_cat_id")
+
+    if text == "⬅️ Назад до категорії":
+        if category_id:
+            cat_row = await db.fetchrow(
+                "SELECT id, group_id, slug, name_uk, name_ru, emoji, sort_order, is_active "
+                "FROM v2_categories WHERE id = $1",
+                int(category_id),
+            )
+            if cat_row:
+                await _v2_show_category_card(message, state, dict(cat_row))
+                return
+        await _v2_show_product_groups(message, state)
+        return
+
+    if text == "➕ Додати товар":
+        if not category_id:
+            await message.answer("⚠️ Категорію не знайдено.")
+            return
+        brands = await db.v2_list_brands_by_category(int(category_id))
+        if not brands:
+            await message.answer("⚠️ Спочатку додайте бренд у цій категорії.")
+            return
+        brand_buttons = [[KeyboardButton(text=b["name"])] for b in brands]
+        brand_buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await state.set_state(V2ProductState.waiting_for_brand)
+        await message.answer(
+            "🏷 Оберіть бренд:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=brand_buttons, resize_keyboard=True),
+        )
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2ProductState.waiting_for_brand)
+async def v2_product_brand_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_products_cat_id")
+
+    if text == "⬅️ Назад":
+        if category_id:
+            await _v2_show_category_products(message, state, int(category_id))
+        return
+
+    if not category_id:
+        await message.answer("⚠️ Категорію не знайдено.")
+        return
+    brands = await db.v2_list_brands_by_category(int(category_id))
+    brand = next((b for b in brands if b["name"] == text), None)
+    if not brand:
+        await message.answer("⚠️ Оберіть бренд зі списку.")
+        return
+    await state.update_data(v2_new_product_brand_id=brand["id"], v2_new_product_brand_name=brand["name"])
+    await state.set_state(V2ProductState.waiting_for_model)
+    await message.answer(
+        f"🏷 Бренд: <b>{brand['name']}</b>\n\nВведіть модель:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2ProductState.waiting_for_model)
+async def v2_product_model_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    category_id = data.get("v2_products_cat_id")
+
+    if message.text == "⬅️ Назад":
+        if category_id:
+            brands = await db.v2_list_brands_by_category(int(category_id))
+            brand_buttons = [[KeyboardButton(text=b["name"])] for b in brands]
+            brand_buttons.append([KeyboardButton(text="⬅️ Назад")])
+            await state.set_state(V2ProductState.waiting_for_brand)
+            await message.answer(
+                "🏷 Оберіть бренд:",
+                reply_markup=ReplyKeyboardMarkup(keyboard=brand_buttons, resize_keyboard=True),
+            )
+        return
+
+    model = (message.text or "").strip()
+    if not model:
+        await message.answer("⚠️ Введіть модель:")
+        return
+    await state.update_data(v2_new_product_model=model)
+    await state.set_state(V2ProductState.waiting_for_price)
+    brand_name = data.get("v2_new_product_brand_name", "")
+    await message.answer(
+        f"🏷 Бренд: <b>{brand_name}</b>\n📝 Модель: <b>{model}</b>\n\nВведіть ціну (у грн):",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2ProductState.waiting_for_price)
+async def v2_product_price_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    category_id = data.get("v2_products_cat_id")
+    brand_id = data.get("v2_new_product_brand_id")
+    brand_name = data.get("v2_new_product_brand_name", "")
+    model = data.get("v2_new_product_model", "")
+
+    if message.text == "⬅️ Назад":
+        await state.set_state(V2ProductState.waiting_for_model)
+        await message.answer(
+            f"🏷 Бренд: <b>{brand_name}</b>\n\nВведіть модель:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    price_text = (message.text or "").strip().replace(",", ".")
+    try:
+        price = float(price_text)
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("⚠️ Неправильна ціна. Введіть число грн:")
+        return
+    if not category_id or not brand_id or not model:
+        await message.answer("⚠️ Помилка даних. Почніть знову.")
+        return
+    try:
+        await db.v2_create_product(
+            category_id=int(category_id),
+            brand_id=int(brand_id),
+            model=model,
+            price=price,
+        )
+    except Exception as _e:
+        print(f"[v2_create_product] {_e}")
+        await message.answer("⚠️ Помилка при збереженні.")
+        return
+    await message.answer(
+        f"✅ Товар <b>{brand_name} {model}</b> додано!\nЦіна: {price:.2f} грн",
+        parse_mode="HTML",
+    )
+    await _v2_show_category_products(message, state, int(category_id))
 
 
 async def v2_product_group_add_start(message: Message, state: FSMContext):
