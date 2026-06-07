@@ -5069,7 +5069,7 @@ async def v2_filter_name(message: Message, state: FSMContext):
 # ── v2: Бренди категорії ─────────────────────────────────────────────────────
 
 async def _v2_show_category_brands(message: Message, state: FSMContext, category_id: int):
-    """Показує бренди категорії через InlineKeyboard."""
+    """Показує бренди категорії через InlineKeyboard, прибираючи ReplyKeyboard."""
     brands = await db.v2_list_brands_by_category(category_id)
     kb = []
     for b in brands:
@@ -5084,11 +5084,9 @@ async def _v2_show_category_brands(message: Message, state: FSMContext, category
         v2_viewing_cat_id=category_id,
         v2_current_category_id=category_id,
     )
-    await message.answer(
-        header,
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
-    )
+    # Спочатку прибираємо ReplyKeyboard, потім додаємо InlineKeyboard до того ж повідомлення
+    sent = await message.answer(header, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+    await sent.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 
 class _BrandsBackFilter(BaseFilter):
