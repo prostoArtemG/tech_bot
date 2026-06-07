@@ -4512,7 +4512,7 @@ async def directories_menu_handler(message: Message, state: FSMContext):
 # ── Admin v2 ──────────────────────────────────────────────────────────────────
 
 _ADMIN_V2_BUTTONS = {
-    "📦 Каталог v2", " Категорії",
+    "📦 Каталог v2", "📂 Категорії",
     "🏷 Бренди", "🔧 Фільтри", "🛍 Товари", "🌐 Сайт v2",
 }
 
@@ -4527,13 +4527,6 @@ async def admin_v2_menu_handler(message: Message, state: FSMContext):
         parse_mode="HTML",
         reply_markup=admin_v2_kb,
     )
-
-
-@router.message(lambda m: m.text in _ADMIN_V2_BUTTONS)
-async def admin_v2_stub_handler(message: Message, state: FSMContext):
-    if not await require_admin(message):
-        return
-    await message.answer("🚧 Розділ v2 у розробці.")
 
 
 # ── v2: Групи товарів ─────────────────────────────────────────────────────────
@@ -4577,8 +4570,7 @@ async def v2_product_group_add_start(message: Message, state: FSMContext):
         return
     await state.set_state(V2ProductGroupState.waiting_for_name_uk)
     await message.answer(
-        "📁 <b>Нова група</b> — крок 1/3\n\nВведіть назву групи (UA):",
-        parse_mode="HTML",
+        "Введіть назву групи UA:",
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="⬅️ Назад")]],
             resize_keyboard=True,
@@ -4619,8 +4611,7 @@ async def v2_product_group_name_ru(message: Message, state: FSMContext):
     if message.text == "⬅️ Назад":
         await state.set_state(V2ProductGroupState.waiting_for_name_uk)
         await message.answer(
-            "📁 <b>Нова група</b> — крок 1/3\n\nВведіть назву групи (UA):",
-            parse_mode="HTML",
+            "Введіть назву групи UA:",
             reply_markup=ReplyKeyboardMarkup(
                 keyboard=[[KeyboardButton(text="⬅️ Назад")]],
                 resize_keyboard=True,
@@ -4688,6 +4679,13 @@ async def v2_product_group_emoji(message: Message, state: FSMContext):
         parse_mode="HTML",
     )
     await _v2_show_product_groups(message, state)
+
+
+@router.message(lambda m: m.text in _ADMIN_V2_BUTTONS)
+async def admin_v2_stub_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await message.answer("🚧 Розділ v2 у розробці.")
 
 
 def _make_category_key(text: str) -> str:
