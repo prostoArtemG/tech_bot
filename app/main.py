@@ -18,7 +18,7 @@ def now_kyiv_str() -> str:
     return now.strftime("%d.%m.%Y %H:%M")
 
 from aiogram import Bot, Dispatcher, Router
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import BaseFilter, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
@@ -2135,7 +2135,7 @@ async def set_language(message: Message, state: FSMContext):
     await message.answer(text, reply_markup=menu)
 
 
-@router.message(lambda m: m.text == "⬅️ Назад")
+@router.message(StateFilter(None), lambda m: m.text == "⬅️ Назад")
 async def back_handler(message: Message, state: FSMContext):
     await state.clear()
     menu = await get_main_menu_for_user(message)
@@ -5071,7 +5071,6 @@ async def v2_filter_name(message: Message, state: FSMContext):
 async def _v2_show_category_brands(message: Message, state: FSMContext, category_id: int):
     """Показує бренди категорії кнопками."""
     brands = await db.v2_list_brands_by_category(category_id)
-    # Сервісна кнопка — першою (вгорі), бренди — в кінці (внизу, видимі)
     buttons = []
     buttons.append([KeyboardButton(text="➕ Додати бренд")])
     for b in brands:
@@ -5089,45 +5088,66 @@ async def _v2_show_category_brands(message: Message, state: FSMContext, category
     )
 
 
+class _BrandsBackFilter(BaseFilter):
+    """Пропускає '⬅️ Назад до категорії' тільки в контексті брендів."""
+
+    async def __call__(self, message: Message, state: FSMContext) -> bool:
+        current = await state.get_state()
+        if current and (
+            current.startswith("V2FilterState:")
+            or current.startswith("FilterCardState:")
+        ):
+            return False
+        data = await state.get_data()
+        return bool(data.get("v2_brands_cat_id"))
+
+
+@router.message(lambda m: m.text == "➕ Додати бренд")
+async def v2_brand_add_start_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    category_id = data.get("v2_brands_cat_id")
+    if not category_id:
+        return
+    await state.set_state(V2CategoryBrandState.waiting_for_name)
+    await message.answer(
+        "Введіть назву бренду:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(lambda m: m.text == "⬅️ Назад до категорії", _BrandsBackFilter())
+async def v2_brand_back_to_category_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    category_id = data.get("v2_brands_cat_id") or data.get("v2_viewing_cat_id")
+    if category_id:
+        cat_row = await db.fetchrow(
+            "SELECT id, group_id, slug, name_uk, name_ru, emoji, sort_order, is_active "
+            "FROM v2_categories WHERE id = $1",
+            int(category_id),
+        )
+        if cat_row:
+            await _v2_show_category_card(message, state, dict(cat_row))
+            return
+    await _v2_show_product_groups(message, state)
+
+
 @router.message(V2CategoryBrandState.browsing)
-async def v2_category_brand_browsing_handler(message: Message, state: FSMContext):
+async def v2_brand_click_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     text = (message.text or "").strip()
     data = await state.get_data()
     category_id = data.get("v2_brands_cat_id")
-    group_id = data.get("v2_cats_group_id")
-
-    if text == "⬅️ Назад до категорії":
-        # Прямий запит за category_id — не залежить від group_id та типу поля
-        if category_id:
-            cat_row = await db.fetchrow(
-                "SELECT id, group_id, slug, name_uk, name_ru, emoji, sort_order, is_active "
-                "FROM v2_categories WHERE id = $1",
-                int(category_id),
-            )
-            if cat_row:
-                await _v2_show_category_card(message, state, dict(cat_row))
-                return
-        await _v2_show_product_groups(message, state)
-        return
-
-    if text == "➕ Додати бренд":
-        await state.set_state(V2CategoryBrandState.waiting_for_name)
-        await message.answer(
-            "Введіть назву бренду:",
-            reply_markup=ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
-                resize_keyboard=True,
-            ),
-        )
-        return
-
-    # Вибір бренду — проста відповідь-заглушка
     if category_id:
         brands = await db.v2_list_brands_by_category(int(category_id))
-        brand_names = {b["name"] for b in brands}
-        if text in brand_names:
+        if text in {b["name"] for b in brands}:
             await message.answer(f"🏷 Бренд: <b>{text}</b>", parse_mode="HTML")
             return
     await message.answer("⚠️ Оберіть бренд зі списку.")
@@ -7785,7 +7805,7 @@ async def profit_menu_handler(message: Message, state: FSMContext):
     )
 
 
-@router.message(lambda m: m.text == "⬅️ Назад")
+@router.message(StateFilter(None), lambda m: m.text == "⬅️ Назад")
 async def back_handler(message: Message, state: FSMContext):
     await state.clear()
     menu = await get_main_menu_for_user(message)
