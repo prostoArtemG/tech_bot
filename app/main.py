@@ -1417,6 +1417,8 @@ class SetProductFilterState(StatesGroup):
 
 
 class V2ProductGroupState(StatesGroup):
+    browsing    = State()  # список груп — чекаємо вибору
+    viewing     = State()  # карточка групи
     waiting_for_name_uk = State()
     waiting_for_name_ru = State()
     waiting_for_emoji   = State()
@@ -4516,23 +4518,49 @@ async def admin_v2_menu_handler(message: Message, state: FSMContext):
 # ── v2: Групи товарів ─────────────────────────────────────────────────────────
 
 async def _v2_show_product_groups(message: Message, state: FSMContext):
-    """Показує список груп v2 з кнопками."""
+    """Показує список груп v2 — кожна група окремою кнопкою."""
     groups = await db.v2_list_product_groups()
-    if groups:
-        lines = []
-        for g in groups:
-            em = (g["emoji"] or "").strip()
-            lines.append(f"{em} {g['name_uk'] or g['name_ru']}".strip())
-        text = "📁 <b>Групи товарів v2</b>\n\n" + "\n".join(lines)
-    else:
-        text = "📁 <b>Групи товарів v2</b>\n\n<i>Поки немає жодної групи.</i>"
-    await state.set_state(None)
+    buttons = []
+    for g in groups:
+        em = (g["emoji"] or "").strip()
+        label = f"{em} {g['name_uk'] or g['name_ru']}".strip()
+        buttons.append([KeyboardButton(text=label)])
+    buttons.append([KeyboardButton(text="➕ Додати групу")])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    header = "📁 <b>Групи товарів v2</b>" + (
+        f"\n\nВсього: {len(groups)}" if groups else "\n\n<i>Поки немає жодної групи.</i>"
+    )
+    await state.set_state(V2ProductGroupState.browsing)
+    await message.answer(
+        header,
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+async def _v2_show_group_card(message: Message, state: FSMContext, group: dict):
+    """Показує карточку однієї групи."""
+    cat_count_row = await db.fetchrow(
+        "SELECT COUNT(*) AS cnt FROM v2_categories WHERE group_id = $1",
+        group["id"],
+    )
+    cat_count = int(cat_count_row["cnt"]) if cat_count_row else 0
+    em = (group["emoji"] or "").strip()
+    name = (group["name_uk"] or group["name_ru"] or "").strip()
+    text = (
+        f"{em} <b>{name}</b>\n\n"
+        f"📂 Категорії групи: {cat_count}"
+    )
+    await state.update_data(v2_viewing_group_id=group["id"])
+    await state.set_state(V2ProductGroupState.viewing)
     await message.answer(
         text,
         parse_mode="HTML",
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="➕ Додати групу")],
+                [KeyboardButton(text="📂 Категорії")],
+                [KeyboardButton(text="✏️ Перейменувати")],
+                [KeyboardButton(text="🗑 Видалити")],
                 [KeyboardButton(text="⬅️ Назад")],
             ],
             resize_keyboard=True,
@@ -4546,6 +4574,58 @@ async def v2_product_groups_handler(message: Message, state: FSMContext):
         return
     await state.clear()
     await _v2_show_product_groups(message, state)
+
+
+@router.message(V2ProductGroupState.browsing)
+async def v2_product_groups_browsing_handler(message: Message, state: FSMContext):
+    """Хендлер стану browsing: ⬅️ Назад, ➕ Додати групу, або вибір групи."""
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        await state.clear()
+        await message.answer(
+            "🆕 <b>Адмін v2</b>\n\nОберіть розділ:",
+            parse_mode="HTML",
+            reply_markup=admin_v2_kb,
+        )
+        return
+    if text == "➕ Додати групу":
+        await state.set_state(V2ProductGroupState.waiting_for_name_uk)
+        await message.answer(
+            "Введіть назву групи UA:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+    # Інакше — вибір групи за текстом кнопки
+    groups = await db.v2_list_product_groups()
+    for g in groups:
+        em = (g["emoji"] or "").strip()
+        label = f"{em} {g['name_uk'] or g['name_ru']}".strip()
+        if text == label:
+            await _v2_show_group_card(message, state, dict(g))
+            return
+    await message.answer("⚠️ Оберіть групу зі списку або натисніть ⬅️ Назад.")
+
+
+@router.message(V2ProductGroupState.viewing)
+async def v2_product_group_card_handler(message: Message, state: FSMContext):
+    """Хендлер карточки групи."""
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        await _v2_show_product_groups(message, state)
+        return
+    if text == "📂 Категорії":
+        await message.answer("🚧 Розділ категорій v2 у розробці.")
+        return
+    if text in ("✏️ Перейменувати", "🗑 Видалити"):
+        await message.answer("🚧 У розробці.")
+        return
 
 
 @router.message(lambda m: m.text == "➕ Додати групу")
@@ -4565,7 +4645,6 @@ async def v2_product_group_add_start(message: Message, state: FSMContext):
 @router.message(V2ProductGroupState.waiting_for_name_uk)
 async def v2_product_group_name_uk(message: Message, state: FSMContext):
     if message.text == "⬅️ Назад":
-        await state.clear()
         await _v2_show_product_groups(message, state)
         return
     name_uk = (message.text or "").strip()
