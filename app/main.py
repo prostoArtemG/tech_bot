@@ -4880,22 +4880,12 @@ async def v2_category_emoji(message: Message, state: FSMContext):
 
 # ── v2: Карточка категорії ───────────────────────────────────────────────────
 
-_v2_category_card_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🏷 Бренди")],
-        [KeyboardButton(text="🔧 Фільтри")],
-        [KeyboardButton(text="🛍 Товари")],
-        [KeyboardButton(text="⬅️ Назад до категорій")],
-    ],
-    resize_keyboard=True,
-)
-
-
 async def _v2_show_category_card(message: Message, state: FSMContext, cat: dict):
-    """Показує карточку категорії з лічильниками."""
+    """Показує карточку категорії через InlineKeyboard."""
     em = (cat["emoji"] or "").strip()
     name = cat["name_uk"] or cat["name_ru"] or ""
     cat_id = cat["id"]
+    group_id = cat.get("group_id") or 0
     brand_row = await db.fetchrow(
         "SELECT COUNT(*) AS cnt FROM v2_category_brands WHERE category_id = $1", cat_id
     )
@@ -4914,9 +4904,15 @@ async def _v2_show_category_card(message: Message, state: FSMContext, cat: dict)
         f"🔧 Фільтри: {filter_cnt}\n"
         f"🛍 Товари: {product_cnt}"
     )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏷 Бренди", callback_data=f"v2_cat_brands:{cat_id}")],
+        [InlineKeyboardButton(text="🔧 Фільтри", callback_data=f"v2_cat_filters:{cat_id}")],
+        [InlineKeyboardButton(text="🛍 Товари", callback_data=f"v2_cat_products:{cat_id}")],
+        [InlineKeyboardButton(text="⬅️ Назад до категорій", callback_data=f"v2_group_categories:{group_id}")],
+    ])
     await state.update_data(v2_viewing_cat_id=cat_id)
     await state.set_state(V2CategoryState.viewing)
-    await message.answer(header, parse_mode="HTML", reply_markup=_v2_category_card_kb)
+    await message.answer(header, parse_mode="HTML", reply_markup=kb)
 
 
 @router.message(V2CategoryState.viewing)
@@ -4952,6 +4948,41 @@ async def v2_category_card_handler(message: Message, state: FSMContext):
     if text == "🛍 Товари":
         await message.answer("🚧 У розробці.")
         return
+
+
+@router.callback_query(lambda c: c.data.startswith("v2_cat_brands:"))
+async def v2_cat_brands_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    if not is_system_admin(callback.from_user.id):
+        return
+    category_id = int(callback.data.split(":")[1])
+    await _v2_show_category_brands(callback.message, state, category_id)
+
+
+@router.callback_query(lambda c: c.data.startswith("v2_cat_filters:"))
+async def v2_cat_filters_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    if not is_system_admin(callback.from_user.id):
+        return
+    category_id = int(callback.data.split(":")[1])
+    await _v2_show_category_filters(callback.message, state, category_id)
+
+
+@router.callback_query(lambda c: c.data.startswith("v2_cat_products:"))
+async def v2_cat_products_callback(callback: CallbackQuery):
+    await callback.answer("🚧 У розробці", show_alert=True)
+
+
+@router.callback_query(lambda c: c.data.startswith("v2_group_categories:"))
+async def v2_group_categories_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    if not is_system_admin(callback.from_user.id):
+        return
+    group_id = int(callback.data.split(":")[1])
+    if group_id:
+        await _v2_show_group_categories(callback.message, state, group_id)
+    else:
+        await _v2_show_product_groups(callback.message, state)
 
 
 # ── v2: Фільтри категорії ─────────────────────────────────────────────────────
