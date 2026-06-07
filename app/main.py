@@ -5100,24 +5100,27 @@ async def v2_filter_name(message: Message, state: FSMContext):
 # ── v2: Бренди категорії ─────────────────────────────────────────────────────
 
 async def _v2_show_category_brands(message: Message, state: FSMContext, category_id: int):
-    """Показує бренди категорії через InlineKeyboard, прибираючи ReplyKeyboard."""
-    brands = await db.v2_list_brands_by_category(category_id)
-    kb = []
-    for b in brands:
-        kb.append([InlineKeyboardButton(text=f"🏷 {b['name']}", callback_data=f"v2_brand_view:{b['id']}")])
-    kb.append([InlineKeyboardButton(text="➕ Додати бренд", callback_data=f"v2_brand_add:{category_id}")])
-    kb.append([InlineKeyboardButton(text="⬅️ Назад до категорії", callback_data=f"v2_cat:{category_id}")])
-    header = "🏷 <b>Бренди категорії</b>" + (
-        f"\n\nВсього: {len(brands)}" if brands else "\n\n<i>Поки немає жодного бренду.</i>"
-    )
-    await state.update_data(
-        v2_brands_cat_id=category_id,
-        v2_viewing_cat_id=category_id,
-        v2_current_category_id=category_id,
-    )
-    # Спочатку прибираємо ReplyKeyboard, потім додаємо InlineKeyboard до того ж повідомлення
-    sent = await message.answer(header, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
-    await sent.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    """Показує бренди категорії через InlineKeyboard."""
+    try:
+        brands = await db.v2_list_brands_by_category(category_id)
+        kb = []
+        for b in brands:
+            kb.append([InlineKeyboardButton(text=f"🏷 {b['name']}", callback_data=f"v2_brand_view:{b['id']}")])
+        kb.append([InlineKeyboardButton(text="➕ Додати бренд", callback_data=f"v2_brand_add:{category_id}")])
+        kb.append([InlineKeyboardButton(text="⬅️ Назад до категорії", callback_data=f"v2_cat:{category_id}")])
+        header = "🏷 <b>Бренди категорії</b>" + (
+            f"\n\nВсього: {len(brands)}" if brands else "\n\n<i>Поки немає жодного бренду.</i>"
+        )
+        await state.update_data(
+            v2_brands_cat_id=category_id,
+            v2_viewing_cat_id=category_id,
+            v2_current_category_id=category_id,
+        )
+        await message.answer(header, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        await message.answer("⚠️ Помилка при відображенні брендів.")
 
 
 class _BrandsBackFilter(BaseFilter):
