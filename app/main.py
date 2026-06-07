@@ -1784,27 +1784,11 @@ site_categories_kb = ReplyKeyboardMarkup(
 admin_v2_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Каталог v2")],
-        [KeyboardButton(text="📁 Группы товаров")],
-        [KeyboardButton(text="📂 Категории")],
-        [KeyboardButton(text="🏷 Бренды")],
-        [KeyboardButton(text="🔧 Фильтры")],
-        [KeyboardButton(text="🛒 Товары")],
-        [KeyboardButton(text="🌐 Сайт v2")],
-        [KeyboardButton(text="⬅️ Назад")],
-    ],
-    resize_keyboard=True,
-)
-
-
-# ── Admin v2 клавіатура ──────────────────────────────────────────────────────
-admin_v2_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📦 Каталог v2")],
-        [KeyboardButton(text="📁 Группы товаров")],
-        [KeyboardButton(text="📂 Категории")],
-        [KeyboardButton(text="🏷 Бренды")],
-        [KeyboardButton(text="🔧 Фильтры")],
-        [KeyboardButton(text="🛒 Товары")],
+        [KeyboardButton(text="📁 Групи товарів")],
+        [KeyboardButton(text="📂 Категорії")],
+        [KeyboardButton(text="🏷 Бренди")],
+        [KeyboardButton(text="🔧 Фільтри")],
+        [KeyboardButton(text="🛍 Товари")],
         [KeyboardButton(text="🌐 Сайт v2")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
