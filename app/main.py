@@ -4988,17 +4988,16 @@ async def v2_filter_browsing_handler(message: Message, state: FSMContext):
     group_id = data.get("v2_cats_group_id")
 
     if text == "⬅️ Назад до категорії":
-        cat_id = data.get("v2_viewing_cat_id")
-        if cat_id:
-            cats = await db.v2_list_categories_by_group(int(group_id)) if group_id else []
-            for c in cats:
-                if c["id"] == cat_id:
-                    await _v2_show_category_card(message, state, dict(c))
-                    return
-        if group_id:
-            await _v2_show_group_categories(message, state, int(group_id))
-        else:
-            await _v2_show_product_groups(message, state)
+        if category_id:
+            cat_row = await db.fetchrow(
+                "SELECT id, group_id, slug, name_uk, name_ru, emoji, sort_order, is_active "
+                "FROM v2_categories WHERE id = $1",
+                int(category_id),
+            )
+            if cat_row:
+                await _v2_show_category_card(message, state, dict(cat_row))
+                return
+        await _v2_show_product_groups(message, state)
         return
 
     if text == "➕ Додати фільтр":
@@ -5081,7 +5080,7 @@ async def _v2_show_category_brands(message: Message, state: FSMContext, category
     header = "🏷 <b>Бренди категорії</b>" + (
         f"\n\nВсього: {len(brands)}" if brands else "\n\n<i>Поки немає жодного бренду.</i>"
     )
-    await state.update_data(v2_brands_cat_id=category_id)
+    await state.update_data(v2_brands_cat_id=category_id, v2_viewing_cat_id=category_id)
     await state.set_state(V2CategoryBrandState.browsing)
     await message.answer(
         header,
@@ -5100,19 +5099,17 @@ async def v2_category_brand_browsing_handler(message: Message, state: FSMContext
     group_id = data.get("v2_cats_group_id")
 
     if text == "⬅️ Назад до категорії":
-        # Відновити карточку категорії
-        cat_id = data.get("v2_viewing_cat_id")
-        if cat_id:
-            cats = await db.v2_list_categories_by_group(int(group_id)) if group_id else []
-            for c in cats:
-                if c["id"] == cat_id:
-                    await _v2_show_category_card(message, state, dict(c))
-                    return
-        # fallback
-        if group_id:
-            await _v2_show_group_categories(message, state, int(group_id))
-        else:
-            await _v2_show_product_groups(message, state)
+        # Прямий запит за category_id — не залежить від group_id та типу поля
+        if category_id:
+            cat_row = await db.fetchrow(
+                "SELECT id, group_id, slug, name_uk, name_ru, emoji, sort_order, is_active "
+                "FROM v2_categories WHERE id = $1",
+                int(category_id),
+            )
+            if cat_row:
+                await _v2_show_category_card(message, state, dict(cat_row))
+                return
+        await _v2_show_product_groups(message, state)
         return
 
     if text == "➕ Додати бренд":
@@ -5126,14 +5123,13 @@ async def v2_category_brand_browsing_handler(message: Message, state: FSMContext
         )
         return
 
-    # Вибір бренду — заглушка
+    # Вибір бренду — проста відповідь-заглушка
     if category_id:
         brands = await db.v2_list_brands_by_category(int(category_id))
-        for b in brands:
-            if text == b["name"]:
-                await message.answer(f"🏷 Бренд: <b>{b['name']}</b>\n\n🚧 Редагування у розробці.",
-                                     parse_mode="HTML")
-                return
+        brand_names = {b["name"] for b in brands}
+        if text in brand_names:
+            await message.answer(f"🏷 Бренд: <b>{text}</b>", parse_mode="HTML")
+            return
     await message.answer("⚠️ Оберіть бренд зі списку.")
 
 
