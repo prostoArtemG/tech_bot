@@ -1774,6 +1774,38 @@ site_categories_kb = ReplyKeyboardMarkup(
 )
 
 
+# ── Admin v2 keyboard ────────────────────────────────────────────────────────
+admin_v2_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📦 Каталог v2")],
+        [KeyboardButton(text="📁 Группы товаров")],
+        [KeyboardButton(text="📂 Категории")],
+        [KeyboardButton(text="🏷 Бренды")],
+        [KeyboardButton(text="🔧 Фильтры")],
+        [KeyboardButton(text="🛒 Товары")],
+        [KeyboardButton(text="🌐 Сайт v2")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
+)
+
+
+# ── Admin v2 клавіатура ──────────────────────────────────────────────────────
+admin_v2_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📦 Каталог v2")],
+        [KeyboardButton(text="📁 Группы товаров")],
+        [KeyboardButton(text="📂 Категории")],
+        [KeyboardButton(text="🏷 Бренды")],
+        [KeyboardButton(text="🔧 Фильтры")],
+        [KeyboardButton(text="🛒 Товары")],
+        [KeyboardButton(text="🌐 Сайт v2")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
+)
+
+
 users_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📋 Список пользователей")],
@@ -2150,6 +2182,9 @@ async def get_main_menu_for_user(message: Message):
                 ],
                 [
                     KeyboardButton(text="⚙️ Справочники"),
+                ],
+                [
+                    KeyboardButton(text="🆕 Адмін v2"),
                 ],
             ],
             resize_keyboard=True
@@ -4468,7 +4503,34 @@ async def directories_menu_handler(message: Message, state: FSMContext):
     await message.answer("Справочники:", reply_markup=directories_kb)
 
 
-def _make_category_key(text: str) -> str:
+# ── Admin v2 ──────────────────────────────────────────────────────────────────
+
+_ADMIN_V2_BUTTONS = {
+    "📦 Каталог v2", "📁 Групи товарів", "📂 Категорії",
+    "🏷 Бренди", "🔧 Фільтри", "🛍 Товари", "🌐 Сайт v2",
+}
+
+
+@router.message(lambda m: m.text == "🆕 Адмін v2")
+async def admin_v2_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer(
+        "🆕 <b>Адмін v2</b>\n\nОберіть розділ:",
+        parse_mode="HTML",
+        reply_markup=admin_v2_kb,
+    )
+
+
+@router.message(lambda m: m.text in _ADMIN_V2_BUTTONS)
+async def admin_v2_stub_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await message.answer("🚧 Розділ v2 у розробці.")
+
+
+
     """Генерирует ASCII-слаг из произвольного текста.
     Транслитерирует кириллицу (украинскую/русскую), пробелы → _.
     Пример: 'Електрочайники' → 'elektrochayniky'
