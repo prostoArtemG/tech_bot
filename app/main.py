@@ -4299,7 +4299,6 @@ async def payment_pay_stub_handler(message: Message):
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
-    print("DEBUG GLOBAL:", repr(message.text), current_state)  # DEBUG
     if current_state:
         return
 
@@ -5080,7 +5079,11 @@ async def _v2_show_category_brands(message: Message, state: FSMContext, category
     header = "🏷 <b>Бренди категорії</b>" + (
         f"\n\nВсього: {len(brands)}" if brands else "\n\n<i>Поки немає жодного бренду.</i>"
     )
-    await state.update_data(v2_brands_cat_id=category_id, v2_viewing_cat_id=category_id)
+    await state.update_data(
+        v2_brands_cat_id=category_id,
+        v2_viewing_cat_id=category_id,
+        v2_current_category_id=category_id,
+    )
     await state.set_state(V2CategoryBrandState.browsing)
     await message.answer(
         header,
@@ -5103,28 +5106,8 @@ class _BrandsBackFilter(BaseFilter):
         return bool(data.get("v2_brands_cat_id"))
 
 
-@router.message(lambda m: m.text == "➕ Додати бренд")
-async def v2_brand_add_start_handler(message: Message, state: FSMContext):
-    print("DEBUG BRAND ADD:", repr(message.text), await state.get_state())  # DEBUG
-    if not await require_admin(message):
-        return
-    data = await state.get_data()
-    category_id = data.get("v2_brands_cat_id")
-    if not category_id:
-        return
-    await state.set_state(V2CategoryBrandState.waiting_for_name)
-    await message.answer(
-        "Введіть назву бренду:",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
-            resize_keyboard=True,
-        ),
-    )
-
-
 @router.message(lambda m: m.text == "⬅️ Назад до категорії", _BrandsBackFilter())
 async def v2_brand_back_to_category_handler(message: Message, state: FSMContext):
-    print("DEBUG BRAND BACK:", repr(message.text), await state.get_state())  # DEBUG
     if not await require_admin(message):
         return
     data = await state.get_data()
@@ -5143,18 +5126,34 @@ async def v2_brand_back_to_category_handler(message: Message, state: FSMContext)
 
 @router.message(V2CategoryBrandState.browsing)
 async def v2_brand_click_handler(message: Message, state: FSMContext):
-    print("DEBUG BRAND CLICK:", repr(message.text), await state.get_state())  # DEBUG
     if not await require_admin(message):
         return
     text = (message.text or "").strip()
     data = await state.get_data()
     category_id = data.get("v2_brands_cat_id")
+
+    if text == "➕ Додати бренд":
+        await state.set_state(V2CategoryBrandState.waiting_for_name)
+        await message.answer(
+            "Введіть назву бренду:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
     if category_id:
         brands = await db.v2_list_brands_by_category(int(category_id))
         if text in {b["name"] for b in brands}:
             await message.answer(f"🏷 Бренд: <b>{text}</b>", parse_mode="HTML")
             return
     await message.answer("⚠️ Оберіть бренд зі списку.")
+
+
+@router.message(StateFilter(None), lambda m: m.text == "➕ Додати бренд")
+async def v2_brand_add_no_state_handler(message: Message):
+    await message.answer("Спочатку відкрийте категорію → 🏷 Бренди")
 
 
 @router.message(V2CategoryBrandState.waiting_for_name)
@@ -11917,7 +11916,6 @@ async def start_web_server():
 
 @web_app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
-    print("=== WEBHOOK HIT ===")  # DEBUG
     if telegram_bot is None or dispatcher is None:
         raise HTTPException(status_code=503, detail="Bot not ready")
     if TELEGRAM_SECRET_TOKEN:
@@ -11932,7 +11930,6 @@ async def telegram_webhook(request: Request):
 
 @web_app.on_event("startup")
 async def _on_startup():
-    print("=== DEBUG BUILD 777 ===")  # DEBUG
     global telegram_bot, dispatcher, _polling_task
 
     if telegram_bot is not None:
