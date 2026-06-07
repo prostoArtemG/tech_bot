@@ -1448,9 +1448,15 @@ class V2FilterValueState(StatesGroup):
 
 class V2ProductState(StatesGroup):
     browsing          = State()  # список товарів
+    viewing           = State()  # карточка товару
     waiting_for_brand = State()  # вибір бренду
     waiting_for_model = State()  # введення моделі
     waiting_for_price = State()  # введення ціни
+
+
+class V2ProductFilterState(StatesGroup):
+    waiting_for_field = State()  # вибір з передвизначених значень
+    waiting_for_value = State()  # довільний текстовий ввід
 
 
 admin_menu_kb = ReplyKeyboardMarkup(
@@ -5331,10 +5337,201 @@ async def v2_product_browsing_handler(message: Message, state: FSMContext):
         )
         return
 
+    # Вибір товару зі списку → карточка
+    if category_id:
+        products = await db.v2_list_products_by_category(int(category_id))
+        for p in products:
+            label = f"{p['brand_name']} — {p['model']}"
+            if text == label:
+                await _v2_show_product_card(message, state, int(p["id"]))
+                return
+
     await message.answer("⚠️ Оберіть дію зі списку.")
 
 
-@router.message(V2ProductState.waiting_for_brand)
+async def _v2_show_product_card(message: Message, state: FSMContext, product_id: int):
+    """Показує карточку товару."""
+    product = await db.v2_get_product_by_id(product_id)
+    if not product:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    fields = await db.v2_list_filter_fields_by_category(int(product["category_id"]))
+    filled = await db.v2_get_product_filter_values(product_id)
+    total_cnt = len(fields)
+    filled_cnt = len(filled)
+    header = (
+        f"🛍 <b>{product['brand_name']} {product['model']}</b>\n"
+        f"💰 {float(product['price']):.2f} грн\n\n"
+        f"🔧 Фільтри: {filled_cnt}/{total_cnt}"
+    )
+    kb = ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="🔧 Заповнити фільтри")],
+        [KeyboardButton(text="⬅️ Назад до товарів")],
+    ], resize_keyboard=True)
+    await state.update_data(v2_viewing_product_id=product_id, v2_products_cat_id=int(product["category_id"]))
+    await state.set_state(V2ProductState.viewing)
+    await message.answer(header, parse_mode="HTML", reply_markup=kb)
+
+
+@router.message(V2ProductState.viewing)
+async def v2_product_viewing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_viewing_product_id")
+    category_id = data.get("v2_products_cat_id")
+
+    if text == "⬅️ Назад до товарів":
+        if category_id:
+            await _v2_show_category_products(message, state, int(category_id))
+        return
+
+    if text == "🔧 Заповнити фільтри":
+        if not product_id or not category_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        fields = await db.v2_list_filter_fields_by_category(int(category_id))
+        if not fields:
+            await message.answer("⚠️ У цій категорії немає фільтрів.")
+            return
+        fields_list = [dict(f) for f in fields]
+        await state.update_data(
+            v2_filling_product_id=int(product_id),
+            v2_filling_cat_id=int(category_id),
+            v2_filling_fields=fields_list,
+            v2_filling_idx=0,
+        )
+        await _v2_show_filter_prompt(message, state, fields_list, 0)
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+async def _v2_show_filter_prompt(message: Message, state: FSMContext, fields: list, idx: int):
+    """Показує промпт для поточного фільтра або повертається до карточки товару після всіх."""
+    data = await state.get_data()
+    product_id = data.get("v2_filling_product_id")
+    if idx >= len(fields):
+        # Всі фільтри заповнено — показати карточку товару
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+    field = fields[idx]
+    label = (field.get("label_uk") or field.get("label_ru") or field.get("field_key") or "?").strip()
+    values = await db.v2_list_filter_values(int(field["id"]))
+    await state.update_data(v2_filling_idx=idx)
+    progress = f"{idx + 1}/{len(fields)}"
+    if values:
+        buttons = [[KeyboardButton(text=v["label_uk"] or v["label_ru"] or v["value_key"])] for v in values]
+        buttons.append([KeyboardButton(text="⏭️ Пропустити")])
+        buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await state.set_state(V2ProductFilterState.waiting_for_field)
+        await message.answer(
+            f"🔧 <b>{label}</b> ({progress})\nОберіть значення:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        )
+    else:
+        await state.set_state(V2ProductFilterState.waiting_for_value)
+        await message.answer(
+            f"🔧 <b>{label}</b> ({progress})\nВведіть значення:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="⏭️ Пропустити")],
+                    [KeyboardButton(text="⬅️ Назад")],
+                ],
+                resize_keyboard=True,
+            ),
+        )
+
+
+@router.message(V2ProductFilterState.waiting_for_field)
+async def v2_product_filter_field_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_filling_product_id")
+    fields = data.get("v2_filling_fields", [])
+    idx = data.get("v2_filling_idx", 0)
+
+    if text == "⬅️ Назад":
+        if idx > 0:
+            await _v2_show_filter_prompt(message, state, fields, idx - 1)
+        elif product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "⏭️ Пропустити":
+        await _v2_show_filter_prompt(message, state, fields, idx + 1)
+        return
+
+    if idx >= len(fields) or not product_id:
+        return
+    field = fields[idx]
+    values = await db.v2_list_filter_values(int(field["id"]))
+    matched = next(
+        (v for v in values if (v["label_uk"] or v["label_ru"] or v["value_key"]) == text),
+        None,
+    )
+    if not matched:
+        await message.answer("⚠️ Оберіть значення зі списку.")
+        return
+    try:
+        await db.v2_upsert_product_filter_value(
+            product_id=int(product_id),
+            filter_field_id=int(field["id"]),
+            filter_value_id=int(matched["id"]),
+            value_text=text,
+        )
+    except Exception as _e:
+        print(f"[v2_upsert_product_filter_value] {_e}")
+        await message.answer("⚠️ Помилка при збереженні.")
+        return
+    await _v2_show_filter_prompt(message, state, fields, idx + 1)
+
+
+@router.message(V2ProductFilterState.waiting_for_value)
+async def v2_product_filter_value_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_filling_product_id")
+    fields = data.get("v2_filling_fields", [])
+    idx = data.get("v2_filling_idx", 0)
+
+    if text == "⬅️ Назад":
+        if idx > 0:
+            await _v2_show_filter_prompt(message, state, fields, idx - 1)
+        elif product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "⏭️ Пропустити":
+        await _v2_show_filter_prompt(message, state, fields, idx + 1)
+        return
+
+    if not text:
+        await message.answer("⚠️ Введіть значення:")
+        return
+    if idx >= len(fields) or not product_id:
+        return
+    field = fields[idx]
+    try:
+        await db.v2_upsert_product_filter_value(
+            product_id=int(product_id),
+            filter_field_id=int(field["id"]),
+            filter_value_id=None,
+            value_text=text,
+        )
+    except Exception as _e:
+        print(f"[v2_upsert_product_filter_value] {_e}")
+        await message.answer("⚠️ Помилка при збереженні.")
+        return
+    await _v2_show_filter_prompt(message, state, fields, idx + 1)
 async def v2_product_brand_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return

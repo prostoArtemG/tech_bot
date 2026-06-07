@@ -3572,5 +3572,35 @@ class Database:
             product_id,
         )
 
+    async def v2_get_product_filter_values(self, product_id: int) -> list:
+        return await self.fetch(
+            """
+            SELECT pfv.product_id, pfv.filter_field_id, pfv.filter_value_id, pfv.value_text,
+                   ff.label_uk, ff.label_ru, ff.field_key
+            FROM v2_product_filter_values pfv
+            JOIN v2_filter_fields ff ON ff.id = pfv.filter_field_id
+            WHERE pfv.product_id = $1
+            """,
+            product_id,
+        )
+
+    async def v2_upsert_product_filter_value(
+        self,
+        product_id: int,
+        filter_field_id: int,
+        filter_value_id,
+        value_text,
+    ) -> None:
+        await self.execute(
+            """
+            INSERT INTO v2_product_filter_values (product_id, filter_field_id, filter_value_id, value_text)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (product_id, filter_field_id) DO UPDATE
+                SET filter_value_id = EXCLUDED.filter_value_id,
+                    value_text = EXCLUDED.value_text
+            """,
+            product_id, filter_field_id, filter_value_id, value_text,
+        )
+
 
 db = Database(DATABASE_URL)
