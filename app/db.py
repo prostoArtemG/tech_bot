@@ -596,6 +596,165 @@ class Database:
         ON product_filter_values (filter_field_id);
         """)
 
+        # ════════════════════════════════════════════════════════════
+        # ── TechVlada v2 schema ──────────────────────────────────────
+        # ════════════════════════════════════════════════════════════
+
+        # v2_product_groups — "Кліматична техніка", "Водонагрівальна техніка"
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_product_groups (
+            id         SERIAL PRIMARY KEY,
+            slug       TEXT NOT NULL UNIQUE,
+            name_ru    TEXT NOT NULL DEFAULT '',
+            name_uk    TEXT NOT NULL DEFAULT '',
+            emoji      TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 100,
+            is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """)
+
+        # v2_categories — "Кондиціонери", "Бойлери" (belongs to group)
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_categories (
+            id         SERIAL PRIMARY KEY,
+            group_id   INTEGER NOT NULL REFERENCES v2_product_groups(id) ON DELETE CASCADE,
+            slug       TEXT NOT NULL UNIQUE,
+            name_ru    TEXT NOT NULL DEFAULT '',
+            name_uk    TEXT NOT NULL DEFAULT '',
+            emoji      TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 100,
+            is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_categories_group_idx
+        ON v2_categories (group_id);
+        """)
+
+        # v2_category_brands — бренди конкретної категорії (не глобальні)
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_category_brands (
+            id          SERIAL PRIMARY KEY,
+            category_id INTEGER NOT NULL REFERENCES v2_categories(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 100,
+            is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+            UNIQUE (category_id, name)
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_category_brands_cat_idx
+        ON v2_category_brands (category_id);
+        """)
+
+        # v2_filter_fields — фільтри/характеристики категорії
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_filter_fields (
+            id          SERIAL PRIMARY KEY,
+            category_id INTEGER NOT NULL REFERENCES v2_categories(id) ON DELETE CASCADE,
+            field_key   TEXT NOT NULL DEFAULT '',
+            label_ru    TEXT NOT NULL DEFAULT '',
+            label_uk    TEXT NOT NULL DEFAULT '',
+            field_type  TEXT NOT NULL DEFAULT 'select',
+            unit        TEXT NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 100,
+            is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+            UNIQUE (category_id, field_key)
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_filter_fields_cat_idx
+        ON v2_filter_fields (category_id);
+        """)
+
+        # v2_filter_values — варіанти значень для select-полів
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_filter_values (
+            id              SERIAL PRIMARY KEY,
+            filter_field_id INTEGER NOT NULL
+                            REFERENCES v2_filter_fields(id) ON DELETE CASCADE,
+            value_key       TEXT NOT NULL DEFAULT '',
+            label_ru        TEXT NOT NULL DEFAULT '',
+            label_uk        TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 100,
+            UNIQUE (filter_field_id, value_key)
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_filter_values_field_idx
+        ON v2_filter_values (filter_field_id);
+        """)
+
+        # v2_products — товари нової архітектури
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_products (
+            id                SERIAL PRIMARY KEY,
+            category_id       INTEGER NOT NULL REFERENCES v2_categories(id),
+            category_brand_id INTEGER NOT NULL REFERENCES v2_category_brands(id),
+            model             TEXT NOT NULL DEFAULT '',
+            slug              TEXT UNIQUE,
+            description       TEXT NOT NULL DEFAULT '',
+            price             NUMERIC(12,2) NOT NULL DEFAULT 0,
+            purchase_price    NUMERIC(12,2) NOT NULL DEFAULT 0,
+            purchase_currency TEXT NOT NULL DEFAULT 'UAH',
+            sku               TEXT,
+            warranty_months   INTEGER NOT NULL DEFAULT 0,
+            stock_qty         INTEGER NOT NULL DEFAULT 0,
+            availability_status TEXT NOT NULL DEFAULT 'in_stock',
+            specs_json        JSONB NOT NULL DEFAULT '{}',
+            is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+            deleted_at        TIMESTAMPTZ,
+            created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_products_category_idx
+        ON v2_products (category_id);
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_products_brand_idx
+        ON v2_products (category_brand_id);
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_products_slug_idx
+        ON v2_products (slug) WHERE slug IS NOT NULL;
+        """)
+
+        # v2_product_filter_values — значення фільтрів конкретного товару
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_product_filter_values (
+            product_id      INTEGER NOT NULL REFERENCES v2_products(id) ON DELETE CASCADE,
+            filter_field_id INTEGER NOT NULL REFERENCES v2_filter_fields(id) ON DELETE CASCADE,
+            filter_value_id INTEGER REFERENCES v2_filter_values(id) ON DELETE SET NULL,
+            value_text      TEXT,
+            PRIMARY KEY (product_id, filter_field_id)
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_pfv_product_idx
+        ON v2_product_filter_values (product_id);
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_pfv_field_idx
+        ON v2_product_filter_values (filter_field_id);
+        """)
+
+        # v2_product_images — фото товару
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS v2_product_images (
+            id         SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL REFERENCES v2_products(id) ON DELETE CASCADE,
+            url        TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        """)
+        await self.execute("""
+        CREATE INDEX IF NOT EXISTS v2_product_images_product_idx
+        ON v2_product_images (product_id);
+        """)
+
     async def add_product(
         self,
         category: str,
