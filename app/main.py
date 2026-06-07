@@ -1426,8 +1426,14 @@ class V2ProductGroupState(StatesGroup):
 
 class V2CategoryState(StatesGroup):
     browsing          = State()  # список категорій групи
+    viewing           = State()  # карточка категорії
     waiting_for_name  = State()
     waiting_for_emoji = State()
+
+
+class V2CategoryBrandState(StatesGroup):
+    browsing         = State()  # список брендів
+    waiting_for_name = State()
 
 
 admin_menu_kb = ReplyKeyboardMarkup(
@@ -4523,6 +4529,78 @@ async def admin_v2_menu_handler(message: Message, state: FSMContext):
 
 # ── v2: Групи товарів ─────────────────────────────────────────────────────────
 
+# Дані для імпорту старих категорій
+_V2_IMPORT_GROUPS = [
+    {
+        "name_uk": "Водонагрівальна техніка",
+        "name_ru": "Водонагревательная техника",
+        "emoji": "💧",
+        "slug": "water_heating",
+        "cats": ["boilers"],
+    },
+    {
+        "name_uk": "Кліматична техніка",
+        "name_ru": "Климатическая техника",
+        "emoji": "🔥",
+        "slug": "climate_tech",
+        "cats": ["air_conditioners", "heaters"],
+    },
+    {
+        "name_uk": "Велика побутова техніка",
+        "name_ru": "Большая бытовая техника",
+        "emoji": "🏠",
+        "slug": "large_appliances",
+        "cats": ["refrigerators", "washing_machines", "hoods",
+                  "gas_stoves", "microwaves", "vacuum_cleaners", "other"],
+    },
+]
+
+
+async def _v2_do_import_old_categories() -> tuple[int, int, int]:
+    """Імпортує старі категорії в v2. Повертає (created_groups, created_cats, skipped)."""
+    created_groups = 0
+    created_cats = 0
+    skipped = 0
+    for g_data in _V2_IMPORT_GROUPS:
+        existing_group = await db.v2_get_product_group_by_slug(g_data["slug"])
+        if existing_group:
+            group_id = existing_group["id"]
+        else:
+            group_id = await db.v2_create_product_group(
+                name_uk=g_data["name_uk"],
+                name_ru=g_data["name_ru"],
+                emoji=g_data["emoji"],
+                slug=g_data["slug"],
+            )
+            if group_id:
+                created_groups += 1
+        if not group_id:
+            continue
+        for cat_key in g_data["cats"]:
+            info = CATEGORY_LABELS.get(cat_key)
+            if not info:
+                skipped += 1
+                continue
+            existing_cat = await db.fetchrow(
+                "SELECT id FROM v2_categories WHERE slug = $1 LIMIT 1", cat_key
+            )
+            if existing_cat:
+                skipped += 1
+            else:
+                cat_id = await db.v2_create_category(
+                    group_id=group_id,
+                    name_uk=info["uk"],
+                    name_ru=info["ru"],
+                    emoji=info.get("emoji", "📦"),
+                    slug=cat_key,
+                )
+                if cat_id:
+                    created_cats += 1
+                else:
+                    skipped += 1
+    return created_groups, created_cats, skipped
+
+
 async def _v2_show_product_groups(message: Message, state: FSMContext):
     """Показує список груп v2 — кожна група окремою кнопкою."""
     groups = await db.v2_list_product_groups()
@@ -4532,6 +4610,7 @@ async def _v2_show_product_groups(message: Message, state: FSMContext):
         label = f"{em} {g['name_uk'] or g['name_ru']}".strip()
         buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="➕ Додати групу")])
+    buttons.append([KeyboardButton(text="📥 Імпорт старих категорій")])
     buttons.append([KeyboardButton(text="⬅️ Назад")])
     header = "📁 <b>Групи товарів v2</b>" + (
         f"\n\nВсього: {len(groups)}" if groups else "\n\n<i>Поки немає жодної групи.</i>"
@@ -4605,6 +4684,22 @@ async def v2_product_groups_browsing_handler(message: Message, state: FSMContext
                 resize_keyboard=True,
             ),
         )
+        return
+    if text == "📥 Імпорт старих категорій":
+        await message.answer("⏳ Імпортуємо...")
+        try:
+            cr_groups, cr_cats, skipped = await _v2_do_import_old_categories()
+        except Exception as _e:
+            print(f"[v2_import] {_e}")
+            await message.answer("⚠️ Помилка під час імпорту.")
+            await _v2_show_product_groups(message, state)
+            return
+        await message.answer(
+            f"✅ Створено груп: {cr_groups}\n"
+            f"✅ Створено категорій: {cr_cats}\n"
+            f"⏭️ Пропущено: {skipped}"
+        )
+        await _v2_show_product_groups(message, state)
         return
     # Інакше — вибір групи за текстом кнопки
     groups = await db.v2_list_product_groups()
@@ -4694,16 +4789,14 @@ async def v2_category_browsing_handler(message: Message, state: FSMContext):
         )
         return
 
-    # Вибір категорії за кнопкою
+    # Вибір категорії за кнопкою → показати карточку
     if group_id:
         cats = await db.v2_list_categories_by_group(int(group_id))
         for c in cats:
             em = (c["emoji"] or "").strip()
             label = f"{em} {c['name_uk'] or c['name_ru']}".strip()
             if text == label:
-                name = c["name_uk"] or c["name_ru"] or label
-                await message.answer(f"📂 Категорія v2: <b>{em} {name}</b>\n\n🚧 Редагування у розробці.",
-                                     parse_mode="HTML")
+                await _v2_show_category_card(message, state, dict(c))
                 return
     await message.answer("⚠️ Оберіть категорію зі списку.")
 
@@ -4770,6 +4863,152 @@ async def v2_category_emoji(message: Message, state: FSMContext):
     )
     await _v2_show_group_categories(message, state, int(group_id))
 
+
+# ── v2: Карточка категорії ───────────────────────────────────────────────────
+
+_v2_category_card_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🏷 Бренди v2")],
+        [KeyboardButton(text="🔧 Фільтри v2")],
+        [KeyboardButton(text="🛍 Товари v2")],
+        [KeyboardButton(text="⬅️ Назад до категорій")],
+    ],
+    resize_keyboard=True,
+)
+
+
+async def _v2_show_category_card(message: Message, state: FSMContext, cat: dict):
+    """Показує карточку категорії."""
+    em = (cat["emoji"] or "").strip()
+    name = cat["name_uk"] or cat["name_ru"] or ""
+    header = f"📂 <b>{em} {name}</b>\nslug: <code>{cat['slug']}</code>"
+    await state.update_data(v2_viewing_cat_id=cat["id"])
+    await state.set_state(V2CategoryState.viewing)
+    await message.answer(header, parse_mode="HTML", reply_markup=_v2_category_card_kb)
+
+
+@router.message(V2CategoryState.viewing)
+async def v2_category_card_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    group_id = data.get("v2_cats_group_id")
+    category_id = data.get("v2_viewing_cat_id")
+
+    if text == "⬅️ Назад до категорій":
+        if group_id:
+            await _v2_show_group_categories(message, state, int(group_id))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+
+    if text == "🏷 Бренди v2":
+        if not category_id:
+            await message.answer("⚠️ Категорію не знайдено.")
+            return
+        await _v2_show_category_brands(message, state, int(category_id))
+        return
+
+    if text in ("🔧 Фільтри v2", "🛍 Товари v2"):
+        await message.answer("🚧 У розробці.")
+        return
+
+
+# ── v2: Бренди категорії ─────────────────────────────────────────────────────
+
+async def _v2_show_category_brands(message: Message, state: FSMContext, category_id: int):
+    """Показує бренди категорії кнопками."""
+    brands = await db.v2_list_brands_by_category(category_id)
+    buttons = []
+    for b in brands:
+        buttons.append([KeyboardButton(text=b["name"])])
+    buttons.append([KeyboardButton(text="➕ Додати бренд")])
+    buttons.append([KeyboardButton(text="⬅️ Назад до категорії")])
+    header = "🏷 <b>Бренди категорії</b>" + (
+        f"\n\nВсього: {len(brands)}" if brands else "\n\n<i>Поки немає жодного бренду.</i>"
+    )
+    await state.update_data(v2_brands_cat_id=category_id)
+    await state.set_state(V2CategoryBrandState.browsing)
+    await message.answer(
+        header,
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(V2CategoryBrandState.browsing)
+async def v2_category_brand_browsing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_brands_cat_id")
+    group_id = data.get("v2_cats_group_id")
+
+    if text == "⬅️ Назад до категорії":
+        # Відновити карточку категорії
+        cat_id = data.get("v2_viewing_cat_id")
+        if cat_id:
+            cats = await db.v2_list_categories_by_group(int(group_id)) if group_id else []
+            for c in cats:
+                if c["id"] == cat_id:
+                    await _v2_show_category_card(message, state, dict(c))
+                    return
+        # fallback
+        if group_id:
+            await _v2_show_group_categories(message, state, int(group_id))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+
+    if text == "➕ Додати бренд":
+        await state.set_state(V2CategoryBrandState.waiting_for_name)
+        await message.answer(
+            "Введіть назву бренду:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    # Вибір бренду — заглушка
+    if category_id:
+        brands = await db.v2_list_brands_by_category(int(category_id))
+        for b in brands:
+            if text == b["name"]:
+                await message.answer(f"🏷 Бренд: <b>{b['name']}</b>\n\n🚧 Редагування у розробці.",
+                                     parse_mode="HTML")
+                return
+    await message.answer("⚠️ Оберіть бренд зі списку.")
+
+
+@router.message(V2CategoryBrandState.waiting_for_name)
+async def v2_category_brand_name(message: Message, state: FSMContext):
+    data = await state.get_data()
+    category_id = data.get("v2_brands_cat_id")
+
+    if message.text == "⬅️ Назад":
+        if category_id:
+            await _v2_show_category_brands(message, state, int(category_id))
+        return
+
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("⚠️ Введіть назву бренду:")
+        return
+    if not category_id:
+        await message.answer("⚠️ Категорію не знайдено. Спробуйте знову.")
+        return
+    try:
+        await db.v2_create_category_brand(category_id=int(category_id), name=name)
+    except Exception as _e:
+        print(f"[v2_create_category_brand] {_e}")
+        await message.answer("⚠️ Помилка при збереженні.")
+        return
+    await message.answer(f"✅ Бренд <b>{name}</b> додано!", parse_mode="HTML")
+    await _v2_show_category_brands(message, state, int(category_id))
 
 
 async def v2_product_group_add_start(message: Message, state: FSMContext):
