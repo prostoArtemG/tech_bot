@@ -3392,5 +3392,40 @@ class Database:
             slug,
         )
 
+    async def v2_list_categories_by_group(self, group_id: int) -> list:
+        return await self.fetch(
+            """
+            SELECT id, group_id, slug, name_ru, name_uk, emoji, sort_order, is_active
+            FROM v2_categories
+            WHERE group_id = $1
+            ORDER BY sort_order ASC, id ASC
+            """,
+            group_id,
+        )
+
+    async def v2_create_category(
+        self,
+        group_id: int,
+        name_uk: str,
+        name_ru: str,
+        emoji: str,
+        slug: str,
+        sort_order: int = 100,
+    ) -> int | None:
+        existing = await self.fetchrow(
+            "SELECT id FROM v2_categories WHERE slug = $1 LIMIT 1", slug
+        )
+        if existing:
+            return existing["id"]
+        row = await self.fetchrow(
+            """
+            INSERT INTO v2_categories (group_id, slug, name_ru, name_uk, emoji, sort_order)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id
+            """,
+            group_id, slug, name_ru, name_uk, emoji, sort_order,
+        )
+        return row["id"] if row else None
+
 
 db = Database(DATABASE_URL)
