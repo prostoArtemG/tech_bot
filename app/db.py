@@ -3495,5 +3495,40 @@ class Database:
         )
         return row["id"] if row else None
 
+    async def v2_list_filter_values(self, filter_field_id: int) -> list:
+        return await self.fetch(
+            """
+            SELECT id, filter_field_id, value_key, label_uk, label_ru, sort_order
+            FROM v2_filter_values
+            WHERE filter_field_id = $1
+            ORDER BY sort_order ASC, id ASC
+            """,
+            filter_field_id,
+        )
+
+    async def v2_create_filter_value(
+        self,
+        filter_field_id: int,
+        value_key: str,
+        label_uk: str,
+        label_ru: str,
+    ) -> int | None:
+        existing = await self.fetchrow(
+            "SELECT id FROM v2_filter_values WHERE filter_field_id = $1 AND value_key = $2 LIMIT 1",
+            filter_field_id,
+            value_key,
+        )
+        if existing:
+            return existing["id"]
+        row = await self.fetchrow(
+            """
+            INSERT INTO v2_filter_values (filter_field_id, value_key, label_uk, label_ru, sort_order)
+            VALUES ($1, $2, $3, $4, 100)
+            RETURNING id
+            """,
+            filter_field_id, value_key, label_uk, label_ru,
+        )
+        return row["id"] if row else None
+
 
 db = Database(DATABASE_URL)
