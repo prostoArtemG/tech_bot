@@ -11917,6 +11917,7 @@ async def start_web_server():
 
 @web_app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
+    print("=== WEBHOOK HIT ===")  # DEBUG
     if telegram_bot is None or dispatcher is None:
         raise HTTPException(status_code=503, detail="Bot not ready")
     if TELEGRAM_SECRET_TOKEN:
@@ -11931,6 +11932,7 @@ async def telegram_webhook(request: Request):
 
 @web_app.on_event("startup")
 async def _on_startup():
+    print("=== DEBUG BUILD 777 ===")  # DEBUG
     global telegram_bot, dispatcher, _polling_task
 
     if telegram_bot is not None:
