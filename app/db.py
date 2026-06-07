@@ -3427,5 +3427,35 @@ class Database:
         )
         return row["id"] if row else None
 
+    async def v2_list_brands_by_category(self, category_id: int) -> list:
+        return await self.fetch(
+            """
+            SELECT id, category_id, name, sort_order, is_active
+            FROM v2_category_brands
+            WHERE category_id = $1
+            ORDER BY sort_order ASC, id ASC
+            """,
+            category_id,
+        )
+
+    async def v2_create_category_brand(self, category_id: int, name: str) -> int | None:
+        existing = await self.fetchrow(
+            "SELECT id FROM v2_category_brands WHERE category_id = $1 AND name = $2 LIMIT 1",
+            category_id,
+            name,
+        )
+        if existing:
+            return existing["id"]
+        row = await self.fetchrow(
+            """
+            INSERT INTO v2_category_brands (category_id, name)
+            VALUES ($1, $2)
+            RETURNING id
+            """,
+            category_id,
+            name,
+        )
+        return row["id"] if row else None
+
 
 db = Database(DATABASE_URL)
