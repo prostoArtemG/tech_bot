@@ -4299,6 +4299,7 @@ async def payment_pay_stub_handler(message: Message):
 })
 async def global_menu_buttons_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
+    print("DEBUG GLOBAL:", repr(message.text), current_state)  # DEBUG
     if current_state:
         return
 
@@ -5104,6 +5105,7 @@ class _BrandsBackFilter(BaseFilter):
 
 @router.message(lambda m: m.text == "➕ Додати бренд")
 async def v2_brand_add_start_handler(message: Message, state: FSMContext):
+    print("DEBUG BRAND ADD:", repr(message.text), await state.get_state())  # DEBUG
     if not await require_admin(message):
         return
     data = await state.get_data()
@@ -5122,6 +5124,7 @@ async def v2_brand_add_start_handler(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "⬅️ Назад до категорії", _BrandsBackFilter())
 async def v2_brand_back_to_category_handler(message: Message, state: FSMContext):
+    print("DEBUG BRAND BACK:", repr(message.text), await state.get_state())  # DEBUG
     if not await require_admin(message):
         return
     data = await state.get_data()
@@ -5140,6 +5143,7 @@ async def v2_brand_back_to_category_handler(message: Message, state: FSMContext)
 
 @router.message(V2CategoryBrandState.browsing)
 async def v2_brand_click_handler(message: Message, state: FSMContext):
+    print("DEBUG BRAND CLICK:", repr(message.text), await state.get_state())  # DEBUG
     if not await require_admin(message):
         return
     text = (message.text or "").strip()
