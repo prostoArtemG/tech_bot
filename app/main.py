@@ -21,7 +21,7 @@ from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import BaseFilter, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
+from aiogram.types import Message, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
 from dotenv import load_dotenv
 import cloudinary
 import cloudinary.uploader
@@ -5069,13 +5069,13 @@ async def v2_filter_name(message: Message, state: FSMContext):
 # ── v2: Бренди категорії ─────────────────────────────────────────────────────
 
 async def _v2_show_category_brands(message: Message, state: FSMContext, category_id: int):
-    """Показує бренди категорії кнопками."""
+    """Показує бренди категорії через InlineKeyboard."""
     brands = await db.v2_list_brands_by_category(category_id)
-    buttons = []
-    buttons.append([KeyboardButton(text="➕ Додати бренд")])
+    kb = []
     for b in brands:
-        buttons.append([KeyboardButton(text=b["name"])])
-    buttons.append([KeyboardButton(text="⬅️ Назад до категорії")])
+        kb.append([InlineKeyboardButton(text=f"🏷 {b['name']}", callback_data=f"v2_brand_view:{b['id']}")])
+    kb.append([InlineKeyboardButton(text="➕ Додати бренд", callback_data=f"v2_brand_add:{category_id}")])
+    kb.append([InlineKeyboardButton(text="⬅️ Назад до категорії", callback_data=f"v2_cat:{category_id}")])
     header = "🏷 <b>Бренди категорії</b>" + (
         f"\n\nВсього: {len(brands)}" if brands else "\n\n<i>Поки немає жодного бренду.</i>"
     )
@@ -5084,11 +5084,10 @@ async def _v2_show_category_brands(message: Message, state: FSMContext, category
         v2_viewing_cat_id=category_id,
         v2_current_category_id=category_id,
     )
-    await state.set_state(V2CategoryBrandState.browsing)
     await message.answer(
         header,
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
     )
 
 
@@ -5156,6 +5155,61 @@ async def v2_brand_add_no_state_handler(message: Message):
     await message.answer("Спочатку відкрийте категорію → 🏷 Бренди")
 
 
+@router.callback_query(lambda c: c.data.startswith("v2_brand_add:"))
+async def v2_brand_add_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    if not is_system_admin(callback.from_user.id):
+        return
+    category_id = int(callback.data.split(":")[1])
+    await state.update_data(
+        v2_brands_cat_id=category_id,
+        v2_viewing_cat_id=category_id,
+        v2_current_category_id=category_id,
+    )
+    await state.set_state(V2CategoryBrandState.waiting_for_name)
+    await callback.message.answer(
+        "Введіть назву бренду:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.callback_query(lambda c: c.data.startswith("v2_cat:"))
+async def v2_brand_cat_back_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    if not is_system_admin(callback.from_user.id):
+        return
+    category_id = int(callback.data.split(":")[1])
+    cat_row = await db.fetchrow(
+        "SELECT id, group_id, slug, name_uk, name_ru, emoji, sort_order, is_active "
+        "FROM v2_categories WHERE id = $1",
+        category_id,
+    )
+    if cat_row:
+        await _v2_show_category_card(callback.message, state, dict(cat_row))
+    else:
+        await _v2_show_product_groups(callback.message, state)
+
+
+@router.callback_query(lambda c: c.data.startswith("v2_brand_view:"))
+async def v2_brand_view_callback(callback: CallbackQuery):
+    brand_id = int(callback.data.split(":")[1])
+    brand_row = await db.fetchrow(
+        "SELECT id, name FROM v2_category_brands WHERE id = $1",
+        brand_id,
+    )
+    if brand_row:
+        await callback.answer()
+        await callback.message.answer(
+            f"🏷 Бренд: <b>{brand_row['name']}</b>",
+            parse_mode="HTML",
+        )
+    else:
+        await callback.answer("Бренд не знайдено", show_alert=True)
+
+
 @router.message(V2CategoryBrandState.waiting_for_name)
 async def v2_category_brand_name(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -5164,6 +5218,8 @@ async def v2_category_brand_name(message: Message, state: FSMContext):
     if message.text == "⬅️ Назад":
         if category_id:
             await _v2_show_category_brands(message, state, int(category_id))
+        else:
+            await message.answer("⚠️", reply_markup=ReplyKeyboardRemove())
         return
 
     name = (message.text or "").strip()
@@ -5179,7 +5235,7 @@ async def v2_category_brand_name(message: Message, state: FSMContext):
         print(f"[v2_create_category_brand] {_e}")
         await message.answer("⚠️ Помилка при збереженні.")
         return
-    await message.answer(f"✅ Бренд <b>{name}</b> додано!", parse_mode="HTML")
+    await message.answer(f"✅ Бренд <b>{name}</b> додано!", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     await _v2_show_category_brands(message, state, int(category_id))
 
 
