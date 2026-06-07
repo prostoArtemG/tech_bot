@@ -1416,6 +1416,12 @@ class SetProductFilterState(StatesGroup):
     waiting_for_value = State()
 
 
+class V2ProductGroupState(StatesGroup):
+    waiting_for_name_uk = State()
+    waiting_for_name_ru = State()
+    waiting_for_emoji   = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -4506,7 +4512,7 @@ async def directories_menu_handler(message: Message, state: FSMContext):
 # ── Admin v2 ──────────────────────────────────────────────────────────────────
 
 _ADMIN_V2_BUTTONS = {
-    "📦 Каталог v2", "📁 Групи товарів", "📂 Категорії",
+    "📦 Каталог v2", " Категорії",
     "🏷 Бренди", "🔧 Фільтри", "🛍 Товари", "🌐 Сайт v2",
 }
 
@@ -4530,7 +4536,161 @@ async def admin_v2_stub_handler(message: Message, state: FSMContext):
     await message.answer("🚧 Розділ v2 у розробці.")
 
 
+# ── v2: Групи товарів ─────────────────────────────────────────────────────────
 
+async def _v2_show_product_groups(message: Message, state: FSMContext):
+    """Показує список груп v2 з кнопками."""
+    groups = await db.v2_list_product_groups()
+    if groups:
+        lines = []
+        for g in groups:
+            em = (g["emoji"] or "").strip()
+            lines.append(f"{em} {g['name_uk'] or g['name_ru']}".strip())
+        text = "📁 <b>Групи товарів v2</b>\n\n" + "\n".join(lines)
+    else:
+        text = "📁 <b>Групи товарів v2</b>\n\n<i>Поки немає жодної групи.</i>"
+    await state.set_state(None)
+    await message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="➕ Додати групу")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(lambda m: m.text == "📁 Групи товарів")
+async def v2_product_groups_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await _v2_show_product_groups(message, state)
+
+
+@router.message(lambda m: m.text == "➕ Додати групу")
+async def v2_product_group_add_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.set_state(V2ProductGroupState.waiting_for_name_uk)
+    await message.answer(
+        "📁 <b>Нова група</b> — крок 1/3\n\nВведіть назву групи (UA):",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2ProductGroupState.waiting_for_name_uk)
+async def v2_product_group_name_uk(message: Message, state: FSMContext):
+    if message.text == "⬅️ Назад":
+        await state.clear()
+        await _v2_show_product_groups(message, state)
+        return
+    name_uk = (message.text or "").strip()
+    if not name_uk:
+        await message.answer("⚠️ Введіть назву:")
+        return
+    await state.update_data(v2_group_name_uk=name_uk)
+    await state.set_state(V2ProductGroupState.waiting_for_name_ru)
+    await message.answer(
+        f"📁 <b>Нова група</b> — крок 2/3\n\nUA: <b>{name_uk}</b>\n\n"
+        "Введіть назву RU або натисніть ⏭️ Пропустити (= UA):",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="⏭️ Пропустити")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2ProductGroupState.waiting_for_name_ru)
+async def v2_product_group_name_ru(message: Message, state: FSMContext):
+    data = await state.get_data()
+    name_uk = data.get("v2_group_name_uk", "")
+    if message.text == "⬅️ Назад":
+        await state.set_state(V2ProductGroupState.waiting_for_name_uk)
+        await message.answer(
+            "📁 <b>Нова група</b> — крок 1/3\n\nВведіть назву групи (UA):",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+    if message.text == "⏭️ Пропустити":
+        name_ru = name_uk
+    else:
+        name_ru = (message.text or "").strip() or name_uk
+    await state.update_data(v2_group_name_ru=name_ru)
+    await state.set_state(V2ProductGroupState.waiting_for_emoji)
+    await message.answer(
+        f"📁 <b>Нова група</b> — крок 3/3\n\n"
+        f"UA: <b>{name_uk}</b> / RU: <b>{name_ru}</b>\n\n"
+        "Введіть emoji або ⏭️ Пропустити (= 📁):",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="⏭️ Пропустити")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2ProductGroupState.waiting_for_emoji)
+async def v2_product_group_emoji(message: Message, state: FSMContext):
+    data = await state.get_data()
+    name_uk = data.get("v2_group_name_uk", "")
+    name_ru = data.get("v2_group_name_ru", name_uk)
+    if message.text == "⬅️ Назад":
+        await state.set_state(V2ProductGroupState.waiting_for_name_ru)
+        await message.answer(
+            f"📁 <b>Нова група</b> — крок 2/3\n\nUA: <b>{name_uk}</b>\n\n"
+            "Введіть назву RU або ⏭️ Пропустити:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="⏭️ Пропустити")],
+                    [KeyboardButton(text="⬅️ Назад")],
+                ],
+                resize_keyboard=True,
+            ),
+        )
+        return
+    emoji = "📁" if message.text == "⏭️ Пропустити" else (message.text or "").strip() or "📁"
+    slug = _make_category_key(name_uk)
+    if not slug:
+        await message.answer("⚠️ Не вдалось згенерувати slug. Спробуйте іншу назву.")
+        return
+    try:
+        await db.v2_create_product_group(
+            name_uk=name_uk, name_ru=name_ru, emoji=emoji, slug=slug,
+        )
+    except Exception as _e:
+        print(f"[v2_create_group] {_e}")
+        await message.answer("⚠️ Помилка при збереженні. Спробуйте ще раз.")
+        return
+    await state.clear()
+    await message.answer(
+        f"✅ Група <b>{emoji} {name_uk}</b> створена!\n"
+        f"slug: <code>{slug}</code>",
+        parse_mode="HTML",
+    )
+    await _v2_show_product_groups(message, state)
+
+
+def _make_category_key(text: str) -> str:
     """Генерирует ASCII-слаг из произвольного текста.
     Транслитерирует кириллицу (украинскую/русскую), пробелы → _.
     Пример: 'Електрочайники' → 'elektrochayniky'

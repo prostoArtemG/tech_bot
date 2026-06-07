@@ -3351,5 +3351,46 @@ class Database:
             product_id,
         )
 
+    # ── TechVlada v2 методы ────────────────────────────────────────
+
+    async def v2_list_product_groups(self) -> list:
+        return await self.fetch(
+            """
+            SELECT id, slug, name_ru, name_uk, emoji, sort_order, is_active
+            FROM v2_product_groups
+            ORDER BY sort_order ASC, id ASC
+            """
+        )
+
+    async def v2_create_product_group(
+        self,
+        name_uk: str,
+        name_ru: str,
+        emoji: str,
+        slug: str,
+        sort_order: int = 100,
+    ) -> int | None:
+        existing = await self.fetchrow(
+            "SELECT id FROM v2_product_groups WHERE slug = $1 LIMIT 1", slug
+        )
+        if existing:
+            return existing["id"]
+        row = await self.fetchrow(
+            """
+            INSERT INTO v2_product_groups (slug, name_ru, name_uk, emoji, sort_order)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            slug, name_ru, name_uk, emoji, sort_order,
+        )
+        return row["id"] if row else None
+
+    async def v2_get_product_group_by_slug(self, slug: str):
+        return await self.fetchrow(
+            "SELECT id, slug, name_ru, name_uk, emoji, sort_order, is_active "
+            "FROM v2_product_groups WHERE slug = $1",
+            slug,
+        )
+
 
 db = Database(DATABASE_URL)
