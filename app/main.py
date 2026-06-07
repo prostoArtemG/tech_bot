@@ -4604,13 +4604,17 @@ async def _v2_do_import_old_categories() -> tuple[int, int, int]:
 async def _v2_show_product_groups(message: Message, state: FSMContext):
     """Показує список груп v2 — кожна група окремою кнопкою."""
     groups = await db.v2_list_product_groups()
+    # Сервісні кнопки — ПЕРШИМИ (Telegram відображає знизу вгору,
+    # тому групи мають бути в КІНЦІ списку, щоб опинитись внизу клавіатури).
     buttons = []
-    for g in groups:
-        em = (g["emoji"] or "").strip()
-        label = f"{em} {g['name_uk'] or g['name_ru']}".strip()
-        buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="➕ Додати групу")])
     buttons.append([KeyboardButton(text="📥 Імпорт старих категорій")])
+    for g in groups:
+        em = (g["emoji"] or "").strip()
+        name = (g["name_uk"] or g["name_ru"] or g["slug"] or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if label:
+            buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="⬅️ Назад")])
     header = "📁 <b>Групи товарів v2</b>" + (
         f"\n\nВсього: {len(groups)}" if groups else "\n\n<i>Поки немає жодної групи.</i>"
@@ -4705,7 +4709,8 @@ async def v2_product_groups_browsing_handler(message: Message, state: FSMContext
     groups = await db.v2_list_product_groups()
     for g in groups:
         em = (g["emoji"] or "").strip()
-        label = f"{em} {g['name_uk'] or g['name_ru']}".strip()
+        name = (g["name_uk"] or g["name_ru"] or g["slug"] or "?").strip()
+        label = f"{em} {name}".strip() if em else name
         if text == label:
             await _v2_show_group_card(message, state, dict(g))
             return
