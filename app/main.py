@@ -756,6 +756,171 @@ async def _get_product_cat_key(product_id) -> str | None:
         cat = None
     return category_key(cat) if cat else None
 
+
+# ── Auto-sync filter_fields from specifications_json ─────────────────────────
+
+def _norm_key(s: str) -> str:
+    """Нормализует ключ для нечёткого сравнения: lower + только буквы/цифры."""
+    import re
+    return re.sub(r"[^a-z0-9а-яёіїєґ]", "", s.lower())
+
+
+async def sync_product_filters_from_specs(product_id: int) -> None:
+    """Авто-синхронизация: читает specifications_json товара и записывает
+    совпадающие значения в product_filter_values.
+    Не перезаписывает уже заполненные вручную значения.
+    Вызывается после каждого изменения характеристик — тихо, без UI-изменений.
+    """
+    try:
+        # 1. Данные товара
+        row = await db.fetchrow(
+            "SELECT id, category_key, brand, model, description, specifications_json "
+            "FROM products WHERE id = $1",
+            product_id,
+        )
+        if not row:
+            return
+        cat_key_db = (row.get("category_key") or "").strip()
+        if not cat_key_db:
+            # Попытка через category column + categories.py
+            fallback = await _get_product_cat_key(product_id)
+            cat_key_db = fallback or ""
+        if not cat_key_db:
+            return
+
+        specs: dict = {}
+        raw_specs = row.get("specifications_json")
+        if isinstance(raw_specs, dict):
+            specs = raw_specs
+        elif raw_specs:
+            import json as _json
+            try:
+                specs = _json.loads(raw_specs) or {}
+            except Exception:
+                specs = {}
+
+        # 2. Filter fields с их возможными значениями
+        fields = await db.get_filter_fields_with_values(cat_key_db)
+        if not fields:
+            return
+
+        # 3. Уже заполненные product_filter_values — не трогаем
+        existing = await db.get_product_filter_values(product_id)
+        filled_field_ids = {r["filter_field_id"] for r in existing}
+
+        # Нормализованные ключи specs для нечёткого поиска
+        norm_specs: dict[str, str] = {_norm_key(k): v for k, v in specs.items() if k and v is not None}
+        # Строковые значения колонок товара для полей типа text
+        product_cols = {
+            "brand": str(row.get("brand") or ""),
+            "model": str(row.get("model") or ""),
+        }
+
+        for field in fields:
+            fid = field["field_id"]
+            if fid in filled_field_ids:
+                continue  # уже заполнено — пропускаем
+
+            fkey = field["field_key"] or ""
+            label_ru = field["label_ru"] or ""
+            label_uk = field["label_uk"] or ""
+
+            # 4. Ищем значение в specifications_json
+            found_value: str | None = None
+
+            # 4a. Прямое совпадение по field_key
+            if fkey in specs:
+                found_value = str(specs[fkey])
+            # 4b. Прямое совпадение по label_ru (нижний регистр)
+            if not found_value and label_ru:
+                for sk, sv in specs.items():
+                    if sk.lower().strip() == label_ru.lower().strip():
+                        found_value = str(sv)
+                        break
+            # 4c. Прямое совпадение по label_uk
+            if not found_value and label_uk:
+                for sk, sv in specs.items():
+                    if sk.lower().strip() == label_uk.lower().strip():
+                        found_value = str(sv)
+                        break
+            # 4d. Нормализованный поиск по field_key
+            if not found_value:
+                norm_fkey = _norm_key(fkey)
+                if norm_fkey and norm_fkey in norm_specs:
+                    found_value = str(norm_specs[norm_fkey])
+            # 4e. Нормализованный поиск по label_ru
+            if not found_value and label_ru:
+                norm_lru = _norm_key(label_ru)
+                if norm_lru and norm_lru in norm_specs:
+                    found_value = str(norm_specs[norm_lru])
+            # 4f. Нормализованный поиск по label_uk
+            if not found_value and label_uk:
+                norm_luk = _norm_key(label_uk)
+                if norm_luk and norm_luk in norm_specs:
+                    found_value = str(norm_specs[norm_luk])
+            # 4g. product columns (brand / model) для text-полей
+            if not found_value and fkey in product_cols:
+                v = product_cols[fkey].strip()
+                if v:
+                    found_value = v
+
+            if not found_value:
+                continue
+
+            found_value = found_value.strip()
+            if not found_value:
+                continue
+
+            # 5. Сопоставление с filter_values
+            fv_list = field.get("values") or []
+            if fv_list:
+                # Select-поле: ищем совпадение среди существующих filter_values
+                matched_id: int | None = None
+                norm_found = _norm_key(found_value)
+                for fv in fv_list:
+                    vkey = (fv.get("value_key") or "").strip()
+                    vru  = (fv.get("label_ru")  or "").strip()
+                    vuk  = (fv.get("label_uk")  or "").strip()
+                    if (found_value.lower() in (vkey.lower(), vru.lower(), vuk.lower())
+                            or _norm_key(vkey) == norm_found
+                            or _norm_key(vru)  == norm_found
+                            or _norm_key(vuk)  == norm_found):
+                        matched_id = fv["value_id"]
+                        found_value = vru or vkey
+                        break
+
+                if matched_id is None:
+                    # Значение не найдено среди filter_values — создаём новое
+                    import re as _re
+                    new_vkey = _re.sub(r"[^a-z0-9_]", "_", found_value.lower())[:50]
+                    new_id = await db.create_filter_value(
+                        filter_field_id=fid,
+                        value=new_vkey,
+                        label_ru=found_value,
+                        label_uk=found_value,
+                    )
+                    matched_id = new_id
+
+                if matched_id:
+                    await db.upsert_product_filter_value(
+                        product_id=product_id,
+                        filter_field_id=fid,
+                        value_text=found_value,
+                        filter_value_id=matched_id,
+                    )
+            else:
+                # Text/number-поле: сохраняем как value_text
+                await db.upsert_product_filter_value(
+                    product_id=product_id,
+                    filter_field_id=fid,
+                    value_text=found_value,
+                    filter_value_id=None,
+                )
+
+    except Exception as _e:
+        print(f"[sync_filters] product_id={product_id}: {_e}")
+
+
 # ── Canonical value mapping (mirrors db.DEFAULT_CATEGORY_ATTRIBUTES.options_json) ──
 # Любой ключ — приведённый к нижнему регистру (label UA/RU, или сам canonical) →
 # canonical key, который и кладём в products.specifications_json.
@@ -7381,6 +7546,11 @@ async def add_product_specs_done_callback(callback: CallbackQuery, state: FSMCon
     except Exception:
         pass
     await callback.answer("Готово")
+    # Финальная синхронизация filter_fields перед показом итога
+    data = await state.get_data()
+    _pid = data.get("add_product_id")
+    if _pid:
+        await sync_product_filters_from_specs(int(_pid))
     await _finalize_add_product_summary(callback.message, state)
 
 
@@ -8772,6 +8942,7 @@ async def specs_opt_callback(callback: CallbackQuery, state: FSMContext):
     value = options[idx]
     stored = _normalize_spec_value(key, value)
     await db.set_product_specification(product_id, key, stored)
+    await sync_product_filters_from_specs(product_id)
     current = await db.get_product_specifications(product_id)
     cur_state = await state.get_state()
     mode = "add" if cur_state == AddProductState.editing_specs.state else "edit"
@@ -8877,6 +9048,7 @@ async def edit_specs_value_handler(message: Message, state: FSMContext):
     else:
         stored = _normalize_spec_value(key, value)
         await db.set_product_specification(int(product_id), key, stored)
+        await sync_product_filters_from_specs(int(product_id))
         await message.answer(f"✅ {label}: {_label_for_spec_value(key, stored)}")
 
     current = await db.get_product_specifications(int(product_id))
