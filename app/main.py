@@ -4745,12 +4745,15 @@ async def v2_product_group_card_handler(message: Message, state: FSMContext):
 async def _v2_show_group_categories(message: Message, state: FSMContext, group_id: int):
     """Показує категорії групи кнопками."""
     cats = await db.v2_list_categories_by_group(group_id)
+    # Сервісні кнопки — першими (вгорі), категорії — в кінці (внизу, видимі)
     buttons = []
+    buttons.append([KeyboardButton(text="➕ Додати категорію v2")])
     for c in cats:
         em = (c["emoji"] or "").strip()
-        label = f"{em} {c['name_uk'] or c['name_ru']}".strip()
-        buttons.append([KeyboardButton(text=label)])
-    buttons.append([KeyboardButton(text="➕ Додати категорію v2")])
+        name = (c["name_uk"] or c["name_ru"] or c["slug"] or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if label:
+            buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="⬅️ Назад до групи")])
     header = "📂 <b>Категорії групи</b>" + (
         f"\n\nВсього: {len(cats)}" if cats else "\n\n<i>Поки немає жодної категорії.</i>"
@@ -4799,7 +4802,8 @@ async def v2_category_browsing_handler(message: Message, state: FSMContext):
         cats = await db.v2_list_categories_by_group(int(group_id))
         for c in cats:
             em = (c["emoji"] or "").strip()
-            label = f"{em} {c['name_uk'] or c['name_ru']}".strip()
+            name = (c["name_uk"] or c["name_ru"] or c["slug"] or "?").strip()
+            label = f"{em} {name}".strip() if em else name
             if text == label:
                 await _v2_show_category_card(message, state, dict(c))
                 return
@@ -4873,9 +4877,9 @@ async def v2_category_emoji(message: Message, state: FSMContext):
 
 _v2_category_card_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="🏷 Бренди v2")],
-        [KeyboardButton(text="🔧 Фільтри v2")],
-        [KeyboardButton(text="🛍 Товари v2")],
+        [KeyboardButton(text="🏷 Бренди")],
+        [KeyboardButton(text="🔧 Фільтри")],
+        [KeyboardButton(text="🛍 Товари")],
         [KeyboardButton(text="⬅️ Назад до категорій")],
     ],
     resize_keyboard=True,
@@ -4883,11 +4887,29 @@ _v2_category_card_kb = ReplyKeyboardMarkup(
 
 
 async def _v2_show_category_card(message: Message, state: FSMContext, cat: dict):
-    """Показує карточку категорії."""
+    """Показує карточку категорії з лічильниками."""
     em = (cat["emoji"] or "").strip()
     name = cat["name_uk"] or cat["name_ru"] or ""
-    header = f"📂 <b>{em} {name}</b>\nslug: <code>{cat['slug']}</code>"
-    await state.update_data(v2_viewing_cat_id=cat["id"])
+    cat_id = cat["id"]
+    brand_row = await db.fetchrow(
+        "SELECT COUNT(*) AS cnt FROM v2_category_brands WHERE category_id = $1", cat_id
+    )
+    filter_row = await db.fetchrow(
+        "SELECT COUNT(*) AS cnt FROM v2_filter_fields WHERE category_id = $1", cat_id
+    )
+    product_row = await db.fetchrow(
+        "SELECT COUNT(*) AS cnt FROM v2_products WHERE category_id = $1", cat_id
+    )
+    brand_cnt = int(brand_row["cnt"]) if brand_row else 0
+    filter_cnt = int(filter_row["cnt"]) if filter_row else 0
+    product_cnt = int(product_row["cnt"]) if product_row else 0
+    header = (
+        f"📂 <b>Категорія:</b> {em} {name}\n\n"
+        f"🏷 Бренди: {brand_cnt}\n"
+        f"🔧 Фільтри: {filter_cnt}\n"
+        f"🛍 Товари: {product_cnt}"
+    )
+    await state.update_data(v2_viewing_cat_id=cat_id)
     await state.set_state(V2CategoryState.viewing)
     await message.answer(header, parse_mode="HTML", reply_markup=_v2_category_card_kb)
 
@@ -4908,14 +4930,14 @@ async def v2_category_card_handler(message: Message, state: FSMContext):
             await _v2_show_product_groups(message, state)
         return
 
-    if text == "🏷 Бренди v2":
+    if text == "🏷 Бренди":
         if not category_id:
             await message.answer("⚠️ Категорію не знайдено.")
             return
         await _v2_show_category_brands(message, state, int(category_id))
         return
 
-    if text in ("🔧 Фільтри v2", "🛍 Товари v2"):
+    if text in ("🔧 Фільтри", "🛍 Товари"):
         await message.answer("🚧 У розробці.")
         return
 
@@ -4925,10 +4947,11 @@ async def v2_category_card_handler(message: Message, state: FSMContext):
 async def _v2_show_category_brands(message: Message, state: FSMContext, category_id: int):
     """Показує бренди категорії кнопками."""
     brands = await db.v2_list_brands_by_category(category_id)
+    # Сервісна кнопка — першою (вгорі), бренди — в кінці (внизу, видимі)
     buttons = []
+    buttons.append([KeyboardButton(text="➕ Додати бренд")])
     for b in brands:
         buttons.append([KeyboardButton(text=b["name"])])
-    buttons.append([KeyboardButton(text="➕ Додати бренд")])
     buttons.append([KeyboardButton(text="⬅️ Назад до категорії")])
     header = "🏷 <b>Бренди категорії</b>" + (
         f"\n\nВсього: {len(brands)}" if brands else "\n\n<i>Поки немає жодного бренду.</i>"
