@@ -3457,5 +3457,43 @@ class Database:
         )
         return row["id"] if row else None
 
+    async def v2_list_filter_fields_by_category(self, category_id: int) -> list:
+        return await self.fetch(
+            """
+            SELECT id, category_id, field_key, label_uk, label_ru, field_type, unit, sort_order, is_active
+            FROM v2_filter_fields
+            WHERE category_id = $1
+            ORDER BY sort_order ASC, id ASC
+            """,
+            category_id,
+        )
+
+    async def v2_create_filter_field(
+        self,
+        category_id: int,
+        field_key: str,
+        label_uk: str,
+        label_ru: str,
+        field_type: str = "select",
+        unit: str = "",
+        sort_order: int = 100,
+    ) -> int | None:
+        existing = await self.fetchrow(
+            "SELECT id FROM v2_filter_fields WHERE category_id = $1 AND field_key = $2 LIMIT 1",
+            category_id,
+            field_key,
+        )
+        if existing:
+            return existing["id"]
+        row = await self.fetchrow(
+            """
+            INSERT INTO v2_filter_fields (category_id, field_key, label_uk, label_ru, field_type, unit, sort_order)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+            """,
+            category_id, field_key, label_uk, label_ru, field_type, unit, sort_order,
+        )
+        return row["id"] if row else None
+
 
 db = Database(DATABASE_URL)

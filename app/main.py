@@ -1436,6 +1436,11 @@ class V2CategoryBrandState(StatesGroup):
     waiting_for_name = State()
 
 
+class V2FilterState(StatesGroup):
+    browsing         = State()  # список фільтрів
+    waiting_for_name = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -4937,9 +4942,129 @@ async def v2_category_card_handler(message: Message, state: FSMContext):
         await _v2_show_category_brands(message, state, int(category_id))
         return
 
-    if text in ("🔧 Фільтри", "🛍 Товари"):
+    if text == "🔧 Фільтри":
+        if not category_id:
+            await message.answer("⚠️ Категорію не знайдено.")
+            return
+        await _v2_show_category_filters(message, state, int(category_id))
+        return
+
+    if text == "🛍 Товари":
         await message.answer("🚧 У розробці.")
         return
+
+
+# ── v2: Фільтри категорії ─────────────────────────────────────────────────────
+
+async def _v2_show_category_filters(message: Message, state: FSMContext, category_id: int):
+    """Показує фільтри категорії кнопками."""
+    fields = await db.v2_list_filter_fields_by_category(category_id)
+    buttons = []
+    buttons.append([KeyboardButton(text="➕ Додати фільтр")])
+    for f in fields:
+        label = (f["label_uk"] or f["label_ru"] or f["field_key"] or "?").strip()
+        if label:
+            buttons.append([KeyboardButton(text=label)])
+    buttons.append([KeyboardButton(text="⬅️ Назад до категорії")])
+    header = "🔧 <b>Фільтри категорії</b>" + (
+        f"\n\nВсього: {len(fields)}" if fields else "\n\n<i>Поки немає жодного фільтра.</i>"
+    )
+    await state.update_data(v2_filters_cat_id=category_id)
+    await state.set_state(V2FilterState.browsing)
+    await message.answer(
+        header,
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(V2FilterState.browsing)
+async def v2_filter_browsing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_filters_cat_id")
+    group_id = data.get("v2_cats_group_id")
+
+    if text == "⬅️ Назад до категорії":
+        cat_id = data.get("v2_viewing_cat_id")
+        if cat_id:
+            cats = await db.v2_list_categories_by_group(int(group_id)) if group_id else []
+            for c in cats:
+                if c["id"] == cat_id:
+                    await _v2_show_category_card(message, state, dict(c))
+                    return
+        if group_id:
+            await _v2_show_group_categories(message, state, int(group_id))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+
+    if text == "➕ Додати фільтр":
+        await state.set_state(V2FilterState.waiting_for_name)
+        await message.answer(
+            "Введіть назву фільтра:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    # Вибір фільтра — заглушка-карточка
+    if category_id:
+        fields = await db.v2_list_filter_fields_by_category(int(category_id))
+        for f in fields:
+            label = (f["label_uk"] or f["label_ru"] or f["field_key"] or "?").strip()
+            if text == label:
+                val_row = await db.fetchrow(
+                    "SELECT COUNT(*) AS cnt FROM v2_filter_values WHERE filter_field_id = $1",
+                    f["id"],
+                )
+                val_cnt = int(val_row["cnt"]) if val_row else 0
+                await message.answer(
+                    f"🔧 <b>Фільтр:</b> {label}\nЗначення: {val_cnt}\n\n🚧 Редагування у розробці.",
+                    parse_mode="HTML",
+                )
+                return
+    await message.answer("⚠️ Оберіть фільтр зі списку.")
+
+
+@router.message(V2FilterState.waiting_for_name)
+async def v2_filter_name(message: Message, state: FSMContext):
+    data = await state.get_data()
+    category_id = data.get("v2_filters_cat_id")
+
+    if message.text == "⬅️ Назад":
+        if category_id:
+            await _v2_show_category_filters(message, state, int(category_id))
+        return
+
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("⚠️ Введіть назву фільтра:")
+        return
+    if not category_id:
+        await message.answer("⚠️ Категорію не знайдено. Спробуйте знову.")
+        return
+    field_key = _make_category_key(name)
+    if not field_key:
+        await message.answer("⚠️ Не вдалось згенерувати ключ. Спробуйте іншу назву.")
+        return
+    try:
+        await db.v2_create_filter_field(
+            category_id=int(category_id),
+            field_key=field_key,
+            label_uk=name,
+            label_ru=name,
+        )
+    except Exception as _e:
+        print(f"[v2_create_filter_field] {_e}")
+        await message.answer("⚠️ Помилка при збереженні.")
+        return
+    await message.answer(f"✅ Фільтр <b>{name}</b> додано!", parse_mode="HTML")
+    await _v2_show_category_filters(message, state, int(category_id))
 
 
 # ── v2: Бренди категорії ─────────────────────────────────────────────────────
