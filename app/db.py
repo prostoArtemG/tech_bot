@@ -3602,5 +3602,29 @@ class Database:
             product_id, filter_field_id, filter_value_id, value_text,
         )
 
+    async def v2_delete_filter_field(self, filter_field_id: int) -> None:
+        await self.execute(
+            "DELETE FROM v2_filter_fields WHERE id = $1",
+            filter_field_id,
+        )
+
+    async def v2_delete_filter_value(self, filter_value_id: int) -> None:
+        await self.execute(
+            "DELETE FROM v2_filter_values WHERE id = $1",
+            filter_value_id,
+        )
+
+    async def v2_rename_filter_field(self, filter_field_id: int, name: str) -> None:
+        await self.execute(
+            "UPDATE v2_filter_fields SET label_uk = $2, label_ru = $2 WHERE id = $1",
+            filter_field_id, name,
+        )
+
+    async def v2_rename_filter_value(self, filter_value_id: int, value: str) -> None:
+        await self.execute(
+            "UPDATE v2_filter_values SET label_uk = $2, label_ru = $2 WHERE id = $1",
+            filter_value_id, value,
+        )
+
 
 db = Database(DATABASE_URL)

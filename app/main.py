@@ -1443,7 +1443,13 @@ class V2FilterState(StatesGroup):
 
 class V2FilterValueState(StatesGroup):
     browsing          = State()  # карточка фільтра + список значень
-    waiting_for_value = State()
+    viewing           = State()  # карточка значення
+    waiting_for_value = State()  # ввід нового значення
+
+
+class V2FilterEditState(StatesGroup):
+    waiting_for_filter_name = State()  # перейменування фільтра
+    waiting_for_value_name  = State()  # перейменування значення
 
 
 class V2ProductState(StatesGroup):
@@ -5081,17 +5087,16 @@ async def _v2_show_filter_card(message: Message, state: FSMContext, field: dict)
     field_id = field["id"]
     label = (field.get("label_uk") or field.get("label_ru") or field.get("field_key") or "?").strip()
     values = await db.v2_list_filter_values(field_id)
-    buttons = []
-    buttons.append([KeyboardButton(text="➕ Додати значення")])
+    buttons = [
+        [KeyboardButton(text="✏️ Перейменувати"), KeyboardButton(text="🗑 Видалити")],
+        [KeyboardButton(text="➕ Додати значення")],
+    ]
     for v in values:
         vl = (v["label_uk"] or v["label_ru"] or v["value_key"] or "?").strip()
         if vl:
             buttons.append([KeyboardButton(text=vl)])
     buttons.append([KeyboardButton(text="⬅️ Назад до фільтрів")])
-    header = (
-        f"🔧 <b>Фільтр:</b> {label}\n"
-        f"📋 Значень: {len(values)}"
-    )
+    header = f"🔧 <b>{label}</b>\n📋 Значень: {len(values)}"
     await state.update_data(v2_filter_field_id=field_id, v2_filter_field_label=label)
     await state.set_state(V2FilterValueState.browsing)
     await message.answer(
@@ -5117,6 +5122,33 @@ async def v2_filter_value_browsing_handler(message: Message, state: FSMContext):
             await _v2_show_product_groups(message, state)
         return
 
+    if text == "✏️ Перейменувати":
+        await state.set_state(V2FilterEditState.waiting_for_filter_name)
+        label = data.get("v2_filter_field_label", "?")
+        await message.answer(
+            f"Поточна назва: <b>{label}</b>\nВведіть нову назву фільтра:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "🗑 Видалити":
+        if field_id:
+            label = data.get("v2_filter_field_label", "?")
+            try:
+                await db.v2_delete_filter_field(int(field_id))
+            except Exception as _e:
+                print(f"[v2_delete_filter_field] {_e}")
+                await message.answer("⚠️ Помилка при видаленні.")
+                return
+            await message.answer(f"✅ Фільтр <b>{label}</b> видалено!", parse_mode="HTML")
+        if category_id:
+            await _v2_show_category_filters(message, state, int(category_id))
+        return
+
     if text == "➕ Додати значення":
         await state.set_state(V2FilterValueState.waiting_for_value)
         await message.answer(
@@ -5127,6 +5159,15 @@ async def v2_filter_value_browsing_handler(message: Message, state: FSMContext):
             ),
         )
         return
+
+    # Клік по значенню → карточка значення
+    if field_id:
+        values = await db.v2_list_filter_values(int(field_id))
+        for v in values:
+            vl = (v["label_uk"] or v["label_ru"] or v["value_key"] or "?").strip()
+            if text == vl:
+                await _v2_show_filter_value_card(message, state, dict(v))
+                return
 
     await message.answer("⚠️ Оберіть дію зі списку.")
 
@@ -5179,6 +5220,165 @@ async def v2_filter_value_input_handler(message: Message, state: FSMContext):
     )
     if field_row:
         await _v2_show_filter_card(message, state, dict(field_row))
+
+
+async def _v2_show_filter_value_card(message: Message, state: FSMContext, value: dict):
+    """Показує карточку значення фільтра."""
+    value_id = value["id"]
+    label = (value.get("label_uk") or value.get("label_ru") or value.get("value_key") or "?").strip()
+    header = f"📋 <b>Значення:</b> {label}"
+    kb = ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="✏️ Перейменувати"), KeyboardButton(text="🗑 Видалити")],
+        [KeyboardButton(text="⬅️ Назад до фільтра")],
+    ], resize_keyboard=True)
+    await state.update_data(v2_filter_value_id=value_id, v2_filter_value_label=label)
+    await state.set_state(V2FilterValueState.viewing)
+    await message.answer(header, parse_mode="HTML", reply_markup=kb)
+
+
+@router.message(V2FilterValueState.viewing)
+async def v2_filter_value_viewing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    field_id = data.get("v2_filter_field_id")
+    value_id = data.get("v2_filter_value_id")
+    category_id = data.get("v2_filters_cat_id")
+
+    if text == "⬅️ Назад до фільтра":
+        if field_id:
+            field_row = await db.fetchrow(
+                "SELECT id, field_key, label_uk, label_ru FROM v2_filter_fields WHERE id = $1",
+                int(field_id),
+            )
+            if field_row:
+                await _v2_show_filter_card(message, state, dict(field_row))
+                return
+        if category_id:
+            await _v2_show_category_filters(message, state, int(category_id))
+        return
+
+    if text == "✏️ Перейменувати":
+        await state.set_state(V2FilterEditState.waiting_for_value_name)
+        label = data.get("v2_filter_value_label", "?")
+        await message.answer(
+            f"Поточна назва: <b>{label}</b>\nВведіть нову назву значення:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "🗑 Видалити":
+        if value_id:
+            label = data.get("v2_filter_value_label", "?")
+            try:
+                await db.v2_delete_filter_value(int(value_id))
+            except Exception as _e:
+                print(f"[v2_delete_filter_value] {_e}")
+                await message.answer("⚠️ Помилка при видаленні.")
+                return
+            await message.answer(f"✅ Значення <b>{label}</b> видалено!", parse_mode="HTML")
+        if field_id:
+            field_row = await db.fetchrow(
+                "SELECT id, field_key, label_uk, label_ru FROM v2_filter_fields WHERE id = $1",
+                int(field_id),
+            )
+            if field_row:
+                await _v2_show_filter_card(message, state, dict(field_row))
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2FilterEditState.waiting_for_filter_name)
+async def v2_filter_rename_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    field_id = data.get("v2_filter_field_id")
+    category_id = data.get("v2_filters_cat_id")
+
+    if message.text == "⬅️ Назад":
+        if field_id:
+            field_row = await db.fetchrow(
+                "SELECT id, field_key, label_uk, label_ru FROM v2_filter_fields WHERE id = $1",
+                int(field_id),
+            )
+            if field_row:
+                await _v2_show_filter_card(message, state, dict(field_row))
+                return
+        if category_id:
+            await _v2_show_category_filters(message, state, int(category_id))
+        return
+
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("⚠️ Введіть назву:")
+        return
+    if not field_id:
+        await message.answer("⚠️ Фільтр не знайдено.")
+        return
+    try:
+        await db.v2_rename_filter_field(int(field_id), name)
+    except Exception as _e:
+        print(f"[v2_rename_filter_field] {_e}")
+        await message.answer("⚠️ Помилка при перейменуванні.")
+        return
+    await message.answer(f"✅ Фільтр перейменовано на <b>{name}</b>!", parse_mode="HTML")
+    field_row = await db.fetchrow(
+        "SELECT id, field_key, label_uk, label_ru FROM v2_filter_fields WHERE id = $1",
+        int(field_id),
+    )
+    if field_row:
+        await _v2_show_filter_card(message, state, dict(field_row))
+
+
+@router.message(V2FilterEditState.waiting_for_value_name)
+async def v2_filter_value_rename_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    value_id = data.get("v2_filter_value_id")
+    field_id = data.get("v2_filter_field_id")
+
+    if message.text == "⬅️ Назад":
+        if value_id:
+            val_row = await db.fetchrow(
+                "SELECT id, filter_field_id, value_key, label_uk, label_ru FROM v2_filter_values WHERE id = $1",
+                int(value_id),
+            )
+            if val_row:
+                await _v2_show_filter_value_card(message, state, dict(val_row))
+                return
+        if field_id:
+            field_row = await db.fetchrow(
+                "SELECT id, field_key, label_uk, label_ru FROM v2_filter_fields WHERE id = $1",
+                int(field_id),
+            )
+            if field_row:
+                await _v2_show_filter_card(message, state, dict(field_row))
+        return
+
+    value = (message.text or "").strip()
+    if not value:
+        await message.answer("⚠️ Введіть назву:")
+        return
+    if not value_id:
+        await message.answer("⚠️ Значення не знайдено.")
+        return
+    try:
+        await db.v2_rename_filter_value(int(value_id), value)
+    except Exception as _e:
+        print(f"[v2_rename_filter_value] {_e}")
+        await message.answer("⚠️ Помилка при перейменуванні.")
+        return
+    await message.answer(f"✅ Значення перейменовано на <b>{value}</b>!", parse_mode="HTML")
+    val_row = await db.fetchrow(
+        "SELECT id, filter_field_id, value_key, label_uk, label_ru FROM v2_filter_values WHERE id = $1",
+        int(value_id),
+    )
+    if val_row:
+        await _v2_show_filter_value_card(message, state, dict(val_row))
 
 
 # ── v2: Бренди категорії ─────────────────────────────────────────────────────
