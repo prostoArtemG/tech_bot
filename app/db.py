@@ -3650,5 +3650,39 @@ class Database:
             image_id,
         )
 
+    async def v2_delete_product(self, product_id: int) -> None:
+        """Soft-delete товару (deleted_at = NOW())."""
+        await self.execute(
+            "UPDATE v2_products SET deleted_at = NOW() WHERE id = $1",
+            product_id,
+        )
+
+    async def v2_update_product_model(self, product_id: int, model: str) -> None:
+        await self.execute(
+            "UPDATE v2_products SET model = $2 WHERE id = $1",
+            product_id, model,
+        )
+
+    async def v2_update_product_price(self, product_id: int, price: float) -> None:
+        await self.execute(
+            "UPDATE v2_products SET price = $2 WHERE id = $1",
+            product_id, price,
+        )
+
+    async def v2_update_product_brand(self, product_id: int, brand_id: int) -> None:
+        await self.execute(
+            "UPDATE v2_products SET category_brand_id = $2 WHERE id = $1",
+            product_id, brand_id,
+        )
+
+    async def v2_toggle_product_active(self, product_id: int) -> bool:
+        """Перемикає is_active. Повертає нове значення."""
+        row = await self.fetchrow(
+            "UPDATE v2_products SET is_active = NOT is_active WHERE id = $1 "
+            "RETURNING is_active",
+            product_id,
+        )
+        return bool(row["is_active"]) if row else False
+
 
 db = Database(DATABASE_URL)

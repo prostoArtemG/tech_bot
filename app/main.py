@@ -1470,6 +1470,14 @@ class V2ProductImageState(StatesGroup):
     waiting_for_photo = State()  # очікуємо фото від користувача
 
 
+class V2ProductEditState(StatesGroup):
+    menu              = State()  # меню редагування
+    confirming_delete = State()  # підтвердження видалення
+    waiting_for_model = State()  # введення нової назви моделі
+    waiting_for_price = State()  # введення нової ціни
+    waiting_for_brand = State()  # вибір нового бренду
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -5489,7 +5497,8 @@ async def _v2_show_category_products(message: Message, state: FSMContext, catego
     buttons = []
     buttons.append([KeyboardButton(text="➕ Додати товар")])
     for p in products:
-        label = f"{p['brand_name']} — {p['model']}"
+        status_icon = "🟢" if p["is_active"] else "🔴"
+        label = f"{status_icon} {p['brand_name']} — {p['model']}"
         buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="⬅️ Назад до категорії")])
     header = "🛍 <b>Товари категорії</b>" + (
@@ -5546,7 +5555,8 @@ async def v2_product_browsing_handler(message: Message, state: FSMContext):
     if category_id:
         products = await db.v2_list_products_by_category(int(category_id))
         for p in products:
-            label = f"{p['brand_name']} — {p['model']}"
+            status_icon = "🟢" if p["is_active"] else "🔴"
+            label = f"{status_icon} {p['brand_name']} — {p['model']}"
             if text == label:
                 await _v2_show_product_card(message, state, int(p["id"]))
                 return
@@ -5564,13 +5574,19 @@ async def _v2_show_product_card(message: Message, state: FSMContext, product_id:
     filled = await db.v2_get_product_filter_values(product_id)
     total_cnt = len(fields)
     filled_cnt = len(filled)
+    is_active = bool(product["is_active"])
+    status_icon = "🟢" if is_active else "🔴"
+    status_text = "В наявності" if is_active else "Немає в наявності"
     header = (
         f"🛍 <b>{product['brand_name']} {product['model']}</b>\n"
-        f"💰 {float(product['price']):.2f} грн\n\n"
+        f"💰 {float(product['price']):.2f} грн\n"
+        f"{status_icon} {status_text}\n\n"
         f"🔧 Фільтри: {filled_cnt}/{total_cnt}"
     )
     kb = ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="🔧 Заповнити фільтри"), KeyboardButton(text="🖼 Фото")],
+        [KeyboardButton(text="🖼 Фото"), KeyboardButton(text="🔧 Заповнити фільтри")],
+        [KeyboardButton(text="✏️ Редагувати"), KeyboardButton(text="🗑 Видалити")],
+        [KeyboardButton(text="🔄 Статус наявності")],
         [KeyboardButton(text="⬅️ Назад до товарів")],
     ], resize_keyboard=True)
     await state.update_data(v2_viewing_product_id=product_id, v2_products_cat_id=int(product["category_id"]))
@@ -5624,6 +5640,41 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         await _v2_show_product_images(message, state, int(product_id))
         return
 
+    if text == "✏️ Редагувати":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await _v2_show_product_edit_menu(message, state, int(product_id))
+        return
+
+    if text == "🔄 Статус наявності":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        new_status = await db.v2_toggle_product_active(int(product_id))
+        icon = "🟢" if new_status else "🔴"
+        status_text = "В наявності" if new_status else "Немає в наявності"
+        await message.answer(f"{icon} Статус оновлено: <b>{status_text}</b>", parse_mode="HTML")
+        await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "🗑 Видалити":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        product = await db.v2_get_product_by_id(int(product_id))
+        name = f"{product['brand_name']} {product['model']}" if product else "?"
+        await state.set_state(V2ProductEditState.confirming_delete)
+        await message.answer(
+            f"⚠️ <b>Видалити товар?</b>\n\n{name}",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[
+                [KeyboardButton(text="✅ Так")],
+                [KeyboardButton(text="❌ Ні")],
+            ], resize_keyboard=True),
+        )
+        return
+
     await message.answer("⚠️ Оберіть дію зі списку.")
 
 
@@ -5645,6 +5696,203 @@ async def _v2_show_product_images(message: Message, state: FSMContext, product_i
             await message.answer_photo(img["url"], caption=f"🆔 {img['id']}")
         except Exception:
             await message.answer(img["url"])
+
+
+# ── v2: Редагування / Видалення товару ───────────────────────────────────────
+
+async def _v2_show_product_edit_menu(message: Message, state: FSMContext, product_id: int):
+    """Показує меню редагування товару."""
+    product = await db.v2_get_product_by_id(product_id)
+    if not product:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    header = (
+        f"✏️ <b>Редагування товару</b>\n\n"
+        f"🏷 {product['brand_name']} {product['model']}\n"
+        f"💰 {float(product['price']):.2f} грн"
+    )
+    await state.update_data(v2_editing_product_id=product_id)
+    await state.set_state(V2ProductEditState.menu)
+    await message.answer(
+        header,
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[
+            [KeyboardButton(text="✏️ Назва")],
+            [KeyboardButton(text="💰 Ціна")],
+            [KeyboardButton(text="🏷 Бренд")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ], resize_keyboard=True),
+    )
+
+
+@router.message(V2ProductEditState.menu)
+async def v2_product_edit_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_editing_product_id")
+
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "✏️ Назва":
+        await state.set_state(V2ProductEditState.waiting_for_model)
+        await message.answer(
+            "📝 Введіть нову назву моделі:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "💰 Ціна":
+        await state.set_state(V2ProductEditState.waiting_for_price)
+        await message.answer(
+            "💰 Введіть нову ціну (грн):",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "🏷 Бренд":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        product = await db.v2_get_product_by_id(int(product_id))
+        if not product:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        brands = await db.v2_list_brands_by_category(int(product["category_id"]))
+        if not brands:
+            await message.answer("⚠️ Немає брендів у цій категорії.")
+            return
+        brand_buttons = [[KeyboardButton(text=b["name"])] for b in brands]
+        brand_buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await state.set_state(V2ProductEditState.waiting_for_brand)
+        await message.answer(
+            "🏷 Оберіть новий бренд:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=brand_buttons, resize_keyboard=True),
+        )
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2ProductEditState.waiting_for_model)
+async def v2_product_edit_model_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_editing_product_id")
+
+    if (message.text or "").strip() == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_edit_menu(message, state, int(product_id))
+        return
+
+    model = (message.text or "").strip()
+    if not model:
+        await message.answer("⚠️ Введіть назву моделі:")
+        return
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    await db.v2_update_product_model(int(product_id), model)
+    await message.answer(f"✅ Назву оновлено: <b>{model}</b>", parse_mode="HTML")
+    await _v2_show_product_card(message, state, int(product_id))
+
+
+@router.message(V2ProductEditState.waiting_for_price)
+async def v2_product_edit_price_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_editing_product_id")
+
+    if (message.text or "").strip() == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_edit_menu(message, state, int(product_id))
+        return
+
+    price_text = (message.text or "").strip().replace(",", ".")
+    try:
+        price = float(price_text)
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("⚠️ Неправильна ціна. Введіть число:")
+        return
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    await db.v2_update_product_price(int(product_id), price)
+    await message.answer(f"✅ Ціну оновлено: <b>{price:.2f} грн</b>", parse_mode="HTML")
+    await _v2_show_product_card(message, state, int(product_id))
+
+
+@router.message(V2ProductEditState.waiting_for_brand)
+async def v2_product_edit_brand_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_editing_product_id")
+
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_edit_menu(message, state, int(product_id))
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    product = await db.v2_get_product_by_id(int(product_id))
+    if not product:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    brands = await db.v2_list_brands_by_category(int(product["category_id"]))
+    brand = next((b for b in brands if b["name"] == text), None)
+    if not brand:
+        await message.answer("⚠️ Оберіть бренд зі списку.")
+        return
+    await db.v2_update_product_brand(int(product_id), int(brand["id"]))
+    await message.answer(f"✅ Бренд оновлено: <b>{brand['name']}</b>", parse_mode="HTML")
+    await _v2_show_product_card(message, state, int(product_id))
+
+
+@router.message(V2ProductEditState.confirming_delete)
+async def v2_product_delete_confirm_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_viewing_product_id")
+    category_id = data.get("v2_products_cat_id")
+
+    if text == "❌ Ні":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "✅ Так":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await db.v2_delete_product(int(product_id))
+        await message.answer("🗑 Товар видалено.")
+        if category_id:
+            await _v2_show_category_products(message, state, int(category_id))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+
+    await message.answer("⚠️ Натисніть ✅ Так або ❌ Ні.")
 
 
 @router.message(V2ProductImageState.browsing)
