@@ -5825,6 +5825,9 @@ async def v2_product_filter_value_handler(message: Message, state: FSMContext):
         await message.answer("⚠️ Помилка при збереженні.")
         return
     await _v2_show_filter_prompt(message, state, fields, idx + 1)
+
+
+@router.message(V2ProductState.waiting_for_brand)
 async def v2_product_brand_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
