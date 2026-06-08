@@ -5588,8 +5588,15 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
     category_id = data.get("v2_products_cat_id")
 
     if text == "⬅️ Назад до товарів":
+        if not category_id and product_id:
+            # fallback: fetch category from DB if missing in state
+            prod = await db.v2_get_product_by_id(int(product_id))
+            if prod:
+                category_id = prod["category_id"]
         if category_id:
             await _v2_show_category_products(message, state, int(category_id))
+        else:
+            await message.answer("⚠️ Категорію не знайдено.")
         return
 
     if text == "🔧 Заповнити фільтри":
@@ -5651,6 +5658,8 @@ async def v2_product_images_browsing_handler(message: Message, state: FSMContext
     if text == "⬅️ Назад до товару":
         if product_id:
             await _v2_show_product_card(message, state, int(product_id))
+        else:
+            await message.answer("⚠️ Товар не знайдено. Поверніться до категорії.")
         return
 
     if text == "➕ Додати фото":
