@@ -13182,9 +13182,46 @@ async def robots_txt(request: Request):
 # ── v2 catalog (тестовий режим) ──────────────────────────────────────────────
 
 @web_app.get("/v2", response_class=HTMLResponse)
-async def site_v2_home(request: Request, q: str = ""):
+async def site_v2_home(request: Request, q: str = "", category: str = "", brand: str = ""):
     q = (q or "").strip()
-    rows = await db.v2_list_active_products_for_site(q=q)
+    category = (category or "").strip()
+    brand = (brand or "").strip()
+
+    # Парсимо динамічні фільтри з query params (все, крім відомих)
+    _known = {"q", "category", "brand"}
+    selected_filters: dict = {}
+    for key, val in request.query_params.multi_items():
+        if key not in _known and val:
+            selected_filters.setdefault(key, []).append(val)
+
+    # Базові рядки (без category/brand/filters): для плиток і списку брендів
+    base_rows = await db.v2_list_active_products_for_site(q=q)
+
+    # Унікальні категорії для плиток (порядок збережено)
+    seen_cat_ids: set = set()
+    all_cats: list = []
+    for p in base_rows:
+        if p["category_id"] not in seen_cat_ids:
+            seen_cat_ids.add(p["category_id"])
+            all_cats.append({
+                "id": p["category_id"],
+                "slug": p["category_slug"],
+                "name_uk": p["category_name_uk"],
+                "name_ru": p["category_name_ru"],
+                "emoji": p["category_emoji"] or "",
+            })
+
+    # Бренди для поточної категорії (без brand/filters)
+    cat_rows = [p for p in base_rows if not category or p["category_slug"] == category]
+    all_brands = sorted({p["brand_name"] for p in cat_rows})
+
+    # Динамічні фільтри (тільки якщо вибрана категорія)
+    filter_fields = await db.v2_get_filters_for_site(category) if category else []
+
+    # Фінальна вибірка з усіма фільтрами
+    rows = await db.v2_list_active_products_for_site(
+        q=q, category=category, brand=brand, selected_filters=selected_filters
+    )
 
     # Будуємо структуру: groups → categories → products
     groups_map: dict = {}
@@ -13220,7 +13257,17 @@ async def site_v2_home(request: Request, q: str = ""):
     return templates.TemplateResponse(
         request=request,
         name="v2_index.html",
-        context={"groups": groups, "total": len(rows), "q": q},
+        context={
+            "groups": groups,
+            "total": len(rows),
+            "q": q,
+            "current_category": category,
+            "current_brand": brand,
+            "all_cats": all_cats,
+            "all_brands": all_brands,
+            "filter_fields": filter_fields,
+            "selected_filters": selected_filters,
+        },
     )
 
 

@@ -43,6 +43,81 @@
             opacity: .5;
             cursor: default;
         }
+        /* ── v2: динамічні фільтри ── */
+        .v2-dyn-filters {
+            margin-top: 12px;
+            border-top: 1px solid #e0e4ea;
+            padding-top: 12px;
+        }
+        .v2-dyn-field {
+            margin-bottom: 10px;
+        }
+        .v2-dyn-field legend {
+            font-size: 13px;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 6px;
+            padding: 0;
+        }
+        .v2-dyn-field .v2-unit {
+            font-weight: 400;
+            color: #888;
+        }
+        .v2-dyn-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .v2-dyn-option {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #f2f4f8;
+            border: 1px solid #d0d4df;
+            border-radius: 6px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background .15s, border-color .15s;
+            user-select: none;
+        }
+        .v2-dyn-option:hover {
+            background: #e6eaf3;
+            border-color: #b0bbd0;
+        }
+        .v2-dyn-option input[type=checkbox] {
+            margin: 0;
+            accent-color: var(--site-primary, #2e86c1);
+        }
+        .v2-dyn-option input[type=checkbox]:checked + span {
+            color: var(--site-primary, #2e86c1);
+            font-weight: 600;
+        }
+        .v2-dyn-option:has(input:checked) {
+            background: #deeaf7;
+            border-color: var(--site-primary, #2e86c1);
+        }
+        .v2-apply-btn {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 6px 18px;
+            background: var(--site-primary, #2e86c1);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .v2-apply-btn:hover { opacity: .9; }
+        .v2-reset-link {
+            display: inline-block;
+            margin-top: 8px;
+            margin-left: 12px;
+            font-size: 13px;
+            color: #888;
+            text-decoration: underline;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -69,36 +144,72 @@
 
 {# ── Плитки категорій v2 ── #}
 <section class="site-categories">
-    <a href="#v2-top" class="site-category-card active">
+    <a href="/v2{% if q %}?q={{ q | urlencode }}{% endif %}" class="site-category-card {% if not current_category %}active{% endif %}">
         <div class="site-category-emoji">📦</div>
         <div class="site-category-title">Всі товари</div>
     </a>
-    {% for group in groups %}
-    {% for cat in group.categories %}
-    <a href="#cat-{{ cat.id }}" class="site-category-card">
+    {% for cat in all_cats %}
+    <a href="/v2?category={{ cat.slug | urlencode }}{% if q %}&q={{ q | urlencode }}{% endif %}" class="site-category-card {% if current_category == cat.slug %}active{% endif %}">
         <div class="site-category-emoji">{{ cat.emoji or "📂" }}</div>
         <div class="site-category-title">{{ cat.name_uk or cat.name_ru }}</div>
     </a>
-    {% endfor %}
     {% endfor %}
 </section>
 
 <div class="catalog-layout" id="v2-top">
     <div class="catalog-content" style="width:100%; max-width:100%;">
 
-        {# ── Пошук ── #}
+        {# ── Пошук + бренд ── #}
         <section class="search-box" style="margin-bottom:16px;">
             <form class="search-form" method="get" action="/v2">
+                {% if current_category %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
                 <div class="search-main-row">
                     <input type="text" name="q" placeholder="Пошук: Samsung, бойлер..." value="{{ q or '' }}">
                     <button type="submit">Знайти</button>
                 </div>
+                {% if all_brands %}
+                <div style="margin-top:8px;">
+                    <select name="brand" class="brand-select" onchange="this.form.submit()">
+                        <option value="">Усі бренди</option>
+                        {% for b in all_brands %}
+                        <option value="{{ b }}" {% if current_brand == b %}selected{% endif %}>{{ b }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                {% if filter_fields %}
+                <div class="v2-dyn-filters">
+                    {% for field in filter_fields %}{% if field.values %}
+                    <fieldset class="v2-dyn-field" style="border:none;margin:0;padding:0;">
+                        <legend>
+                            {{ field.label_uk or field.label_ru or field.field_key }}{% if field.unit %}<span class="v2-unit">, {{ field.unit }}</span>{% endif %}
+                        </legend>
+                        <div class="v2-dyn-options">
+                            {% for val in field.values %}
+                            <label class="v2-dyn-option">
+                                <input type="checkbox" name="{{ field.field_key }}" value="{{ val.value_key }}"
+                                    {% if val.value_key in selected_filters.get(field.field_key, []) %}checked{% endif %}>
+                                <span>{{ val.label_uk or val.label_ru or val.value_key }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    {% endif %}{% endfor %}
+                    <div>
+                        <button type="submit" class="v2-apply-btn">Застосувати</button>
+                        {% if selected_filters %}
+                        <a href="/v2?category={{ current_category | urlencode }}{% if q %}&q={{ q | urlencode }}{% endif %}" class="v2-reset-link">Скинути фільтри</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </form>
         </section>
 
-        {% if q %}
+        {% if q or current_category or current_brand %}
         <p style="font-size:14px; color:#666; margin-bottom:12px;">
-            Результати пошуку: <b>«{{ q }}»</b> — знайдено <b>{{ total }}</b> товар(ів)
+            Результати{% if q %} пошуку «{{ q }}»{% endif %}{% if current_category %} • категорія: <b>{{ current_category }}</b>{% endif %}{% if current_brand %} • бренд: <b>{{ current_brand }}</b>{% endif %} — <b>{{ total }}</b> товар(ів)
         </p>
         {% else %}
         <p class="v2-status-summary">Активних товарів: <b>{{ total }}</b></p>
@@ -106,7 +217,7 @@
 
         {% if not groups %}
         <p style="color:#888; padding:32px 0; font-size:15px;">
-            {% if q %}Нічого не знайдено за запитом «{{ q }}».{% else %}Поки що немає активних товарів у каталозі v2.{% endif %}
+            {% if q or current_category or current_brand %}Нічого не знайдено за цим запитом.{% else %}Поки що немає активних товарів у каталозі v2.{% endif %}
         </p>
         {% endif %}
 

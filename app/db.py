@@ -3684,66 +3684,124 @@ class Database:
         )
         return bool(row["is_active"]) if row else False
 
-    async def v2_list_active_products_for_site(self, q: str = "") -> list:
-        """Повертає активні v2-товари з брендом, категорією, групою і першим фото."""
+    async def v2_list_active_products_for_site(
+        self, q: str = "", category: str = "", brand: str = "", selected_filters: dict = None
+    ) -> list:
+        """Повертає активні v2-товари. Підтримує пошук (q), категорію (слаг), бренд і динамічні фільтри."""
+        conditions = ["p.is_active = TRUE", "p.deleted_at IS NULL"]
+        params: list = []
+
         q = (q or "").strip()
+        category = (category or "").strip()
+        brand = (brand or "").strip()
+        selected_filters = selected_filters or {}
+
         if q:
-            pattern = f"%{q}%"
-            rows = await self.fetch(
-                """
-                SELECT
-                    p.id, p.model, p.price, p.is_active,
-                    b.name AS brand_name,
-                    c.id AS category_id, c.slug AS category_slug,
-                    c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
-                    c.emoji AS category_emoji,
-                    g.id AS group_id, g.slug AS group_slug,
-                    g.name_uk AS group_name_uk, g.name_ru AS group_name_ru,
-                    g.emoji AS group_emoji,
-                    (SELECT url FROM v2_product_images
-                     WHERE product_id = p.id
-                     ORDER BY sort_order, id LIMIT 1) AS first_image
-                FROM v2_products p
-                JOIN v2_category_brands b ON b.id = p.category_brand_id
-                JOIN v2_categories c ON c.id = p.category_id
-                JOIN v2_product_groups g ON g.id = c.group_id
-                WHERE p.is_active = TRUE AND p.deleted_at IS NULL
-                  AND (
-                    p.model    ILIKE $1
-                    OR b.name  ILIKE $1
-                    OR c.name_uk ILIKE $1
-                    OR c.name_ru ILIKE $1
-                    OR g.name_uk ILIKE $1
-                    OR g.name_ru ILIKE $1
-                  )
-                ORDER BY g.sort_order, g.id, c.sort_order, c.id, b.name, p.model
-                """,
-                pattern,
+            params.append(f"%{q}%")
+            n = len(params)
+            conditions.append(
+                f"(p.model ILIKE ${n} OR b.name ILIKE ${n}"
+                f" OR c.name_uk ILIKE ${n} OR c.name_ru ILIKE ${n}"
+                f" OR g.name_uk ILIKE ${n} OR g.name_ru ILIKE ${n})"
             )
-        else:
-            rows = await self.fetch(
-                """
-                SELECT
-                    p.id, p.model, p.price, p.is_active,
-                    b.name AS brand_name,
-                    c.id AS category_id, c.slug AS category_slug,
-                    c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
-                    c.emoji AS category_emoji,
-                    g.id AS group_id, g.slug AS group_slug,
-                    g.name_uk AS group_name_uk, g.name_ru AS group_name_ru,
-                    g.emoji AS group_emoji,
-                    (SELECT url FROM v2_product_images
-                     WHERE product_id = p.id
-                     ORDER BY sort_order, id LIMIT 1) AS first_image
-                FROM v2_products p
-                JOIN v2_category_brands b ON b.id = p.category_brand_id
-                JOIN v2_categories c ON c.id = p.category_id
-                JOIN v2_product_groups g ON g.id = c.group_id
-                WHERE p.is_active = TRUE AND p.deleted_at IS NULL
-                ORDER BY g.sort_order, g.id, c.sort_order, c.id, b.name, p.model
-                """
+        if category:
+            params.append(category)
+            conditions.append(f"c.slug = ${len(params)}")
+        if brand:
+            params.append(brand)
+            conditions.append(f"b.name = ${len(params)}")
+
+        for field_key, value_keys in selected_filters.items():
+            if not value_keys:
+                continue
+            params.append(field_key)
+            fk_idx = len(params)
+            params.append(list(value_keys))
+            vk_idx = len(params)
+            conditions.append(
+                f"EXISTS ("
+                f"  SELECT 1 FROM v2_product_filter_values pfv_f"
+                f"  JOIN v2_filter_fields ff_f ON ff_f.id = pfv_f.filter_field_id"
+                f"  JOIN v2_filter_values fv_f ON fv_f.id = pfv_f.filter_value_id"
+                f"  WHERE pfv_f.product_id = p.id"
+                f"  AND ff_f.field_key = ${fk_idx}"
+                f"  AND fv_f.value_key = ANY(${vk_idx})"
+                f")"
             )
+
+        where = " AND ".join(conditions)
+        sql = f"""
+            SELECT
+                p.id, p.model, p.price, p.is_active,
+                b.name AS brand_name,
+                c.id AS category_id, c.slug AS category_slug,
+                c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
+                c.emoji AS category_emoji,
+                g.id AS group_id, g.slug AS group_slug,
+                g.name_uk AS group_name_uk, g.name_ru AS group_name_ru,
+                g.emoji AS group_emoji,
+                (SELECT url FROM v2_product_images
+                 WHERE product_id = p.id
+                 ORDER BY sort_order, id LIMIT 1) AS first_image
+            FROM v2_products p
+            JOIN v2_category_brands b ON b.id = p.category_brand_id
+            JOIN v2_categories c ON c.id = p.category_id
+            JOIN v2_product_groups g ON g.id = c.group_id
+            WHERE {where}
+            ORDER BY g.sort_order, g.id, c.sort_order, c.id, b.name, p.model
+        """
+        rows = await self.fetch(sql, *params)
         return [dict(r) for r in rows]
+
+    async def v2_get_filters_for_site(self, category_slug: str) -> list:
+        """Повертає filter_fields + values для категорії, в яких є хоч один активний товар з цим значенням."""
+        rows = await self.fetch(
+            """
+            SELECT
+                ff.id    AS field_id,  ff.field_key, ff.label_uk, ff.label_ru,
+                ff.field_type, ff.unit, ff.sort_order,
+                fv.id    AS value_id,  fv.value_key,
+                fv.label_uk  AS value_label_uk, fv.label_ru  AS value_label_ru,
+                fv.sort_order AS value_sort_order
+            FROM v2_filter_fields ff
+            JOIN v2_categories c ON c.id = ff.category_id
+            JOIN v2_filter_values fv ON fv.filter_field_id = ff.id
+            WHERE c.slug = $1
+              AND ff.is_active = TRUE
+              AND fv.id IN (
+                SELECT DISTINCT pfv.filter_value_id
+                FROM v2_product_filter_values pfv
+                JOIN v2_products p ON p.id = pfv.product_id
+                JOIN v2_categories cat2 ON cat2.id = p.category_id
+                WHERE p.is_active = TRUE AND p.deleted_at IS NULL
+                  AND pfv.filter_value_id IS NOT NULL
+                  AND cat2.slug = $1
+              )
+            ORDER BY ff.sort_order, ff.id, fv.sort_order, fv.id
+            """,
+            category_slug,
+        )
+        fields_map: dict = {}
+        for row in rows:
+            fid = row["field_id"]
+            if fid not in fields_map:
+                fields_map[fid] = {
+                    "id": fid,
+                    "field_key": row["field_key"],
+                    "label_uk": row["label_uk"],
+                    "label_ru": row["label_ru"],
+                    "field_type": row["field_type"],
+                    "unit": row["unit"] or "",
+                    "sort_order": row["sort_order"],
+                    "values": [],
+                }
+            fields_map[fid]["values"].append({
+                "id": row["value_id"],
+                "value_key": row["value_key"],
+                "label_uk": row["value_label_uk"],
+                "label_ru": row["value_label_ru"],
+            })
+        return list(fields_map.values())
 
     async def v2_get_product_for_site(self, product_id: int):
         """Повертає повні дані v2-товару для сторінки: категорія, група, бренд, фото, фільтри."""
