@@ -4311,7 +4311,7 @@ async def payment_pay_stub_handler(message: Message):
     await payment_pay_stub_handler_internal(message, message.from_user, message.text)
 
 
-@router.message(StateFilter("*"), lambda m: m.text in {
+@router.message(StateFilter(None), lambda m: m.text in {
     "📦 Товары", "🛒 Продажа", "➕ Приход", "➕ Добавить товар", "⬅️ Назад", "❌ Сброс",
     "🧾 Гарантии", "🔍 Найти гарантию",
     "📋 Заказы", "➕ Создать заказ", "📋 Список заказов", "🔁 Изменить статус заказа",
