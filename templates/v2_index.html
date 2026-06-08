@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Каталог v2 — Technovlada</title>
+    <meta name="robots" content="noindex, follow">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* ── v2 catalog overrides ── */
+        .v2-banner {
+            background: #1a1a2e;
+            color: #e0e0ff;
+            text-align: center;
+            padding: 10px 16px;
+            font-size: 13px;
+            letter-spacing: .5px;
+        }
+        .v2-banner a { color: #aaaaff; }
+
+        .v2-group {
+            margin: 32px 0 8px;
+        }
+        .v2-group-title {
+            font-size: 22px;
+            font-weight: 700;
+            padding: 0 0 8px;
+            border-bottom: 2px solid var(--site-primary, #444);
+            margin-bottom: 20px;
+        }
+        .v2-category {
+            margin-bottom: 28px;
+        }
+        .v2-category-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--site-primary, #333);
+            margin-bottom: 14px;
+        }
+        .v2-products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        .v2-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow .15s;
+        }
+        .v2-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+        .v2-card-img {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: cover;
+            background: #f4f4f4;
+        }
+        .v2-card-img-placeholder {
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            color: #bbb;
+        }
+        .v2-card-body {
+            padding: 10px 12px 12px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .v2-card-brand {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #888;
+            letter-spacing: .4px;
+        }
+        .v2-card-model {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        .v2-card-price {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--site-primary, #e05);
+            margin-top: auto;
+            padding-top: 6px;
+        }
+        .v2-card-status {
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 4px;
+        }
+        .v2-card-status.active   { background: #e6f9ee; color: #1a7a3c; }
+        .v2-status-summary {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 480px) {
+            .v2-products-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="v2-banner">
+    🚧 Тестова сторінка каталогу v2 — не для публікації.
+    <a href="/">← На головну</a>
+</div>
+
+<header class="site-header">
+    <div class="header-inner">
+        <div class="header-title">
+            <a href="/" class="site-logo" aria-label="Technovlada">
+                <span class="logo-badge">T</span>
+                <span class="logo-text">Technovlada</span>
+            </a>
+            <p>Каталог v2 — тестовий режим</p>
+        </div>
+        <div class="header-actions">
+            <a href="/" class="header-pill">← Старий сайт</a>
+        </div>
+    </div>
+</header>
+
+<main class="container" style="padding: 24px 16px;">
+
+    <h1 style="font-size:26px; margin-bottom:6px;">📦 Каталог v2</h1>
+    <p class="v2-status-summary">Активних товарів: <b>{{ total }}</b></p>
+
+    {% if not groups %}
+    <p style="color:#888; font-size:15px;">Поки що немає активних товарів у каталозі v2.</p>
+    {% endif %}
+
+    {% for group in groups %}
+    <section class="v2-group">
+        <h2 class="v2-group-title">{{ group.emoji }} {{ group.name_uk or group.name_ru }}</h2>
+
+        {% for cat in group.categories %}
+        <div class="v2-category">
+            <h3 class="v2-category-title">{{ cat.emoji }} {{ cat.name_uk or cat.name_ru }}</h3>
+
+            <div class="v2-products-grid">
+                {% for p in cat.products %}
+                <div class="v2-card">
+                    {% if p.first_image %}
+                    <img class="v2-card-img" src="{{ p.first_image }}" alt="{{ p.brand_name }} {{ p.model }}" loading="lazy">
+                    {% else %}
+                    <div class="v2-card-img-placeholder">📷</div>
+                    {% endif %}
+
+                    <div class="v2-card-body">
+                        <span class="v2-card-brand">{{ p.brand_name }}</span>
+                        <span class="v2-card-model">{{ p.model }}</span>
+                        {% if p.price %}
+                        <span class="v2-card-price">{{ "{:,.0f}".format(p.price) }} грн</span>
+                        {% endif %}
+                        <span class="v2-card-status active">В наявності</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+    {% endfor %}
+
+</main>
+
+</body>
+</html>

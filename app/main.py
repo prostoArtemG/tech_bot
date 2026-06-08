@@ -13013,6 +13013,50 @@ async def robots_txt(request: Request):
     return PlainTextResponse(content=body, media_type="text/plain")
 
 
+# ── v2 catalog (тестовий режим) ──────────────────────────────────────────────
+
+@web_app.get("/v2", response_class=HTMLResponse)
+async def site_v2_home(request: Request):
+    rows = await db.v2_list_active_products_for_site()
+
+    # Будуємо структуру: groups → categories → products
+    groups_map: dict = {}
+    for p in rows:
+        gid = p["group_id"]
+        if gid not in groups_map:
+            groups_map[gid] = {
+                "id": gid,
+                "slug": p["group_slug"],
+                "name_uk": p["group_name_uk"],
+                "name_ru": p["group_name_ru"],
+                "emoji": p["group_emoji"] or "",
+                "categories": {},
+            }
+        g = groups_map[gid]
+        cid = p["category_id"]
+        if cid not in g["categories"]:
+            g["categories"][cid] = {
+                "id": cid,
+                "slug": p["category_slug"],
+                "name_uk": p["category_name_uk"],
+                "name_ru": p["category_name_ru"],
+                "emoji": p["category_emoji"] or "",
+                "products": [],
+            }
+        g["categories"][cid]["products"].append(p)
+
+    groups = []
+    for g in groups_map.values():
+        g["categories"] = list(g["categories"].values())
+        groups.append(g)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="v2_index.html",
+        context={"groups": groups, "total": len(rows)},
+    )
+
+
 @web_app.post("/api/cart-order")
 async def api_cart_order(request: Request):
     data = await request.json()
