@@ -5667,7 +5667,7 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         await _v2_show_product_card(message, state, int(product_id))
         return
 
-    if text == "� Характеристики":
+    if text == "📝 Характеристики":
         if not product_id:
             await message.answer("⚠️ Товар не знайдено.")
             return
@@ -5676,7 +5676,7 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         await _v2_show_specs_menu(message, state, int(product_id), cat_id)
         return
 
-    if text == "�🗑 Видалити":
+    if text == "🗑 Видалити":
         if not product_id:
             await message.answer("⚠️ Товар не знайдено.")
             return
