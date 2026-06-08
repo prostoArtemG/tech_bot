@@ -49,9 +49,7 @@
             border-top: 1px solid #e0e4ea;
             padding-top: 12px;
         }
-        .v2-dyn-field {
-            margin-bottom: 10px;
-        }
+        .v2-dyn-field { margin-bottom: 14px; }
         .v2-dyn-field legend {
             font-size: 13px;
             font-weight: 600;
@@ -66,18 +64,22 @@
         .v2-dyn-options {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
+            gap: 8px;
         }
         .v2-dyn-option {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            flex: 0 0 auto;
+            width: auto;
+            min-width: auto;
             background: #f2f4f8;
             border: 1px solid #d0d4df;
-            border-radius: 6px;
-            padding: 4px 10px;
+            border-radius: 12px;
+            padding: 8px 12px;
             cursor: pointer;
             font-size: 13px;
+            white-space: nowrap;
             transition: background .15s, border-color .15s;
             user-select: none;
         }
@@ -86,8 +88,15 @@
             border-color: #b0bbd0;
         }
         .v2-dyn-option input[type=checkbox] {
+            flex: 0 0 auto;
+            width: 18px;
+            height: 18px;
             margin: 0;
             accent-color: var(--site-primary, #2e86c1);
+        }
+        .v2-dyn-option span {
+            line-height: 1;
+            white-space: nowrap;
         }
         .v2-dyn-option input[type=checkbox]:checked + span {
             color: var(--site-primary, #2e86c1);
