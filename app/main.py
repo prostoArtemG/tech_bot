@@ -1478,6 +1478,11 @@ class V2ProductEditState(StatesGroup):
     waiting_for_brand = State()  # вибір нового бренду
 
 
+class V2QuickNavState(StatesGroup):
+    choosing_group    = State()  # вибір групи для швидкої навігації
+    choosing_category = State()  # вибір категорії для швидкої навігації
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -4552,8 +4557,7 @@ async def directories_menu_handler(message: Message, state: FSMContext):
 # ── Admin v2 ──────────────────────────────────────────────────────────────────
 
 _ADMIN_V2_BUTTONS = {
-    "📦 Каталог v2", "📂 Категорії",
-    "🏷 Бренди", "🔧 Фільтри", "🛍 Товари", "🌐 Сайт v2",
+    "📦 Каталог v2", "🌐 Сайт v2",
 }
 
 
@@ -6317,6 +6321,147 @@ async def v2_product_group_emoji(message: Message, state: FSMContext):
         parse_mode="HTML",
     )
     await _v2_show_product_groups(message, state)
+
+
+# ── v2: Швидка навігація (📂 Категорії / 🏷 Бренди / 🔧 Фільтри / 🛍 Товари) ──
+
+_V2_QUICK_NAV_TARGET = {
+    "📂 Категорії": "categories",
+    "🏷 Бренди":    "brands",
+    "🔧 Фільтри":   "filters",
+    "🛍 Товари":    "products",
+}
+
+
+async def _v2_qnav_show_groups(message: Message, state: FSMContext, target: str):
+    """Показує список груп для швидкої навігації."""
+    groups = await db.v2_list_product_groups()
+    buttons = []
+    for g in groups:
+        em = (g["emoji"] or "").strip()
+        name = (g["name_uk"] or g["name_ru"] or g["slug"] or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if label:
+            buttons.append([KeyboardButton(text=label)])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    prompt = {
+        "categories": "Оберіть групу для перегляду категорій:",
+        "brands":     "Оберіть групу → потім категорію для брендів:",
+        "filters":    "Оберіть групу → потім категорію для фільтрів:",
+        "products":   "Оберіть групу → потім категорію для товарів:",
+    }.get(target, "Оберіть групу:")
+    await state.update_data(v2_quick_target=target)
+    await state.set_state(V2QuickNavState.choosing_group)
+    await message.answer(
+        f"📁 <b>{prompt}</b>",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(lambda m: m.text in _V2_QUICK_NAV_TARGET)
+async def v2_quick_nav_start(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    target = _V2_QUICK_NAV_TARGET[message.text]
+    await _v2_qnav_show_groups(message, state, target)
+
+
+@router.message(V2QuickNavState.choosing_group)
+async def v2_qnav_choose_group_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    target = data.get("v2_quick_target", "categories")
+
+    if text == "⬅️ Назад":
+        await state.clear()
+        await message.answer(
+            "🆕 <b>Адмін v2</b>\n\nОберіть розділ:",
+            parse_mode="HTML",
+            reply_markup=admin_v2_kb,
+        )
+        return
+
+    groups = await db.v2_list_product_groups()
+    group = None
+    for g in groups:
+        em = (g["emoji"] or "").strip()
+        name = (g["name_uk"] or g["name_ru"] or g["slug"] or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if text == label:
+            group = dict(g)
+            break
+
+    if not group:
+        await message.answer("⚠️ Оберіть групу зі списку.")
+        return
+
+    if target == "categories":
+        await _v2_show_group_categories(message, state, int(group["id"]))
+        return
+
+    # Для brands/filters/products — показати категорії
+    cats = await db.v2_list_categories_by_group(int(group["id"]))
+    if not cats:
+        await message.answer("⚠️ У цій групі немає категорій.")
+        return
+    buttons = []
+    for c in cats:
+        em = (c["emoji"] or "").strip()
+        cname = (c["name_uk"] or c["name_ru"] or c["slug"] or "?").strip()
+        clabel = f"{em} {cname}".strip() if em else cname
+        if clabel:
+            buttons.append([KeyboardButton(text=clabel)])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    prompt = {
+        "brands":   "Оберіть категорію для брендів:",
+        "filters":  "Оберіть категорію для фільтрів:",
+        "products": "Оберіть категорію для товарів:",
+    }.get(target, "Оберіть категорію:")
+    await state.update_data(v2_quick_group_id=group["id"], v2_quick_cats=[dict(c) for c in cats])
+    await state.set_state(V2QuickNavState.choosing_category)
+    await message.answer(
+        f"📂 <b>{prompt}</b>",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+@router.message(V2QuickNavState.choosing_category)
+async def v2_qnav_choose_category_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    target = data.get("v2_quick_target", "products")
+
+    if text == "⬅️ Назад":
+        await _v2_qnav_show_groups(message, state, target)
+        return
+
+    cats = data.get("v2_quick_cats", [])
+    category = None
+    for c in cats:
+        em = (c.get("emoji") or "").strip()
+        cname = (c.get("name_uk") or c.get("name_ru") or c.get("slug") or "?").strip()
+        clabel = f"{em} {cname}".strip() if em else cname
+        if text == clabel:
+            category = c
+            break
+
+    if not category:
+        await message.answer("⚠️ Оберіть категорію зі списку.")
+        return
+
+    category_id = int(category["id"])
+    if target == "brands":
+        await _v2_show_category_brands(message, state, category_id)
+    elif target == "filters":
+        await _v2_show_category_filters(message, state, category_id)
+    else:  # products
+        await _v2_show_category_products(message, state, category_id)
 
 
 @router.message(lambda m: m.text in _ADMIN_V2_BUTTONS)
