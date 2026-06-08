@@ -180,13 +180,13 @@
 
                 {% if filter_fields %}
                 <div class="v2-dyn-filters">
-                    {% for field in filter_fields %}{% if field.values %}
+                    {% for field in filter_fields %}{% if field['values'] %}
                     <fieldset class="v2-dyn-field" style="border:none;margin:0;padding:0;">
                         <legend>
                             {{ field.label_uk or field.label_ru or field.field_key }}{% if field.unit %}<span class="v2-unit">, {{ field.unit }}</span>{% endif %}
                         </legend>
                         <div class="v2-dyn-options">
-                            {% for val in field.values %}
+                            {% for val in field['values'] %}
                             <label class="v2-dyn-option">
                                 <input type="checkbox" name="{{ field.field_key }}" value="{{ val.value_key }}"
                                     {% if val.value_key in selected_filters.get(field.field_key, []) %}checked{% endif %}>
