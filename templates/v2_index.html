@@ -7,116 +7,49 @@
     <meta name="robots" content="noindex, follow">
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        /* ── v2 catalog overrides ── */
-        .v2-banner {
-            background: #1a1a2e;
-            color: #e0e0ff;
+        /* ── v2: тестова плашка ── */
+        .v2-test-banner {
+            background: #1e1e3a;
+            color: #c5c5ff;
             text-align: center;
-            padding: 10px 16px;
+            padding: 8px 16px;
             font-size: 13px;
-            letter-spacing: .5px;
+            letter-spacing: .3px;
         }
-        .v2-banner a { color: #aaaaff; }
-
-        .v2-group {
-            margin: 32px 0 8px;
+        .v2-test-banner a {
+            color: #9999ff;
+            text-decoration: underline;
         }
-        .v2-group-title {
-            font-size: 22px;
+        /* ── v2: заголовки груп ── */
+        .v2-group-heading {
+            width: 100%;
+            font-size: 20px;
             font-weight: 700;
-            padding: 0 0 8px;
-            border-bottom: 2px solid var(--site-primary, #444);
-            margin-bottom: 20px;
+            padding: 24px 0 4px;
+            border-bottom: 2px solid var(--site-primary, #2e86c1);
+            margin-bottom: 16px;
+            color: var(--site-primary, #2e86c1);
         }
-        .v2-category {
-            margin-bottom: 28px;
-        }
-        .v2-category-title {
-            font-size: 17px;
-            font-weight: 600;
-            color: var(--site-primary, #333);
-            margin-bottom: 14px;
-        }
-        .v2-products-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 16px;
-        }
-        .v2-card {
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
-            overflow: hidden;
-            background: #fff;
-            display: flex;
-            flex-direction: column;
-            transition: box-shadow .15s;
-        }
-        .v2-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
-        .v2-card-img {
+        .v2-category-heading {
             width: 100%;
-            aspect-ratio: 4/3;
-            object-fit: cover;
-            background: #f4f4f4;
-        }
-        .v2-card-img-placeholder {
-            width: 100%;
-            aspect-ratio: 4/3;
-            background: #f0f0f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 36px;
-            color: #bbb;
-        }
-        .v2-card-body {
-            padding: 10px 12px 12px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .v2-card-brand {
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            color: #888;
-            letter-spacing: .4px;
-        }
-        .v2-card-model {
-            font-size: 15px;
-            font-weight: 600;
-            color: #1a1a1a;
-        }
-        .v2-card-price {
             font-size: 16px;
-            font-weight: 700;
-            color: var(--site-primary, #e05);
-            margin-top: auto;
-            padding-top: 6px;
+            font-weight: 600;
+            color: #444;
+            padding: 16px 0 8px;
         }
-        .v2-card-status {
-            font-size: 11px;
-            padding: 2px 7px;
-            border-radius: 4px;
-            display: inline-block;
-            margin-top: 4px;
-        }
-        .v2-card-status.active   { background: #e6f9ee; color: #1a7a3c; }
-        .v2-status-summary {
-            font-size: 13px;
-            color: #888;
-            margin-bottom: 24px;
-        }
-        @media (max-width: 480px) {
-            .v2-products-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        /* ── v2: кнопки-заглушки ── */
+        .v2-card-disabled {
+            pointer-events: none;
+            opacity: .5;
+            cursor: default;
         }
     </style>
 </head>
 <body>
 
-<div class="v2-banner">
-    🚧 Тестова сторінка каталогу v2 — не для публікації.
-    <a href="/">← На головну</a>
+<div class="v2-test-banner">
+    🚧 Каталог v2 — тестовий режим. Не для публікації.
+    <a href="/">← На головну (старий сайт)</a>
 </div>
 
 <header class="site-header">
@@ -134,49 +67,82 @@
     </div>
 </header>
 
-<main class="container" style="padding: 24px 16px;">
-
-    <h1 style="font-size:26px; margin-bottom:6px;">📦 Каталог v2</h1>
-    <p class="v2-status-summary">Активних товарів: <b>{{ total }}</b></p>
-
-    {% if not groups %}
-    <p style="color:#888; font-size:15px;">Поки що немає активних товарів у каталозі v2.</p>
-    {% endif %}
-
+{# ── Плитки категорій v2 ── #}
+<section class="site-categories">
+    <a href="#v2-top" class="site-category-card active">
+        <div class="site-category-emoji">📦</div>
+        <div class="site-category-title">Всі товари</div>
+    </a>
     {% for group in groups %}
-    <section class="v2-group">
-        <h2 class="v2-group-title">{{ group.emoji }} {{ group.name_uk or group.name_ru }}</h2>
+    {% for cat in group.categories %}
+    <a href="#cat-{{ cat.id }}" class="site-category-card">
+        <div class="site-category-emoji">{{ cat.emoji or "📂" }}</div>
+        <div class="site-category-title">{{ cat.name_uk or cat.name_ru }}</div>
+    </a>
+    {% endfor %}
+    {% endfor %}
+</section>
+
+<div class="catalog-layout" id="v2-top">
+    <div class="catalog-content" style="width:100%; max-width:100%;">
+
+        {% if not groups %}
+        <p style="color:#888; padding:32px 0; font-size:15px;">
+            Поки що немає активних товарів у каталозі v2.
+        </p>
+        {% endif %}
+
+        {% for group in groups %}
+        <div class="v2-group-heading">
+            {{ group.emoji or "📦" }} {{ group.name_uk or group.name_ru }}
+        </div>
 
         {% for cat in group.categories %}
-        <div class="v2-category">
-            <h3 class="v2-category-title">{{ cat.emoji }} {{ cat.name_uk or cat.name_ru }}</h3>
-
-            <div class="v2-products-grid">
-                {% for p in cat.products %}
-                <div class="v2-card">
-                    {% if p.first_image %}
-                    <img class="v2-card-img" src="{{ p.first_image }}" alt="{{ p.brand_name }} {{ p.model }}" loading="lazy">
-                    {% else %}
-                    <div class="v2-card-img-placeholder">📷</div>
-                    {% endif %}
-
-                    <div class="v2-card-body">
-                        <span class="v2-card-brand">{{ p.brand_name }}</span>
-                        <span class="v2-card-model">{{ p.model }}</span>
-                        {% if p.price %}
-                        <span class="v2-card-price">{{ "{:,.0f}".format(p.price) }} грн</span>
-                        {% endif %}
-                        <span class="v2-card-status active">В наявності</span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
+        <div class="v2-category-heading" id="cat-{{ cat.id }}">
+            {{ cat.emoji or "📂" }} {{ cat.name_uk or cat.name_ru }}
         </div>
+
+        <main class="products products-grid">
+            {% for p in cat.products %}
+            <div class="card" tabindex="0" aria-label="{{ p.brand_name }} {{ p.model }}">
+                <div class="card-image-wrap">
+                    {% if p.first_image %}
+                    <img src="{{ p.first_image }}" class="product-img" alt="{{ p.brand_name }} {{ p.model }}" loading="lazy">
+                    {% else %}
+                    <div class="no-photo">Нет фото</div>
+                    {% endif %}
+                </div>
+
+                <div class="category">{{ cat.name_uk or cat.name_ru }}</div>
+
+                <h2>{{ p.brand_name }} {{ p.model }}</h2>
+
+                <div class="status">
+                    <span class="stock-badge stock-in">🟢 В наявності</span>
+                </div>
+
+                <div class="price-block">
+                    {% if p.price %}
+                    <p class="price">{{ "{:,.0f}".format(p.price) | replace(",", " ") }} грн</p>
+                    {% else %}
+                    <p class="price">— грн</p>
+                    {% endif %}
+                </div>
+
+                <div class="card-actions">
+                    <span class="details-btn v2-card-disabled">Детальніше</span>
+                    <button type="button" class="cart-btn v2-card-disabled" disabled>🛒 У кошик</button>
+                </div>
+            </div>
+            {% endfor %}
+        </main>
+
         {% endfor %}
-    </section>
-    {% endfor %}
+        {% endfor %}
 
-</main>
+    </div>
+</div>
 
+<script src="/static/lang.js"></script>
 </body>
 </html>
