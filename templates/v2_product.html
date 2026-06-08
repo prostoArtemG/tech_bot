@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ product.brand_name }} {{ product.model }} — Technovlada v2</title>
+    <meta name="robots" content="noindex, follow">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .v2-test-banner {
+            background: #1e1e3a;
+            color: #c5c5ff;
+            text-align: center;
+            padding: 8px 16px;
+            font-size: 13px;
+            letter-spacing: .3px;
+        }
+        .v2-test-banner a { color: #9999ff; text-decoration: underline; }
+
+        .v2-cart-disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<div class="v2-test-banner">
+    🚧 Каталог v2 — тестовий режим. Не для публікації.
+    <a href="/">← На головну (старий сайт)</a>
+</div>
+
+<header class="site-header">
+    <div class="header-inner">
+        <div class="header-title">
+            <a href="/" class="site-logo" aria-label="Technovlada">
+                <span class="logo-badge">T</span>
+                <span class="logo-text">Technovlada</span>
+            </a>
+            <p>Каталог v2 — тестовий режим</p>
+        </div>
+        <div class="header-actions">
+            <a href="/v2" class="header-pill">← Каталог v2</a>
+        </div>
+    </div>
+</header>
+
+<main class="product-page">
+    <a href="/v2" class="back-link">← Назад до каталогу v2</a>
+
+    <div class="product-grid">
+
+        {# ── Фото ── #}
+        <div class="product-image">
+            <div class="product-gallery">
+                {% if product.images %}
+                <img id="mainImage"
+                     src="{{ product.images[0].url }}"
+                     class="main-image lightbox-trigger"
+                     alt="{{ product.brand_name }} {{ product.model }}"
+                     data-lb-index="0">
+                {% if product.images | length > 1 %}
+                <div class="thumbs-row">
+                    {% for img in product.images %}
+                    <img src="{{ img.url }}"
+                         onclick="changeImage(this, '{{ img.url }}', {{ loop.index0 }})"
+                         class="thumb-img lightbox-thumb{% if loop.first %} active{% endif %}"
+                         data-lb-index="{{ loop.index0 }}"
+                         alt="{{ product.brand_name }} {{ product.model }} фото {{ loop.index }}">
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="no-photo" style="height:260px;display:flex;align-items:center;justify-content:center;font-size:48px;">📷</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ── Інфо ── #}
+        <div class="product-info">
+            <div class="product-card">
+
+                <div class="product-meta">
+                    <div class="category">
+                        {{ product.group_emoji or "" }} {{ product.group_name_uk or product.group_name_ru }}
+                        {% if product.category_name_uk or product.category_name_ru %}
+                        &nbsp;/&nbsp; {{ product.category_emoji or "" }} {{ product.category_name_uk or product.category_name_ru }}
+                        {% endif %}
+                    </div>
+                    <div class="status">
+                        <span class="stock-badge stock-in">🟢 В наявності</span>
+                    </div>
+                </div>
+
+                <h1 class="product-title">{{ product.brand_name }} {{ product.model }}</h1>
+
+                <div class="price-block">
+                    {% if product.price %}
+                    <div class="price">{{ "{:,.0f}".format(product.price) | replace(",", " ") }} грн</div>
+                    {% else %}
+                    <div class="price">— грн</div>
+                    {% endif %}
+                </div>
+
+                {# ── Характеристики (фільтри v2) ── #}
+                {% if product.filters %}
+                <div class="specs-box">
+                    <h3>📋 Характеристики</h3>
+                    {% for f in product.filters %}
+                    <div class="spec-row">
+                        <span>{{ f.label_uk or f.label_ru or f.field_key }}</span>
+                        <b>
+                            {% if f.value_label_uk or f.value_label_ru %}
+                                {{ f.value_label_uk or f.value_label_ru }}
+                            {% elif f.value_text %}
+                                {{ f.value_text }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </b>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {# ── Дії ── #}
+                <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
+                    <a href="/v2" class="details-btn">← Назад до каталогу</a>
+                    <button type="button" class="cart-btn v2-cart-disabled" disabled>🛒 У кошик</button>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</main>
+
+{# ── Lightbox ── #}
+<div id="productLightbox" class="img-lightbox" aria-hidden="true" role="dialog">
+    <button type="button" class="img-lightbox-close" aria-label="Закрити">×</button>
+    <button type="button" class="img-lightbox-nav img-lightbox-prev" aria-label="Попереднє фото">‹</button>
+    <button type="button" class="img-lightbox-nav img-lightbox-next" aria-label="Наступне фото">›</button>
+    <img class="img-lightbox-img" alt="">
+    <div class="img-lightbox-counter"></div>
+</div>
+
+<script>
+function changeImage(thumbEl, src, idx) {
+    var main = document.getElementById('mainImage');
+    if (main) { main.src = src; main.setAttribute('data-lb-index', String(idx)); }
+    document.querySelectorAll('.thumb-img').forEach(function(el){ el.classList.remove('active'); });
+    if (thumbEl) thumbEl.classList.add('active');
+}
+(function(){
+    var thumbs = Array.prototype.slice.call(document.querySelectorAll('.thumbs-row .thumb-img'));
+    var gallery = thumbs.length ? thumbs.map(function(t){ return t.getAttribute('src'); }) : [];
+    if (!gallery.length) {
+        var m = document.getElementById('mainImage');
+        if (m && m.getAttribute('src')) gallery = [m.getAttribute('src')];
+    }
+    var lb = document.getElementById('productLightbox');
+    if (!lb || !gallery.length) return;
+    var lbImg = lb.querySelector('.img-lightbox-img');
+    var lbClose = lb.querySelector('.img-lightbox-close');
+    var lbPrev = lb.querySelector('.img-lightbox-prev');
+    var lbNext = lb.querySelector('.img-lightbox-next');
+    var lbCounter = lb.querySelector('.img-lightbox-counter');
+    var current = 0;
+    function show(idx) {
+        current = (idx + gallery.length) % gallery.length;
+        lbImg.src = gallery[current];
+        if (lbCounter) {
+            lbCounter.style.display = gallery.length > 1 ? '' : 'none';
+            lbCounter.textContent = (current + 1) + ' / ' + gallery.length;
+        }
+        if (lbPrev) lbPrev.style.display = gallery.length > 1 ? '' : 'none';
+        if (lbNext) lbNext.style.display = gallery.length > 1 ? '' : 'none';
+    }
+    function open(idx) { show(idx || 0); lb.classList.add('open'); lb.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; }
+    function close() { lb.classList.remove('open'); lb.setAttribute('aria-hidden','true'); lbImg.src=''; document.body.style.overflow=''; }
+    var main = document.getElementById('mainImage');
+    if (main) { main.style.cursor='zoom-in'; main.addEventListener('click', function(){ open(parseInt(main.getAttribute('data-lb-index')||'0',10)); }); }
+    document.querySelectorAll('.thumb-img').forEach(function(t){
+        t.addEventListener('click', function(){ if(t.classList.contains('active')){ open(parseInt(t.getAttribute('data-lb-index')||'0',10)); } });
+    });
+    if (lbClose) lbClose.addEventListener('click', close);
+    if (lbPrev) lbPrev.addEventListener('click', function(e){ e.stopPropagation(); show(current-1); });
+    if (lbNext) lbNext.addEventListener('click', function(e){ e.stopPropagation(); show(current+1); });
+    lb.addEventListener('click', function(e){ if(e.target===lb) close(); });
+    document.addEventListener('keydown', function(e){
+        if (!lb.classList.contains('open')) return;
+        if (e.key==='Escape') close();
+        else if (e.key==='ArrowLeft') show(current-1);
+        else if (e.key==='ArrowRight') show(current+1);
+    });
+})();
+</script>
+
+<script src="/static/lang.js"></script>
+</body>
+</html>

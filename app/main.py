@@ -13057,6 +13057,18 @@ async def site_v2_home(request: Request):
     )
 
 
+@web_app.get("/v2/product/{product_id}", response_class=HTMLResponse)
+async def site_v2_product(request: Request, product_id: int):
+    product = await db.v2_get_product_for_site(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не знайдено")
+    return templates.TemplateResponse(
+        request=request,
+        name="v2_product.html",
+        context={"product": product},
+    )
+
+
 @web_app.post("/api/cart-order")
 async def api_cart_order(request: Request):
     data = await request.json()

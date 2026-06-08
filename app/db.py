@@ -3710,5 +3710,54 @@ class Database:
         )
         return [dict(r) for r in rows]
 
+    async def v2_get_product_for_site(self, product_id: int):
+        """Повертає повні дані v2-товару для сторінки: категорія, група, бренд, фото, фільтри."""
+        row = await self.fetchrow(
+            """
+            SELECT
+                p.id, p.model, p.price, p.is_active,
+                b.name AS brand_name,
+                c.id AS category_id, c.slug AS category_slug,
+                c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
+                c.emoji AS category_emoji,
+                g.id AS group_id, g.slug AS group_slug,
+                g.name_uk AS group_name_uk, g.name_ru AS group_name_ru,
+                g.emoji AS group_emoji
+            FROM v2_products p
+            JOIN v2_category_brands b ON b.id = p.category_brand_id
+            JOIN v2_categories c ON c.id = p.category_id
+            JOIN v2_product_groups g ON g.id = c.group_id
+            WHERE p.id = $1 AND p.is_active = TRUE AND p.deleted_at IS NULL
+            """,
+            product_id,
+        )
+        if not row:
+            return None
+        product = dict(row)
+
+        images = await self.fetch(
+            "SELECT id, url, sort_order FROM v2_product_images "
+            "WHERE product_id = $1 ORDER BY sort_order, id",
+            product_id,
+        )
+        product["images"] = [dict(img) for img in images]
+
+        filters = await self.fetch(
+            """
+            SELECT pfv.value_text,
+                   ff.label_uk, ff.label_ru, ff.field_key,
+                   fv.label_uk AS value_label_uk, fv.label_ru AS value_label_ru
+            FROM v2_product_filter_values pfv
+            JOIN v2_filter_fields ff ON ff.id = pfv.filter_field_id
+            LEFT JOIN v2_filter_values fv ON fv.id = pfv.filter_value_id
+            WHERE pfv.product_id = $1
+            ORDER BY ff.sort_order, ff.id
+            """,
+            product_id,
+        )
+        product["filters"] = [dict(f) for f in filters]
+
+        return product
+
 
 db = Database(DATABASE_URL)
