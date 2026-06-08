@@ -13182,8 +13182,9 @@ async def robots_txt(request: Request):
 # ── v2 catalog (тестовий режим) ──────────────────────────────────────────────
 
 @web_app.get("/v2", response_class=HTMLResponse)
-async def site_v2_home(request: Request):
-    rows = await db.v2_list_active_products_for_site()
+async def site_v2_home(request: Request, q: str = ""):
+    q = (q or "").strip()
+    rows = await db.v2_list_active_products_for_site(q=q)
 
     # Будуємо структуру: groups → categories → products
     groups_map: dict = {}
@@ -13219,7 +13220,7 @@ async def site_v2_home(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="v2_index.html",
-        context={"groups": groups, "total": len(rows)},
+        context={"groups": groups, "total": len(rows), "q": q},
     )
 
 

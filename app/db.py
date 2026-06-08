@@ -3684,30 +3684,65 @@ class Database:
         )
         return bool(row["is_active"]) if row else False
 
-    async def v2_list_active_products_for_site(self) -> list:
+    async def v2_list_active_products_for_site(self, q: str = "") -> list:
         """Повертає активні v2-товари з брендом, категорією, групою і першим фото."""
-        rows = await self.fetch(
-            """
-            SELECT
-                p.id, p.model, p.price, p.is_active,
-                b.name AS brand_name,
-                c.id AS category_id, c.slug AS category_slug,
-                c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
-                c.emoji AS category_emoji,
-                g.id AS group_id, g.slug AS group_slug,
-                g.name_uk AS group_name_uk, g.name_ru AS group_name_ru,
-                g.emoji AS group_emoji,
-                (SELECT url FROM v2_product_images
-                 WHERE product_id = p.id
-                 ORDER BY sort_order, id LIMIT 1) AS first_image
-            FROM v2_products p
-            JOIN v2_category_brands b ON b.id = p.category_brand_id
-            JOIN v2_categories c ON c.id = p.category_id
-            JOIN v2_product_groups g ON g.id = c.group_id
-            WHERE p.is_active = TRUE AND p.deleted_at IS NULL
-            ORDER BY g.sort_order, g.id, c.sort_order, c.id, b.name, p.model
-            """
-        )
+        q = (q or "").strip()
+        if q:
+            pattern = f"%{q}%"
+            rows = await self.fetch(
+                """
+                SELECT
+                    p.id, p.model, p.price, p.is_active,
+                    b.name AS brand_name,
+                    c.id AS category_id, c.slug AS category_slug,
+                    c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
+                    c.emoji AS category_emoji,
+                    g.id AS group_id, g.slug AS group_slug,
+                    g.name_uk AS group_name_uk, g.name_ru AS group_name_ru,
+                    g.emoji AS group_emoji,
+                    (SELECT url FROM v2_product_images
+                     WHERE product_id = p.id
+                     ORDER BY sort_order, id LIMIT 1) AS first_image
+                FROM v2_products p
+                JOIN v2_category_brands b ON b.id = p.category_brand_id
+                JOIN v2_categories c ON c.id = p.category_id
+                JOIN v2_product_groups g ON g.id = c.group_id
+                WHERE p.is_active = TRUE AND p.deleted_at IS NULL
+                  AND (
+                    p.model    ILIKE $1
+                    OR b.name  ILIKE $1
+                    OR c.name_uk ILIKE $1
+                    OR c.name_ru ILIKE $1
+                    OR g.name_uk ILIKE $1
+                    OR g.name_ru ILIKE $1
+                  )
+                ORDER BY g.sort_order, g.id, c.sort_order, c.id, b.name, p.model
+                """,
+                pattern,
+            )
+        else:
+            rows = await self.fetch(
+                """
+                SELECT
+                    p.id, p.model, p.price, p.is_active,
+                    b.name AS brand_name,
+                    c.id AS category_id, c.slug AS category_slug,
+                    c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
+                    c.emoji AS category_emoji,
+                    g.id AS group_id, g.slug AS group_slug,
+                    g.name_uk AS group_name_uk, g.name_ru AS group_name_ru,
+                    g.emoji AS group_emoji,
+                    (SELECT url FROM v2_product_images
+                     WHERE product_id = p.id
+                     ORDER BY sort_order, id LIMIT 1) AS first_image
+                FROM v2_products p
+                JOIN v2_category_brands b ON b.id = p.category_brand_id
+                JOIN v2_categories c ON c.id = p.category_id
+                JOIN v2_product_groups g ON g.id = c.group_id
+                WHERE p.is_active = TRUE AND p.deleted_at IS NULL
+                ORDER BY g.sort_order, g.id, c.sort_order, c.id, b.name, p.model
+                """
+            )
         return [dict(r) for r in rows]
 
     async def v2_get_product_for_site(self, product_id: int):

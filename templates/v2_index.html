@@ -86,9 +86,27 @@
 <div class="catalog-layout" id="v2-top">
     <div class="catalog-content" style="width:100%; max-width:100%;">
 
+        {# ── Пошук ── #}
+        <section class="search-box" style="margin-bottom:16px;">
+            <form class="search-form" method="get" action="/v2">
+                <div class="search-main-row">
+                    <input type="text" name="q" placeholder="Пошук: Samsung, бойлер..." value="{{ q or '' }}">
+                    <button type="submit">Знайти</button>
+                </div>
+            </form>
+        </section>
+
+        {% if q %}
+        <p style="font-size:14px; color:#666; margin-bottom:12px;">
+            Результати пошуку: <b>«{{ q }}»</b> — знайдено <b>{{ total }}</b> товар(ів)
+        </p>
+        {% else %}
+        <p class="v2-status-summary">Активних товарів: <b>{{ total }}</b></p>
+        {% endif %}
+
         {% if not groups %}
         <p style="color:#888; padding:32px 0; font-size:15px;">
-            Поки що немає активних товарів у каталозі v2.
+            {% if q %}Нічого не знайдено за запитом «{{ q }}».{% else %}Поки що немає активних товарів у каталозі v2.{% endif %}
         </p>
         {% endif %}
 
