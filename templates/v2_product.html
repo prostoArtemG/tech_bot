@@ -123,6 +123,19 @@
                 </div>
                 {% endif %}
 
+                {# ── Додаткові характеристики з specs_json (не в фільтрах) ── #}
+                {% if extra_specs %}
+                <div class="specs-box" style="margin-top:12px;">
+                    <h3>📄 Додатково</h3>
+                    {% for k, v in extra_specs.items() %}
+                    <div class="spec-row">
+                        <span>{{ k }}</span>
+                        <b>{{ v }}</b>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
                 {# ── Дії ── #}
                 <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
                     <a href="/v2" class="details-btn">← Назад до каталогу</a>

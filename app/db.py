@@ -3716,6 +3716,7 @@ class Database:
             """
             SELECT
                 p.id, p.model, p.price, p.is_active,
+                p.specs_json,
                 b.name AS brand_name,
                 c.id AS category_id, c.slug AS category_slug,
                 c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
@@ -3758,6 +3759,32 @@ class Database:
         product["filters"] = [dict(f) for f in filters]
 
         return product
+
+    async def v2_get_product_specs(self, product_id: int) -> dict:
+        """Повертає specs_json словник товару."""
+        row = await self.fetchrow(
+            "SELECT specs_json FROM v2_products WHERE id = $1",
+            product_id,
+        )
+        if not row:
+            return {}
+        val = row["specs_json"]
+        if isinstance(val, dict):
+            return val
+        try:
+            import json as _json
+            return _json.loads(val) if val else {}
+        except Exception:
+            return {}
+
+    async def v2_update_product_specs(self, product_id: int, specs: dict) -> None:
+        """Зберігає specs_json для товару."""
+        import json as _json
+        await self.execute(
+            "UPDATE v2_products SET specs_json = $2::jsonb WHERE id = $1",
+            product_id,
+            _json.dumps(specs, ensure_ascii=False),
+        )
 
 
 db = Database(DATABASE_URL)

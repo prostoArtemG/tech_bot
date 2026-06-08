@@ -1483,6 +1483,11 @@ class V2QuickNavState(StatesGroup):
     choosing_category = State()  # вибір категорії для швидкої навігації
 
 
+class V2ProductSpecsState(StatesGroup):
+    menu              = State()  # меню характеристик
+    waiting_for_bulk_text = State()  # очікування вставки списком
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -5589,8 +5594,8 @@ async def _v2_show_product_card(message: Message, state: FSMContext, product_id:
     )
     kb = ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="🖼 Фото"), KeyboardButton(text="🔧 Заповнити фільтри")],
-        [KeyboardButton(text="✏️ Редагувати"), KeyboardButton(text="🗑 Видалити")],
-        [KeyboardButton(text="🔄 Статус наявності")],
+        [KeyboardButton(text="📝 Характеристики"), KeyboardButton(text="✏️ Редагувати")],
+        [KeyboardButton(text="🗑 Видалити"), KeyboardButton(text="🔄 Статус наявності")],
         [KeyboardButton(text="⬅️ Назад до товарів")],
     ], resize_keyboard=True)
     await state.update_data(v2_viewing_product_id=product_id, v2_products_cat_id=int(product["category_id"]))
@@ -5662,7 +5667,16 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         await _v2_show_product_card(message, state, int(product_id))
         return
 
-    if text == "🗑 Видалити":
+    if text == "� Характеристики":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        prod = await db.v2_get_product_by_id(int(product_id))
+        cat_id = int(prod["category_id"]) if prod else None
+        await _v2_show_specs_menu(message, state, int(product_id), cat_id)
+        return
+
+    if text == "�🗑 Видалити":
         if not product_id:
             await message.answer("⚠️ Товар не знайдено.")
             return
@@ -5960,6 +5974,158 @@ async def v2_product_image_upload_handler(message: Message, state: FSMContext):
         return
 
     await _v2_show_product_images(message, state, int(product_id))
+
+
+# ── v2: Характеристики товару ─────────────────────────────────────────────────
+
+async def _v2_show_specs_menu(message: Message, state: FSMContext, product_id: int, category_id):
+    """Показує меню характеристик товару."""
+    product = await db.v2_get_product_by_id(product_id)
+    specs = await db.v2_get_product_specs(product_id)
+    cnt = len(specs)
+    header = (
+        f"📝 <b>Характеристики товару</b>\n\n"
+        f"🏷 {product['brand_name'] if product else '?'} {product['model'] if product else ''}\n"
+        f"Збережено характеристик: <b>{cnt}</b>"
+    )
+    await state.update_data(v2_specs_product_id=product_id, v2_specs_cat_id=category_id)
+    await state.set_state(V2ProductSpecsState.menu)
+    await message.answer(
+        header,
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[
+            [KeyboardButton(text="📋 Вставити списком")],
+            [KeyboardButton(text="🧹 Очистити")],
+            [KeyboardButton(text="⬅️ Назад до товару")],
+        ], resize_keyboard=True),
+    )
+
+
+@router.message(V2ProductSpecsState.menu)
+async def v2_specs_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_specs_product_id")
+    category_id = data.get("v2_specs_cat_id")
+
+    if text == "⬅️ Назад до товару":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "📋 Вставити списком":
+        await state.set_state(V2ProductSpecsState.waiting_for_bulk_text)
+        await message.answer(
+            "📋 <b>Вставте характеристики у форматі:</b>\n\n"
+            "<code>Літраж: 80 л\n"
+            "Тип ТЕНа: Сухий\n"
+            "Монтаж: Вертикальний\n"
+            "Потужність: 1500 Вт</code>",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "🧹 Очистити":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await db.v2_update_product_specs(int(product_id), {})
+        await message.answer("🧹 Характеристики очищено.")
+        await _v2_show_specs_menu(message, state, int(product_id), category_id)
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2ProductSpecsState.waiting_for_bulk_text)
+async def v2_specs_bulk_text_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_specs_product_id")
+    category_id = data.get("v2_specs_cat_id")
+
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_specs_menu(message, state, int(product_id), category_id)
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+
+    # Парсимо рядки "ключ: значення"
+    specs: dict = {}
+    for line in text.splitlines():
+        if ":" in line:
+            key, _, val = line.partition(":")
+            key = key.strip()
+            val = val.strip()
+            if key and val:
+                specs[key] = val
+
+    if not specs:
+        await message.answer(
+            "⚠️ Не знайдено жодного рядка у форматі <b>ключ: значення</b>.",
+            parse_mode="HTML",
+        )
+        return
+
+    # Зберігаємо specs_json
+    await db.v2_update_product_specs(int(product_id), specs)
+
+    # Намагаємось зіставити з filter_fields
+    matched = 0
+    if category_id:
+        fields = await db.v2_list_filter_fields_by_category(int(category_id))
+        for field in fields:
+            field_keys = {
+                (field.get("label_uk") or "").lower().strip(),
+                (field.get("label_ru") or "").lower().strip(),
+                (field.get("field_key") or "").lower().strip(),
+            }
+            field_keys.discard("")
+            for spec_key, spec_val in specs.items():
+                if spec_key.lower().strip() in field_keys:
+                    values = await db.v2_list_filter_values(int(field["id"]))
+                    value_id = None
+                    for v in values:
+                        v_labels = {
+                            (v.get("label_uk") or "").lower().strip(),
+                            (v.get("label_ru") or "").lower().strip(),
+                            (v.get("value_key") or "").lower().strip(),
+                        }
+                        v_labels.discard("")
+                        if spec_val.lower().strip() in v_labels:
+                            value_id = v["id"]
+                            break
+                    if value_id is None and (field.get("field_type") or "select") == "select":
+                        value_key = make_slug(spec_val)
+                        value_id = await db.v2_create_filter_value(
+                            int(field["id"]), value_key, spec_val, spec_val
+                        )
+                    await db.v2_upsert_product_filter_value(
+                        int(product_id),
+                        int(field["id"]),
+                        value_id,
+                        spec_val if value_id is None else None,
+                    )
+                    matched += 1
+                    break
+
+    await message.answer(
+        f"✅ Збережено <b>{len(specs)}</b> характеристик.\n"
+        f"🔧 Зіставлено з фільтрами: <b>{matched}</b>",
+        parse_mode="HTML",
+    )
+    await _v2_show_specs_menu(message, state, int(product_id), category_id)
 
 
 async def _v2_show_filter_prompt(message: Message, state: FSMContext, fields: list, idx: int):
@@ -13062,10 +13228,25 @@ async def site_v2_product(request: Request, product_id: int):
     product = await db.v2_get_product_for_site(product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Товар не знайдено")
+    # Ключі/мітки що вже показані через фільтри
+    shown_keys: set = set()
+    for f in product.get("filters", []):
+        for k in (f.get("field_key"), f.get("label_uk"), f.get("label_ru")):
+            if k:
+                shown_keys.add(k.lower().strip())
+    # Залишкові характеристики з specs_json
+    specs_json = product.get("specs_json") or {}
+    if not isinstance(specs_json, dict):
+        import json as _json
+        try:
+            specs_json = _json.loads(specs_json)
+        except Exception:
+            specs_json = {}
+    extra_specs = {k: v for k, v in specs_json.items() if k.lower().strip() not in shown_keys}
     return templates.TemplateResponse(
         request=request,
         name="v2_product.html",
-        context={"product": product},
+        context={"product": product, "extra_specs": extra_specs},
     )
 
 
