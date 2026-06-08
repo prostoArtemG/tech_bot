@@ -13382,28 +13382,108 @@ async def site_v2_home(
 
 @web_app.get("/v2/product/{product_id}", response_class=HTMLResponse)
 async def site_v2_product(request: Request, product_id: int):
-    product = await db.v2_get_product_for_site(product_id)
-    if not product:
+    raw = await db.v2_get_product_for_site(product_id)
+    if not raw:
         raise HTTPException(status_code=404, detail="Товар не знайдено")
-    # Ключі/мітки що вже показані через фільтри
-    shown_keys: set = set()
-    for f in product.get("filters", []):
-        for k in (f.get("field_key"), f.get("label_uk"), f.get("label_ru")):
-            if k:
-                shown_keys.add(k.lower().strip())
-    # Залишкові характеристики з specs_json
-    specs_json = product.get("specs_json") or {}
+
+    # Зображення: url → image_url (формат product.html)
+    images = [
+        {"image_url": img["url"]}
+        for img in (raw.get("images") or [])
+        if img.get("url")
+    ]
+    photo_url = images[0]["image_url"] if images else ""
+
+    # specs_json
+    specs_json = raw.get("specs_json") or {}
     if not isinstance(specs_json, dict):
         import json as _json
         try:
             specs_json = _json.loads(specs_json)
         except Exception:
             specs_json = {}
-    extra_specs = {k: v for k, v in specs_json.items() if k.lower().strip() not in shown_keys}
+
+    # Характеристики з filter_values + specs_json → specifications / spec_labels / spec_field_order
+    specifications: dict = {}
+    spec_labels: dict = {}
+    spec_field_order: list = []
+    for f in raw.get("filters") or []:
+        key = f.get("field_key") or ""
+        label = f.get("label_uk") or f.get("label_ru") or key
+        value = f.get("value_label_uk") or f.get("value_label_ru") or f.get("value_text") or ""
+        if key and value and key not in specifications:
+            specifications[key] = value
+            spec_labels[key] = label
+            spec_field_order.append(key)
+    for key, value in specs_json.items():
+        if key not in specifications and value is not None and str(value).strip():
+            specifications[key] = str(value)
+            spec_labels[key] = key
+            spec_field_order.append(key)
+
+    # Адаптований product-dict для product.html
+    product = {
+        "id": raw["id"],
+        "brand": raw["brand_name"],
+        "model": raw["model"],
+        "price": raw["price"],
+        "current_price": raw["price"],
+        "old_price": None,
+        "is_sale": False,
+        "category": raw["category_name_uk"] or raw["category_name_ru"] or raw["category_slug"],
+        "stock_status": "in_stock",
+        "photo_url": photo_url,
+        "warranty_months": "",
+        "specs": None,
+        "description": None,
+        "boiler_volume_liters": specifications.get("volume"),
+        "boiler_ten_type": None,
+        "specifications_json": {},
+    }
+
+    # Спільні налаштування сайту
+    site_contacts = {
+        "phone": await db.get_setting("site_phone") or "",
+        "phones": await get_phones_list(),
+        "tg": await db.get_setting("site_tg") or "",
+        "instagram": await db.get_setting("site_instagram") or "",
+        "address": await db.get_setting("site_address") or "",
+        "schedule": await db.get_setting("site_schedule") or "",
+    }
+    site_title = await db.get_setting("site_title") or "Technovlada"
+    site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
+    seo_product = {
+        "meta_title": f"{raw['brand_name']} {raw['model']} — {site_title}",
+        "meta_description": "",
+        "h1": f"{raw['brand_name']} {raw['model']}",
+        "seo_text": "",
+        "indexable": False,
+    }
+
     return templates.TemplateResponse(
         request=request,
-        name="v2_product.html",
-        context={"product": product, "extra_specs": extra_specs},
+        name="product.html",
+        context={
+            "product": product,
+            "images": images,
+            "specifications": specifications,
+            "spec_labels": spec_labels,
+            "spec_field_order": spec_field_order,
+            "variants": [],
+            "site_contacts": site_contacts,
+            "site_title": site_title,
+            "site_subtitle": site_subtitle,
+            "header_show_cart": header_show_cart,
+            "header_show_contacts": header_show_contacts,
+            "header_show_language": header_show_language,
+            "site_design": await get_site_design(),
+            "seo_product": seo_product,
+            "canonical_url": f"{_seo_base_url(request)}/v2/product/{product_id}",
+            "catalog_base": "/v2",
+        },
     )
 
 
