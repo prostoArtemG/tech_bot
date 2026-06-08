@@ -241,12 +241,12 @@
     {% endif %}
 
     <section class="site-categories">
-        <a href="/" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">
+        <a href="{{ catalog_base }}" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">
             <div class="site-category-emoji">📦</div>
             <div class="site-category-title" data-ru="Все товары" data-uk="Всі товари">Все товары</div>
         </a>
         {% for cat in category_cards %}
-        <a href="/?category={{ cat.filter_value }}" class="site-category-card {% if (current_category_key and current_category_key == cat.key) or (not current_category_key and current_category == cat.filter_value) %}active{% endif %}">
+        <a href="{{ catalog_base }}?category={{ cat.filter_value }}" class="site-category-card {% if (current_category_key and current_category_key == cat.key) or (not current_category_key and current_category == cat.filter_value) %}active{% endif %}">
             {% if cat.key == 'hoods' %}
             <div class="site-category-emoji"><img src="/static/icons/hood.png" class="site-category-img" alt="{{ cat.name_ru }}"></div>
             {% else %}
@@ -259,7 +259,7 @@
 
     <div class="catalog-layout" id="catalog">
     <section class="search-box">
-        <form class="search-form" method="get" action="/">
+        <form class="search-form" method="get" action="{{ catalog_base }}">
             {% if current_category %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
             <div class="search-main-row">
                 <input type="text" name="q"
@@ -321,7 +321,7 @@
                 <div class="filters-cat-grid">
                     {% for card in category_cards %}
                     <a class="filters-cat-pill"
-                       href="/?category={{ card.filter_value | urlencode }}{{ _cat_qs }}"
+                       href="{{ catalog_base }}?category={{ card.filter_value | urlencode }}{{ _cat_qs }}"
                        data-ru="{{ card.name_ru }}"
                        data-uk="{{ card.name_uk }}">
                         <span class="filters-cat-emoji" aria-hidden="true">{{ card.emoji }}</span>
@@ -438,7 +438,7 @@
     <div class="catalog-toolbar" id="catalogToolbar">
       <div class="chips-row" id="chipsRow">
         <div class="active-chips" id="activeChips"></div>
-        <a class="clear-filters-btn" id="clearFiltersBtn" href="/"
+        <a class="clear-filters-btn" id="clearFiltersBtn" href="{{ catalog_base }}"
            style="display:none"
            data-ru="Скинути фільтри" data-uk="Скинути фільтри">Скинути фільтри</a>
       </div>
@@ -459,7 +459,7 @@
         {% set _b = (product.brand or '')|trim %}
         {% set _m = (product.model or '')|trim %}
         {% if (_b and _b not in ['-', 'None']) or (_m and _m not in ['-', 'None']) %}
-        <div class="card" data-href="/product/{{ product.id }}" data-id="{{ product.id }}" data-price="{{ product.current_price or product.price }}" data-specs="{{ (product.specifications_json or {})|tojson|e }}" tabindex="0" role="link" aria-label="{{ product.brand }} {{ product.model }}">
+        <div class="card" data-href="{{ product.url or ('/product/' ~ product.id|string) }}" data-id="{{ product.id }}" data-price="{{ product.current_price or product.price }}" data-specs="{{ (product.specifications_json or {})|tojson|e }}" tabindex="0" role="link" aria-label="{{ product.brand }} {{ product.model }}">
             <div class="card-image-wrap">
                 {% if product.is_sale %}
                 <div class="card-sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></div>
@@ -499,7 +499,7 @@
             <p class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} <span data-ru="мес" data-uk="міс">мес</span></p>
 
             <div class="card-actions">
-                <a href="/product/{{ product.id }}" class="details-btn" data-ru="Подробнее" data-uk="Детальніше">Подробнее</a>
+                <a href="{{ product.url or ('/product/' ~ product.id|string) }}" class="details-btn" data-ru="Подробнее" data-uk="Детальніше">Подробнее</a>
                 <button type="button" class="cart-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ cur_price }}')">🛒 <span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
             </div>
         </div>
@@ -518,15 +518,15 @@
     {% set _qs = _qs_ns.s %}
     <div class="pagination">
       {% if page > 1 %}
-      <a href="/?page={{ page - 1 }}{{ _qs }}">← Назад</a>
+      <a href="{{ catalog_base }}?page={{ page - 1 }}{{ _qs }}">← Назад</a>
       {% endif %}
 
       {% for p in range(1, pages + 1) %}
-      <a class="{% if p == page %}active{% endif %}" href="/?page={{ p }}{{ _qs }}">{{ p }}</a>
+      <a class="{% if p == page %}active{% endif %}" href="{{ catalog_base }}?page={{ p }}{{ _qs }}">{{ p }}</a>
       {% endfor %}
 
       {% if page < pages %}
-      <a href="/?page={{ page + 1 }}{{ _qs }}">Вперёд →</a>
+      <a href="{{ catalog_base }}?page={{ page + 1 }}{{ _qs }}">Вперёд →</a>
       {% endif %}
     </div>
     {% endif %}
@@ -767,6 +767,7 @@
 </footer>
 
 <script>
+var _CAT_BASE = {{ catalog_base | tojson }};
 /* ─── Filter metadata: built by Jinja, consumed by chips JS ─── */
 var FILTER_META = {
   {% for attr in dyn_attrs %}
@@ -849,7 +850,7 @@ var FILTER_META = {
       all.forEach(function (v) { if (v !== chip.value) p.append(chip.key, v); });
       p.delete('page');
       var qs = p.toString();
-      window.location.href = qs ? '/?' + qs : '/';
+      window.location.href = _CAT_BASE + (qs ? '?' + qs : '');
     });
     chipsEl.appendChild(btn);
   });
@@ -857,7 +858,7 @@ var FILTER_META = {
   if (clearBtn) {
     clearBtn.style.display = '';
     var cat = params.get('category');
-    clearBtn.href = cat ? '/?category=' + encodeURIComponent(cat) : '/';
+    clearBtn.href = cat ? _CAT_BASE + '?category=' + encodeURIComponent(cat) : _CAT_BASE;
   }
 }());
 
@@ -872,7 +873,7 @@ var FILTER_META = {
     else p.delete('sort');
     p.delete('page');
     var qs = p.toString();
-    window.location.href = qs ? '/?' + qs : '/';
+    window.location.href = _CAT_BASE + (qs ? '?' + qs : '');
   });
 }());
 

@@ -12615,6 +12615,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "seo_index": seo_index,
             "seo_effective": seo_effective,
             "canonical_url": canonical_url,
+            "catalog_base": "/",
         }
     )
 
@@ -13182,91 +13183,199 @@ async def robots_txt(request: Request):
 # ── v2 catalog (тестовий режим) ──────────────────────────────────────────────
 
 @web_app.get("/v2", response_class=HTMLResponse)
-async def site_v2_home(request: Request, q: str = "", category: str = "", brand: str = ""):
+async def site_v2_home(
+    request: Request,
+    q: str = "",
+    category: str = "",
+    brand: str = "",
+    price_min: str = "",
+    price_max: str = "",
+    in_stock: str = "",
+    sort: str = "",
+    page: int = 1,
+):
     q = (q or "").strip()
     category = (category or "").strip()
     brand = (brand or "").strip()
+    price_min = (price_min or "").strip()
+    price_max = (price_max or "").strip()
+    sort = (sort or "").strip().lower()
+    if sort not in ("", "price_asc", "price_desc", "new", "newest", "popular"):
+        sort = ""
 
-    # Парсимо динамічні фільтри з query params (все, крім відомих)
-    _known = {"q", "category", "brand"}
+    # Динамічні фільтри з query params (все, крім відомих)
+    _known = {"q", "category", "brand", "price_min", "price_max", "in_stock", "sort", "page"}
     selected_filters: dict = {}
     for key, val in request.query_params.multi_items():
         if key not in _known and val:
             selected_filters.setdefault(key, []).append(val)
 
-    # Базові рядки (без category/brand/filters): для плиток і списку брендів
+    # Базова вибірка (без category/brand/filters) — для category_cards та brands
     base_rows = await db.v2_list_active_products_for_site(q=q)
 
-    # Унікальні категорії для плиток (порядок збережено)
+    # category_cards — унікальні категорії, порядок із base_rows
     seen_cat_ids: set = set()
-    all_cats: list = []
+    category_cards: list = []
     for p in base_rows:
         if p["category_id"] not in seen_cat_ids:
             seen_cat_ids.add(p["category_id"])
-            all_cats.append({
-                "id": p["category_id"],
-                "slug": p["category_slug"],
-                "name_uk": p["category_name_uk"],
-                "name_ru": p["category_name_ru"],
-                "emoji": p["category_emoji"] or "",
+            category_cards.append({
+                "key": p["category_slug"],
+                "name_ru": p["category_name_ru"] or p["category_name_uk"] or p["category_slug"],
+                "name_uk": p["category_name_uk"] or p["category_name_ru"] or p["category_slug"],
+                "emoji": p["category_emoji"] or "\U0001f4e6",
+                "filter_value": p["category_slug"],
             })
 
-    # Бренди для поточної категорії (без brand/filters)
-    cat_rows = [p for p in base_rows if not category or p["category_slug"] == category]
-    all_brands = sorted({p["brand_name"] for p in cat_rows})
+    # Brands для поточної категорії
+    cat_base_rows = [p for p in base_rows if not category or p["category_slug"] == category]
+    brands = sorted({p["brand_name"] for p in cat_base_rows})
 
-    # Динамічні фільтри (тільки якщо вибрана категорія)
+    # Динамічні фільтри → формат index.html
     filter_fields = await db.v2_get_filters_for_site(category) if category else []
+    dyn_attrs: list = []
+    dyn_options: dict = {}
+    dyn_selected: dict = {}
+    dyn_query_extras: list = []
+    for field in filter_fields:
+        dyn_attrs.append({
+            "attribute_key": field["field_key"],
+            "name_ru": field["label_ru"] or field["label_uk"] or field["field_key"],
+            "name_ua": field["label_uk"] or field["label_ru"] or field["field_key"],
+            "type": field["field_type"],
+            "unit": field["unit"] or "",
+            "render_kind": "checkbox",
+        })
+        dyn_options[field["field_key"]] = [
+            {
+                "value": val["value_key"],
+                "label_ru": val["label_ru"] or val["label_uk"] or val["value_key"],
+                "label_uk": val["label_uk"] or val["label_ru"] or val["value_key"],
+            }
+            for val in field["values"]
+        ]
+        if field["field_key"] in selected_filters:
+            dyn_selected[field["field_key"]] = selected_filters[field["field_key"]]
+            for v in selected_filters[field["field_key"]]:
+                dyn_query_extras.append((field["field_key"], v))
 
     # Фінальна вибірка з усіма фільтрами
     rows = await db.v2_list_active_products_for_site(
         q=q, category=category, brand=brand, selected_filters=selected_filters
     )
 
-    # Будуємо структуру: groups → categories → products
-    groups_map: dict = {}
-    for p in rows:
-        gid = p["group_id"]
-        if gid not in groups_map:
-            groups_map[gid] = {
-                "id": gid,
-                "slug": p["group_slug"],
-                "name_uk": p["group_name_uk"],
-                "name_ru": p["group_name_ru"],
-                "emoji": p["group_emoji"] or "",
-                "categories": {},
-            }
-        g = groups_map[gid]
-        cid = p["category_id"]
-        if cid not in g["categories"]:
-            g["categories"][cid] = {
-                "id": cid,
-                "slug": p["category_slug"],
-                "name_uk": p["category_name_uk"],
-                "name_ru": p["category_name_ru"],
-                "emoji": p["category_emoji"] or "",
-                "products": [],
-            }
-        g["categories"][cid]["products"].append(p)
+    # Адаптуємо v2 рядки до формату карточки index.html
+    products: list = [
+        {
+            "id": p["id"],
+            "brand": p["brand_name"],
+            "model": p["model"],
+            "price": p["price"],
+            "current_price": p["price"],
+            "old_price": None,
+            "is_sale": False,
+            "category": p["category_name_uk"] or p["category_name_ru"] or p["category_slug"],
+            "category_key": p["category_slug"],
+            "photo_url": p["first_image"] or "",
+            "stock_status": "in_stock",
+            "availability_status": "in_stock",
+            "warranty_months": "",
+            "specifications_json": {},
+            "url": f"/v2/product/{p['id']}",
+        }
+        for p in rows
+    ]
 
-    groups = []
-    for g in groups_map.values():
-        g["categories"] = list(g["categories"].values())
-        groups.append(g)
+    # Фільтр ціни
+    if price_min:
+        try:
+            products = [p for p in products if float(p["price"] or 0) >= float(price_min)]
+        except ValueError:
+            pass
+    if price_max:
+        try:
+            products = [p for p in products if float(p["price"] or 0) <= float(price_max)]
+        except ValueError:
+            pass
+
+    # Сортування
+    def _v2_price(p):
+        try:
+            return float(p.get("price") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if sort == "price_asc":
+        products = sorted(products, key=_v2_price)
+    elif sort == "price_desc":
+        products = sorted(products, key=_v2_price, reverse=True)
+    elif sort in ("new", "newest"):
+        products = sorted(products, key=lambda p: p["id"], reverse=True)
+
+    # Пагінація
+    per_page = 12
+    total = len(products)
+    pages = math.ceil(total / per_page) if total else 1
+    page = max(1, min(page, pages))
+    products_page = products[(page - 1) * per_page: page * per_page]
+
+    # Спільні налаштування сайту
+    site_contacts = {
+        "phone": await db.get_setting("site_phone") or "",
+        "phones": await get_phones_list(),
+        "tg": await db.get_setting("site_tg") or "",
+        "instagram": await db.get_setting("site_instagram") or "",
+        "address": await db.get_setting("site_address") or "",
+        "schedule": await db.get_setting("site_schedule") or "",
+    }
+    site_title = await db.get_setting("site_title") or "Technovlada"
+    site_subtitle = await db.get_setting("site_subtitle") or "\u0411\u044b\u0442\u043e\u0432\u0430\u044f \u0442\u0435\u0445\u043d\u0438\u043a\u0430 \u043f\u043e\u0434 \u0437\u0430\u043a\u0430\u0437 \u0438 \u0432 \u043d\u0430\u043b\u0438\u0447\u0438\u0438"
+    header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
+    header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
+    header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
+    site_design = await get_site_design()
+    active_banners = await db.list_active_banners()
+    seo_effective = {
+        "meta_title": f"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 v2 \u2014 {site_title}",
+        "meta_description": "",
+        "h1": "",
+        "seo_text": "",
+        "indexable": False,
+    }
 
     return templates.TemplateResponse(
         request=request,
-        name="v2_index.html",
+        name="index.html",
         context={
-            "groups": groups,
-            "total": len(rows),
+            "products": products_page,
+            "category_cards": category_cards,
             "q": q,
             "current_category": category,
+            "current_category_key": category,
+            "page": page,
+            "pages": pages,
+            "brands": brands,
             "current_brand": brand,
-            "all_cats": all_cats,
-            "all_brands": all_brands,
-            "filter_fields": filter_fields,
-            "selected_filters": selected_filters,
+            "price_min": price_min,
+            "price_max": price_max,
+            "in_stock": in_stock,
+            "dyn_attrs": dyn_attrs,
+            "dyn_options": dyn_options,
+            "dyn_selected": dyn_selected,
+            "dyn_range": {},
+            "dyn_query_extras": dyn_query_extras,
+            "current_sort": sort,
+            "site_contacts": site_contacts,
+            "site_title": site_title,
+            "site_subtitle": site_subtitle,
+            "header_show_cart": header_show_cart,
+            "header_show_contacts": header_show_contacts,
+            "header_show_language": header_show_language,
+            "site_design": site_design,
+            "active_banners": active_banners,
+            "seo_effective": seo_effective,
+            "canonical_url": f"{_seo_base_url(request)}/v2",
+            "catalog_base": "/v2",
         },
     )
 
