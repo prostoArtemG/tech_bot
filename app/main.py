@@ -1465,6 +1465,11 @@ class V2ProductFilterState(StatesGroup):
     waiting_for_value = State()  # довільний текстовий ввід
 
 
+class V2ProductImageState(StatesGroup):
+    browsing          = State()  # список фото
+    waiting_for_photo = State()  # очікуємо фото від користувача
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -5565,7 +5570,7 @@ async def _v2_show_product_card(message: Message, state: FSMContext, product_id:
         f"🔧 Фільтри: {filled_cnt}/{total_cnt}"
     )
     kb = ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="🔧 Заповнити фільтри")],
+        [KeyboardButton(text="🔧 Заповнити фільтри"), KeyboardButton(text="🖼 Фото")],
         [KeyboardButton(text="⬅️ Назад до товарів")],
     ], resize_keyboard=True)
     await state.update_data(v2_viewing_product_id=product_id, v2_products_cat_id=int(product["category_id"]))
@@ -5605,7 +5610,95 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         await _v2_show_filter_prompt(message, state, fields_list, 0)
         return
 
+    if text == "🖼 Фото":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await _v2_show_product_images(message, state, int(product_id))
+        return
+
     await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+# ── v2: Фото товару ──────────────────────────────────────────────────────────
+
+async def _v2_show_product_images(message: Message, state: FSMContext, product_id: int):
+    """Показує список фото товару."""
+    images = await db.v2_list_product_images(product_id)
+    header = f"🖼 <b>Фото товару</b>\n\nВсього: {len(images)}"
+    kb = ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="➕ Додати фото")],
+        [KeyboardButton(text="⬅️ Назад до товару")],
+    ], resize_keyboard=True)
+    await state.update_data(v2_images_product_id=product_id)
+    await state.set_state(V2ProductImageState.browsing)
+    await message.answer(header, parse_mode="HTML", reply_markup=kb)
+    for img in images:
+        try:
+            await message.answer_photo(img["url"], caption=f"🆔 {img['id']}")
+        except Exception:
+            await message.answer(img["url"])
+
+
+@router.message(V2ProductImageState.browsing)
+async def v2_product_images_browsing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_images_product_id")
+
+    if text == "⬅️ Назад до товару":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "➕ Додати фото":
+        await state.set_state(V2ProductImageState.waiting_for_photo)
+        await message.answer(
+            "📷 Надішліть фото товару:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2ProductImageState.waiting_for_photo)
+async def v2_product_image_upload_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_images_product_id")
+
+    if (message.text or "").strip() == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_images(message, state, int(product_id))
+        return
+
+    if not message.photo:
+        await message.answer("⚠️ Будь ласка, надішліть фото (не файл).")
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+
+    await message.answer("⏳ Завантажуємо...")
+    try:
+        file_id = message.photo[-1].file_id
+        url = await save_telegram_photo(telegram_bot, file_id)
+        await db.v2_add_product_image(int(product_id), url)
+        await message.answer("✅ Фото збережено.")
+    except Exception as e:
+        print(f"[v2_image_upload] {e}")
+        await message.answer("⚠️ Не вдалося завантажити фото. Спробуйте ще раз.")
+        return
+
+    await _v2_show_product_images(message, state, int(product_id))
 
 
 async def _v2_show_filter_prompt(message: Message, state: FSMContext, fields: list, idx: int):

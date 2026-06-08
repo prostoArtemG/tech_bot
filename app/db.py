@@ -3626,5 +3626,29 @@ class Database:
             filter_value_id, value,
         )
 
+    async def v2_list_product_images(self, product_id: int) -> list:
+        rows = await self.fetch(
+            "SELECT id, url, sort_order FROM v2_product_images "
+            "WHERE product_id = $1 ORDER BY sort_order, id",
+            product_id,
+        )
+        return [dict(r) for r in rows]
+
+    async def v2_add_product_image(self, product_id: int, url: str) -> int | None:
+        row = await self.fetchrow(
+            "INSERT INTO v2_product_images (product_id, url, sort_order) "
+            "VALUES ($1, $2, COALESCE("
+            "  (SELECT MAX(sort_order)+1 FROM v2_product_images WHERE product_id=$1), 0"
+            ")) RETURNING id",
+            product_id, url,
+        )
+        return row["id"] if row else None
+
+    async def v2_delete_product_image(self, image_id: int) -> None:
+        await self.execute(
+            "DELETE FROM v2_product_images WHERE id = $1",
+            image_id,
+        )
+
 
 db = Database(DATABASE_URL)
