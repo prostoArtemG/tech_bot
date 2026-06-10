@@ -151,6 +151,10 @@
 }
 .v2-cat-tile-emoji { font-size: 22px; line-height: 1; flex-shrink: 0; }
 .v2-cat-tile-name { line-height: 1.25; word-break: break-word; white-space: normal; }
+.v2-group-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.v2-group-count { font-size: 13px; font-weight: 400; opacity: .60; white-space: nowrap; }
+.v2-cat-tile-count { font-size: 11px; opacity: .55; line-height: 1; }
+.v2-cat-tile.active .v2-cat-tile-count { opacity: .85; }
 </style>
 </head>
 <body>
@@ -391,13 +395,17 @@
                             <span class="v2-group-emoji">{{ group.emoji }}</span>
                             <span class="v2-group-name" data-ru="{{ group.name_ru }}" data-uk="{{ group.name_uk }}">{{ group.name_uk or group.name_ru }}</span>
                         </span>
-                        <svg class="v2-group-chevron" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/></svg>
+                        <span class="v2-group-right">
+                            <span class="v2-group-count">{{ group.product_count }}</span>
+                            <svg class="v2-group-chevron" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true"><path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/></svg>
+                        </span>
                     </button>
                     <div class="v2-group-body">
                         {% for cat in group.categories %}
                         <a href="{{ catalog_base }}?category={{ cat.filter_value | urlencode }}" class="v2-cat-tile {% if current_category == cat.filter_value %}active{% endif %}">
                             <span class="v2-cat-tile-emoji">{{ cat.emoji }}</span>
                             <span class="v2-cat-tile-name" data-ru="{{ cat.name_ru }}" data-uk="{{ cat.name_uk }}">{{ cat.name_uk or cat.name_ru }}</span>
+                            <span class="v2-cat-tile-count">{{ cat.product_count }}</span>
                         </a>
                         {% endfor %}
                     </div>
