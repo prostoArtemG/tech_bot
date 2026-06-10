@@ -13231,6 +13231,33 @@ async def site_v2_home(
     cat_base_rows = [p for p in base_rows if not category or p["category_slug"] == category]
     brands = sorted({p["brand_name"] for p in cat_base_rows})
 
+    # Групова ієрархія для акордеону (порядок з base_rows — вже відсортований за g.sort_order)
+    _grp_map: dict = {}
+    for p in base_rows:
+        gid = p["group_id"]
+        if gid not in _grp_map:
+            _grp_map[gid] = {
+                "id": gid,
+                "slug": p["group_slug"],
+                "name_uk": p["group_name_uk"] or p["group_name_ru"] or p["group_slug"],
+                "name_ru": p["group_name_ru"] or p["group_name_uk"] or p["group_slug"],
+                "emoji": p["group_emoji"] or "\U0001f4e6",
+                "categories": {},
+            }
+        cid = p["category_id"]
+        if cid not in _grp_map[gid]["categories"]:
+            _grp_map[gid]["categories"][cid] = {
+                "key": p["category_slug"],
+                "name_uk": p["category_name_uk"] or p["category_name_ru"] or p["category_slug"],
+                "name_ru": p["category_name_ru"] or p["category_name_uk"] or p["category_slug"],
+                "emoji": p["category_emoji"] or "\U0001f4e6",
+                "filter_value": p["category_slug"],
+            }
+    category_groups: list = []
+    for _g in _grp_map.values():
+        _g["categories"] = list(_g["categories"].values())
+        category_groups.append(_g)
+
     # Динамічні фільтри → формат index.html
     filter_fields = await db.v2_get_filters_for_site(category) if category else []
     dyn_attrs: list = []
@@ -13376,6 +13403,7 @@ async def site_v2_home(
             "seo_effective": seo_effective,
             "canonical_url": f"{_seo_base_url(request)}/v2",
             "catalog_base": "/v2",
+            "category_groups": category_groups,
         },
     )
 
