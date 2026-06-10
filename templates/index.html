@@ -162,21 +162,25 @@
     justify-content: center;
     gap: 10px;
     width: 100%;
-    padding: 16px 20px;
-    border-radius: 18px;
+    height: 52px;
+    padding: 0 18px;
+    border-radius: 16px;
     background: #1b2a3b;
     color: #fff;
     border: none;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     cursor: pointer;
     transition: background .15s;
     box-sizing: border-box;
+    box-shadow: none;
 }
 .v2-catalog-open-btn:hover { background: #243447; }
-.v2-catalog-bar { padding: 10px 16px 0; box-sizing: border-box; }
-@media (max-width: 768px) {
-    .v2-nav { display: none; }
+.v2-catalog-bar {
+    background: #0f1726;
+    padding: 10px 16px 14px;
+    margin: 0;
+    box-sizing: border-box;
 }
 .v2-catalog-backdrop {
     position: fixed;
