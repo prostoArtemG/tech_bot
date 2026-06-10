@@ -182,6 +182,47 @@
     margin: 0;
     box-sizing: border-box;
 }
+/* ── lang globe dropdown (mobile only) ── */
+.lang-globe-btn { display: none; }
+@media (max-width: 768px) {
+    .lang-globe-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.12);
+        border: 1px solid rgba(255,255,255,.25);
+        color: #fff;
+        font-size: 16px;
+        cursor: pointer;
+        flex-shrink: 0;
+        padding: 0;
+    }
+    .lang-dropdown-wrap { position: relative; }
+    .lang-dropdown-wrap .lang-switch {
+        display: none !important;
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        background: #1b2a3b;
+        border-radius: 10px;
+        padding: 6px 8px !important;
+        flex-direction: column !important;
+        gap: 2px !important;
+        min-width: 60px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.3);
+        z-index: 600;
+    }
+    .lang-dropdown-wrap .lang-switch.is-open { display: flex !important; }
+    .lang-dropdown-wrap .lang-separator { display: none !important; }
+    .lang-dropdown-wrap .site-lang-btn {
+        width: 100% !important;
+        text-align: center !important;
+        border-radius: 6px !important;
+    }
+}
 .v2-catalog-backdrop {
     position: fixed;
     inset: 0;
@@ -327,10 +368,13 @@
 
                 <div class="header-actions">
                     {% if header_show_language %}
-                    <div class="lang-switch">
-                        <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-                        <span class="lang-separator">|</span>
-                        <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                    <div class="lang-dropdown-wrap" id="langDropdownWrap">
+                        <button class="lang-globe-btn" id="langGlobeBtn" aria-label="Мова" aria-expanded="false">🌐</button>
+                        <div class="lang-switch">
+                            <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                            <span class="lang-separator">|</span>
+                            <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                        </div>
                     </div>
                     {% endif %}
 
@@ -1347,6 +1391,21 @@ var FILTER_META = {
             btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         });
     });
+    // Lang globe dropdown (mobile)
+    var langWrap  = document.getElementById('langDropdownWrap');
+    var langGlobe = document.getElementById('langGlobeBtn');
+    if (langWrap && langGlobe) {
+        var langMenu = langWrap.querySelector('.lang-switch');
+        langGlobe.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = langMenu.classList.toggle('is-open');
+            langGlobe.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        document.addEventListener('click', function () {
+            langMenu.classList.remove('is-open');
+            langGlobe.setAttribute('aria-expanded', 'false');
+        });
+    }
 }());
 </script>
 
