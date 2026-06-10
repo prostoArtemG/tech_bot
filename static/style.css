@@ -24,13 +24,14 @@ body {
     position: relative;
     background: var(--site-header-bg, #111827);
     color: var(--site-header-text, #ffffff);
-    padding: 36px 220px;
-    min-height: 100px;
-    text-align: center;
+    padding: 20px 24px;
 }
 
 .site-header .header-inner {
-    display: block;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
     position: relative;
 }
 
@@ -54,13 +55,11 @@ body {
 
 /* ── right side: lang + cart only ── */
 .site-header .header-actions {
-    position: absolute !important;
-    top: 24px !important;
-    right: 24px !important;
+    position: static !important;
     transform: none !important;
     display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-end !important;
+    flex-direction: row !important;
+    align-items: center !important;
     gap: 8px !important;
 }
 

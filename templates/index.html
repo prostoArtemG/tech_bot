@@ -223,6 +223,103 @@
         border-radius: 6px !important;
     }
 }
+/* ── 3-col header layout ── */
+.hdr-col-logo {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.hdr-subtitle {
+    font-size: 12px !important;
+    color: #d1d5db;
+    margin: 2px 0 0 !important;
+}
+.hdr-col-perks {
+    flex: 1 1 180px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+}
+.hdr-col-perks li {
+    font-size: 12px;
+    color: rgba(255,255,255,.82);
+    white-space: nowrap;
+}
+.hdr-col-right {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+.hdr-phones { display: flex; flex-direction: column; gap: 5px; }
+.hdr-phone-row { display: flex; align-items: center; gap: 6px; }
+.hdr-phone-link {
+    color: #fff;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.hdr-phone-link:hover { text-decoration: underline; }
+.hdr-viber-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #7360f2;
+    color: #fff;
+    font-size: 14px;
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: background .15s;
+}
+.hdr-viber-btn:hover { background: #5a4bcf; }
+/* mobile perks marquee */
+.hdr-perks-mobile {
+    display: none;
+    overflow: hidden;
+    border-top: 1px solid rgba(255,255,255,.10);
+    margin-top: 8px;
+    padding: 6px 0 2px;
+}
+.hdr-perks-track {
+    display: flex;
+    gap: 28px;
+    white-space: nowrap;
+    animation: hdr-perk-scroll 24s linear infinite;
+    width: max-content;
+}
+.hdr-perks-track span { font-size: 12px; color: rgba(255,255,255,.78); }
+@keyframes hdr-perk-scroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+@media (max-width: 768px) {
+    .header-inner { flex-wrap: wrap !important; gap: 10px !important; }
+    .hdr-col-logo  { width: 100%; }
+    .hdr-col-perks { display: none; }
+    .hdr-perks-mobile { display: block; }
+    .hdr-col-right {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .hdr-phones { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .hdr-phone-link { font-size: 12px; }
+    .hdr-phone-row { gap: 4px; }
+}
 .v2-catalog-backdrop {
     position: fixed;
     inset: 0;
@@ -349,38 +446,79 @@
 <body>
         <header class="site-header">
             <div class="header-inner">
-        <div class="header-title">
+
+                {# ── Col 1: Logo + subtitle ── #}
+                <div class="hdr-col-logo">
                     <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
                         <span class="logo-badge">T</span>
                         <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
                     </a>
-                    <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
-                    {% if header_show_contacts %}
-                    {% if site_contacts.phones %}
-                        {% for p in site_contacts.phones %}
-                        <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</a>
-                        {% endfor %}
-                    {% elif site_contacts.phone %}
-                        <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
-                    {% endif %}
-                    {% endif %}
+                    <p class="hdr-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
                 </div>
 
-                <div class="header-actions">
-                    {% if header_show_language %}
-                    <div class="lang-dropdown-wrap" id="langDropdownWrap">
-                        <button class="lang-globe-btn" id="langGlobeBtn" aria-label="Мова" aria-expanded="false">🌐</button>
-                        <div class="lang-switch">
-                            <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-                            <span class="lang-separator">|</span>
-                            <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                {# ── Col 2: Advantages (desktop) ── #}
+                <ul class="hdr-col-perks">
+                    <li data-ru="✅ Бесплатная доставка по Запорожью" data-uk="✅ Безкоштовна доставка по Запоріжжю">✅ Безкоштовна доставка по Запоріжжю</li>
+                    <li data-ru="✅ Монтаж кондиционеров и бойлеров за 1 день" data-uk="✅ Монтаж кондиціонерів та бойлерів за 1 день">✅ Монтаж кондиціонерів та бойлерів за 1 день</li>
+                    <li data-ru="✅ Официальная гарантия" data-uk="✅ Офіційна гарантія">✅ Офіційна гарантія</li>
+                    <li data-ru="✅ Оплата при получении" data-uk="✅ Оплата при отриманні">✅ Оплата при отриманні</li>
+                    <li data-ru="✅ Более 1000 товаров в наличии" data-uk="✅ Понад 1000 товарів в наявності">✅ Понад 1000 товарів в наявності</li>
+                </ul>
+
+                {# ── Col 3: Phones + Lang/Cart ── #}
+                <div class="hdr-col-right">
+                    {% if header_show_contacts %}
+                    {% if site_contacts.phones %}
+                    <div class="hdr-phones">
+                        {% for p in site_contacts.phones %}
+                        <div class="hdr-phone-row">
+                            <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="hdr-phone-link">📞{% if p.name %} {{ p.name }}:{% endif %} {{ p.phone }}</a>
+                            <a href="viber://chat?number=%2B{{ (p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% elif site_contacts.phone %}
+                    <div class="hdr-phones">
+                        <div class="hdr-phone-row">
+                            <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="hdr-phone-link">📞 {{ site_contacts.phone }}</a>
+                            <a href="viber://chat?number=%2B{{ (site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
                         </div>
                     </div>
                     {% endif %}
-
-                    {% if header_show_cart %}
-                    <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
                     {% endif %}
+
+                    <div class="header-actions">
+                        {% if header_show_language %}
+                        <div class="lang-dropdown-wrap" id="langDropdownWrap">
+                            <button class="lang-globe-btn" id="langGlobeBtn" aria-label="Мова" aria-expanded="false">🌐</button>
+                            <div class="lang-switch">
+                                <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                                <span class="lang-separator">|</span>
+                                <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if header_show_cart %}
+                        <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
+                        {% endif %}
+                    </div>
+                </div>
+
+            </div>
+
+            {# ── Mobile perks marquee ── #}
+            <div class="hdr-perks-mobile" aria-hidden="true">
+                <div class="hdr-perks-track">
+                    <span data-ru="✅ Бесплатная доставка" data-uk="✅ Безкоштовна доставка">✅ Безкоштовна доставка по Запоріжжю</span>
+                    <span data-ru="✅ Монтаж за 1 день" data-uk="✅ Монтаж за 1 день">✅ Монтаж кондиціонерів та бойлерів за 1 день</span>
+                    <span data-ru="✅ Официальная гарантия" data-uk="✅ Офіційна гарантія">✅ Офіційна гарантія</span>
+                    <span data-ru="✅ Оплата при получении" data-uk="✅ Оплата при отриманні">✅ Оплата при отриманні</span>
+                    <span data-ru="✅ Более 1000 товаров" data-uk="✅ Понад 1000 товарів">✅ Понад 1000 товарів в наявності</span>
+                    <span data-ru="✅ Бесплатная доставка" data-uk="✅ Безкоштовна доставка">✅ Безкоштовна доставка по Запоріжжю</span>
+                    <span data-ru="✅ Монтаж за 1 день" data-uk="✅ Монтаж за 1 день">✅ Монтаж кондиціонерів та бойлерів за 1 день</span>
+                    <span data-ru="✅ Официальная гарантия" data-uk="✅ Офіційна гарантія">✅ Офіційна гарантія</span>
+                    <span data-ru="✅ Оплата при получении" data-uk="✅ Оплата при отриманні">✅ Оплата при отриманні</span>
+                    <span data-ru="✅ Более 1000 товаров" data-uk="✅ Понад 1000 товарів">✅ Понад 1000 товарів в наявності</span>
                 </div>
             </div>
         </header>
