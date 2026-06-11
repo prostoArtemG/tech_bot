@@ -858,6 +858,16 @@ button:hover {
     color: #6b7280;
     margin-top: 8px;
 }
+.desc-toggle-btn {
+    margin-top: 6px;
+    background: none;
+    border: none;
+    color: #2563eb;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+}
 
 /* ── Variants of same model (product page) ── */
 .variants-box {

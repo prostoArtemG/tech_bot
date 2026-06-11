@@ -3768,6 +3768,40 @@ class Database:
             product_id, brand_id,
         )
 
+    async def v2_get_product_description(self, product_id: int) -> str:
+        row = await self.fetchrow(
+            "SELECT description FROM v2_products WHERE id = $1",
+            product_id,
+        )
+        return (row["description"] or "") if row else ""
+
+    async def v2_update_product_description(self, product_id: int, description: str) -> None:
+        await self.execute(
+            "UPDATE v2_products SET description = $2 WHERE id = $1",
+            product_id, description,
+        )
+
+    async def v2_set_main_product_image(self, product_id: int, image_id: int) -> None:
+        """Встановлює фото як головне (sort_order=0), переупорядковує решту від 1."""
+        await self.execute(
+            "UPDATE v2_product_images SET sort_order = 0 WHERE id = $1 AND product_id = $2",
+            image_id, product_id,
+        )
+        await self.execute(
+            """
+            WITH others AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order, id) AS rn
+                FROM v2_product_images
+                WHERE product_id = $1 AND id != $2
+            )
+            UPDATE v2_product_images img
+            SET sort_order = o.rn
+            FROM others o
+            WHERE img.id = o.id
+            """,
+            product_id, image_id,
+        )
+
     async def v2_toggle_product_active(self, product_id: int) -> bool:
         """Перемикає is_active. Повертає нове значення."""
         row = await self.fetchrow(
@@ -3902,7 +3936,7 @@ class Database:
             """
             SELECT
                 p.id, p.model, p.price, p.is_active,
-                p.specs_json,
+                p.specs_json, p.description,
                 b.name AS brand_name,
                 c.id AS category_id, c.slug AS category_slug,
                 c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,

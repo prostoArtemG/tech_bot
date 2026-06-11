@@ -1470,6 +1470,11 @@ class V2ProductImageState(StatesGroup):
     waiting_for_photo = State()  # очікуємо фото від користувача
 
 
+class V2ProductDescriptionState(StatesGroup):
+    viewing          = State()  # перегляд/меню опису
+    waiting_for_text = State()  # очікуємо текст опису
+
+
 class V2ProductEditState(StatesGroup):
     menu              = State()  # меню редагування
     confirming_delete = State()  # підтвердження видалення
@@ -5619,8 +5624,9 @@ async def _v2_show_product_card(message: Message, state: FSMContext, product_id:
     )
     kb = ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="🖼 Фото"), KeyboardButton(text="🔧 Заповнити фільтри")],
-        [KeyboardButton(text="📝 Характеристики"), KeyboardButton(text="✏️ Редагувати")],
-        [KeyboardButton(text="🗑 Видалити"), KeyboardButton(text="🔄 Статус наявності")],
+        [KeyboardButton(text="📝 Характеристики"), KeyboardButton(text="📄 Описання")],
+        [KeyboardButton(text="✏️ Редагувати"), KeyboardButton(text="🔄 Статус наявності")],
+        [KeyboardButton(text="🗑 Видалити")],
         [KeyboardButton(text="⬅️ Назад до товарів")],
     ], resize_keyboard=True)
     await state.update_data(v2_viewing_product_id=product_id, v2_products_cat_id=int(product["category_id"]))
@@ -5674,6 +5680,13 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         await _v2_show_product_images(message, state, int(product_id))
         return
 
+    if text == "📄 Описання":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await _v2_show_product_description(message, state, int(product_id))
+        return
+
     if text == "✏️ Редагувати":
         if not product_id:
             await message.answer("⚠️ Товар не знайдено.")
@@ -5721,24 +5734,124 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
     await message.answer("⚠️ Оберіть дію зі списку.")
 
 
+# ── v2: Опис товару ───────────────────────────────────────────────────────────
+
+async def _v2_show_product_description(message: Message, state: FSMContext, product_id: int):
+    """Показує опис товару і меню управління."""
+    desc = await db.v2_get_product_description(product_id)
+    if desc:
+        preview = desc[:800] + ("..." if len(desc) > 800 else "")
+        header = f"📄 <b>Опис товару</b>\n\n{preview}"
+    else:
+        header = "📄 <b>Опис товару</b>\n\n<i>Опис поки не заповнений.</i>"
+    kb = ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="✏️ Змінити опис")],
+        [KeyboardButton(text="🧹 Очистити опис")],
+        [KeyboardButton(text="⬅️ Назад до товару")],
+    ], resize_keyboard=True)
+    await state.update_data(v2_desc_product_id=product_id)
+    await state.set_state(V2ProductDescriptionState.viewing)
+    await message.answer(header, parse_mode="HTML", reply_markup=kb)
+
+
+@router.message(V2ProductDescriptionState.viewing)
+async def v2_product_description_viewing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_desc_product_id")
+
+    if text == "⬅️ Назад до товару":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "✏️ Змінити опис":
+        await state.set_state(V2ProductDescriptionState.waiting_for_text)
+        await message.answer(
+            "📝 Введіть опис товару (до 4096 символів):",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "🧹 Очистити опис":
+        if product_id:
+            await db.v2_update_product_description(int(product_id), "")
+            await message.answer("✅ Опис очищено.")
+            await _v2_show_product_description(message, state, int(product_id))
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2ProductDescriptionState.waiting_for_text)
+async def v2_product_description_text_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_desc_product_id")
+
+    if (message.text or "").strip() == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_description(message, state, int(product_id))
+        return
+
+    new_desc = (message.text or "").strip()
+    if not new_desc:
+        await message.answer("⚠️ Опис не може бути порожнім.")
+        return
+
+    if len(new_desc) > 4096:
+        await message.answer("⚠️ Опис занадто довгий (максимум 4096 символів).")
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+
+    await db.v2_update_product_description(int(product_id), new_desc)
+    await message.answer("✅ Опис збережено.")
+    await _v2_show_product_description(message, state, int(product_id))
+
+
 # ── v2: Фото товару ──────────────────────────────────────────────────────────
 
 async def _v2_show_product_images(message: Message, state: FSMContext, product_id: int):
     """Показує список фото товару."""
     images = await db.v2_list_product_images(product_id)
+    label_map: dict = {}
+    for i, img in enumerate(images, 1):
+        label = f"⭐ Фото {i}" if i == 1 else f"Фото {i}"
+        label_map[label] = img["id"]
+
     header = f"🖼 <b>Фото товару</b>\n\nВсього: {len(images)}"
-    kb = ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="➕ Додати фото")],
-        [KeyboardButton(text="⬅️ Назад до товару")],
-    ], resize_keyboard=True)
-    await state.update_data(v2_images_product_id=product_id)
+    keyboard = [[KeyboardButton(text="➕ Додати фото")]]
+    if len(images) > 1:
+        keyboard.append([KeyboardButton(text="⭐ Зробити головним")])
+    if images:
+        keyboard.append([KeyboardButton(text="🗑 Видалити фото")])
+    keyboard.append([KeyboardButton(text="⬅️ Назад до товару")])
+
+    kb = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    await state.update_data(
+        v2_images_product_id=product_id,
+        v2_image_label_map=label_map,
+        v2_image_action=None,
+    )
     await state.set_state(V2ProductImageState.browsing)
     await message.answer(header, parse_mode="HTML", reply_markup=kb)
-    for img in images:
+    for label, img_id in label_map.items():
+        img_data = next((x for x in images if x["id"] == img_id), None)
+        if not img_data:
+            continue
         try:
-            await message.answer_photo(img["url"], caption=f"🆔 {img['id']}")
+            await message.answer_photo(img_data["url"], caption=label)
         except Exception:
-            await message.answer(img["url"])
+            await message.answer(f"{label}: {img_data['url']}")
 
 
 # ── v2: Редагування / Видалення товару ───────────────────────────────────────
@@ -5945,12 +6058,19 @@ async def v2_product_images_browsing_handler(message: Message, state: FSMContext
     text = (message.text or "").strip()
     data = await state.get_data()
     product_id = data.get("v2_images_product_id")
+    action = data.get("v2_image_action")
+    label_map: dict = data.get("v2_image_label_map") or {}
 
     if text == "⬅️ Назад до товару":
         if product_id:
             await _v2_show_product_card(message, state, int(product_id))
         else:
             await message.answer("⚠️ Товар не знайдено. Поверніться до категорії.")
+        return
+
+    if text == "⬅️ Скасувати":
+        if product_id:
+            await _v2_show_product_images(message, state, int(product_id))
         return
 
     if text == "➕ Додати фото":
@@ -5962,6 +6082,44 @@ async def v2_product_images_browsing_handler(message: Message, state: FSMContext
                 resize_keyboard=True,
             ),
         )
+        return
+
+    if text == "⭐ Зробити головним":
+        if not label_map or len(label_map) <= 1:
+            await message.answer("⚠️ Потрібно мінімум 2 фото щоб змінити головне.")
+            return
+        await state.update_data(v2_image_action="set_main")
+        non_main = {lbl: iid for lbl, iid in label_map.items() if not lbl.startswith("⭐")}
+        select_kb = [[KeyboardButton(text=lbl)] for lbl in non_main]
+        select_kb.append([KeyboardButton(text="⬅️ Скасувати")])
+        await message.answer(
+            "Оберіть фото, яке стане головним:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=select_kb, resize_keyboard=True),
+        )
+        return
+
+    if text == "🗑 Видалити фото":
+        if not label_map:
+            await message.answer("⚠️ Фотографій немає.")
+            return
+        await state.update_data(v2_image_action="delete")
+        select_kb = [[KeyboardButton(text=lbl)] for lbl in label_map]
+        select_kb.append([KeyboardButton(text="⬅️ Скасувати")])
+        await message.answer(
+            "Оберіть фото для видалення:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=select_kb, resize_keyboard=True),
+        )
+        return
+
+    if action and text in label_map:
+        image_id = label_map[text]
+        if action == "set_main":
+            await db.v2_set_main_product_image(int(product_id), image_id)
+            await message.answer("✅ Головне фото оновлено.")
+        elif action == "delete":
+            await db.v2_delete_product_image(image_id)
+            await message.answer("✅ Фото видалено.")
+        await _v2_show_product_images(message, state, int(product_id))
         return
 
     await message.answer("⚠️ Оберіть дію зі списку.")
@@ -13733,7 +13891,7 @@ async def site_v2_product(request: Request, product_id: int):
         "photo_url": photo_url,
         "warranty_months": "",
         "specs": None,
-        "description": None,
+        "description": raw.get("description") or "",
         "boiler_volume_liters": specifications.get("volume"),
         "boiler_ten_type": None,
         "specifications_json": {},

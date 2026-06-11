@@ -233,7 +233,13 @@
                                 {% endif %}
 
                                 {% if product.description %}
-                                <div class="desc">{{ product.description }}</div>
+                                <div class="desc v2-product-description">
+                                    <div id="prodDescShort">{{ product.description[:400] | e }}{% if product.description | length > 400 %}...{% endif %}</div>
+                                    {% if product.description | length > 400 %}
+                                    <div id="prodDescFull" style="display:none">{{ product.description | e }}</div>
+                                    <button type="button" id="prodDescBtn" onclick="(function(){var s=document.getElementById('prodDescShort'),f=document.getElementById('prodDescFull'),b=document.getElementById('prodDescBtn');if(f.style.display==='none'){f.style.display='';s.style.display='none';b.textContent='Згорнути';}else{f.style.display='none';s.style.display='';b.textContent='Показати повністю';}})()" class="desc-toggle-btn" data-ru="Показать полностью" data-uk="Показати повністю">Показати повністю</button>
+                                    {% endif %}
+                                </div>
                                 {% endif %}
 
                 <form class="order-form" method="post" action="/order">
