@@ -1876,6 +1876,16 @@ site_v2_settings_kb = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+# ── v2: глобальний список товарів ────────────────────────────────────────────
+v2_products_global_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📋 Список товарів")],
+        [KeyboardButton(text="⚪ Без фільтрів"), KeyboardButton(text="🟡 Частково заповнені"), KeyboardButton(text="✅ Готові")],
+        [KeyboardButton(text="🔍 Пошук товару")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
+)
 
 users_kb = ReplyKeyboardMarkup(
     keyboard=[
