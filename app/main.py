@@ -1861,6 +1861,16 @@ admin_v2_kb = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+# ── Site v2 settings keyboard ────────────────────────────────────────────────
+site_v2_settings_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🟢 Старий каталог")],
+        [KeyboardButton(text="🆕 Каталог V2")],
+        [KeyboardButton(text="⬅️ Назад до Сайт v2")],
+    ],
+    resize_keyboard=True,
+)
+
 
 users_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -4562,7 +4572,7 @@ async def directories_menu_handler(message: Message, state: FSMContext):
 # ── Admin v2 ──────────────────────────────────────────────────────────────────
 
 _ADMIN_V2_BUTTONS = {
-    "📦 Каталог v2", "🌐 Сайт v2",
+    "📦 Каталог v2",
 }
 
 
@@ -6635,6 +6645,58 @@ async def admin_v2_stub_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     await message.answer("🚧 Розділ v2 у розробці.")
+
+
+# ── Сайт v2: версія каталогу ─────────────────────────────────────────────────
+
+@router.message(lambda m: m.text == "🌐 Сайт v2")
+async def site_v2_settings_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    version = await db.get_catalog_version()
+    label = "V2" if version == "v2" else "Старий (old)"
+    await message.answer(
+        f"🌐 <b>Сайт v2 — Версія каталогу</b>\n\n"
+        f"Поточна версія: <b>{label}</b>\n\n"
+        f"Оберіть версію каталогу для головної сторінки сайту:",
+        parse_mode="HTML",
+        reply_markup=site_v2_settings_kb,
+    )
+
+
+@router.message(lambda m: m.text == "🟢 Старий каталог")
+async def catalog_version_set_old(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await db.set_catalog_version("old")
+    await message.answer(
+        "✅ Каталог перемкнено на стару версію",
+        reply_markup=site_v2_settings_kb,
+    )
+
+
+@router.message(lambda m: m.text == "🆕 Каталог V2")
+async def catalog_version_set_v2(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await db.set_catalog_version("v2")
+    await message.answer(
+        "✅ Каталог перемкнено на V2",
+        reply_markup=site_v2_settings_kb,
+    )
+
+
+@router.message(lambda m: m.text == "⬅️ Назад до Сайт v2")
+async def back_to_site_v2_settings(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await state.clear()
+    await message.answer(
+        "🆕 <b>Адмін v2</b>\n\nОберіть розділ:",
+        parse_mode="HTML",
+        reply_markup=admin_v2_kb,
+    )
 
 
 def _make_category_key(text: str) -> str:
@@ -12073,6 +12135,22 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
     if sort not in ("", "price_asc", "price_desc", "new", "newest", "popular"):
         sort = ""
 
+    # Перевірка версії каталогу — якщо v2, рендеримо v2-логіку на "/"
+    _catalog_ver = await db.get_catalog_version()
+    if _catalog_ver == "v2":
+        return await site_v2_home(
+            request,
+            q=q,
+            category=category,
+            brand=brand,
+            price_min=price_min,
+            price_max=price_max,
+            in_stock=in_stock,
+            sort=sort,
+            page=page,
+            _catalog_base="/",
+        )
+
     if q:
         products = await db.search_site_products(q)
     else:
@@ -13193,6 +13271,7 @@ async def site_v2_home(
     in_stock: str = "",
     sort: str = "",
     page: int = 1,
+    _catalog_base: str = "/v2",
 ):
     q = (q or "").strip()
     category = (category or "").strip()
@@ -13410,8 +13489,8 @@ async def site_v2_home(
             "site_design": site_design,
             "active_banners": active_banners,
             "seo_effective": seo_effective,
-            "canonical_url": f"{_seo_base_url(request)}/v2",
-            "catalog_base": "/v2",
+            "canonical_url": f"{_seo_base_url(request)}{_catalog_base}",
+            "catalog_base": _catalog_base,
             "category_groups": category_groups,
         },
     )

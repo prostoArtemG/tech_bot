@@ -1642,6 +1642,16 @@ class Database:
         await self.set_setting(key, new_value)
         return new_value
 
+    async def get_catalog_version(self) -> str:
+        """Повертає поточну версію каталогу: 'old' або 'v2'."""
+        return await self.get_setting("catalog_version", "old") or "old"
+
+    async def set_catalog_version(self, version: str):
+        """Зберігає версію каталогу. Допустимі значення: 'old', 'v2'."""
+        if version not in ("old", "v2"):
+            raise ValueError(f"Unknown catalog version: {version}")
+        await self.set_setting("catalog_version", version)
+
 
     async def get_currency_rates(self):
         usd = await self.get_setting("usd_rate", "40")
