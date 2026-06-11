@@ -235,22 +235,6 @@
     color: #d1d5db;
     margin: 2px 0 0 !important;
 }
-.hdr-col-perks {
-    flex: 1 1 180px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 5px;
-    min-width: 0;
-}
-.hdr-col-perks li {
-    font-size: 12px;
-    color: rgba(255,255,255,.82);
-    white-space: nowrap;
-}
 .hdr-col-right {
     flex-shrink: 0;
     display: flex;
@@ -283,23 +267,9 @@
     transition: background .15s;
 }
 .hdr-viber-btn:hover { background: #5a4bcf; }
-/* mobile perks list */
-.hdr-perks-mobile {
-    display: none;
-    border-top: 1px solid rgba(255,255,255,.10);
-    margin-top: 8px;
-    padding: 10px 12px;
-    grid-template-columns: 1fr;
-    gap: 6px;
-    font-size: 12px;
-    color: rgba(255,255,255,.85);
-}
-.hdr-perks-mobile span { line-height: 1.4; }
 @media (max-width: 768px) {
     .header-inner { flex-wrap: wrap !important; gap: 10px !important; }
     .hdr-col-logo  { width: 100%; }
-    .hdr-col-perks { display: none; }
-    .hdr-perks-mobile { display: grid; }
     .hdr-col-right {
         width: 100%;
         flex-direction: row;
@@ -311,9 +281,6 @@
     .hdr-phones { flex-direction: row; flex-wrap: wrap; gap: 6px; }
     .hdr-phone-link { font-size: 12px; }
     .hdr-phone-row { gap: 4px; }
-}
-@media (min-width: 420px) and (max-width: 768px) {
-    .hdr-perks-mobile { grid-template-columns: 1fr 1fr; }
 }
 .v2-catalog-backdrop {
     position: fixed;
@@ -451,16 +418,7 @@
                     <p class="hdr-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
                 </div>
 
-                {# ── Col 2: Advantages (desktop) ── #}
-                <ul class="hdr-col-perks">
-                    <li data-ru="✅ Бесплатная доставка по Запорожью" data-uk="✅ Безкоштовна доставка по Запоріжжю">✅ Безкоштовна доставка по Запоріжжю</li>
-                    <li data-ru="✅ Монтаж кондиционеров и бойлеров за 1 день" data-uk="✅ Монтаж кондиціонерів та бойлерів за 1 день">✅ Монтаж кондиціонерів та бойлерів за 1 день</li>
-                    <li data-ru="✅ Официальная гарантия" data-uk="✅ Офіційна гарантія">✅ Офіційна гарантія</li>
-                    <li data-ru="✅ Оплата при получении" data-uk="✅ Оплата при отриманні">✅ Оплата при отриманні</li>
-                    <li data-ru="✅ Более 1000 товаров в наличии" data-uk="✅ Понад 1000 товарів в наявності">✅ Понад 1000 товарів в наявності</li>
-                </ul>
-
-                {# ── Col 3: Phones + Lang/Cart ── #}
+                {# ── Col 2: Phones + Lang/Cart ── #}
                 <div class="hdr-col-right">
                     {% if header_show_contacts %}
                     {% if site_contacts.phones %}
@@ -501,14 +459,6 @@
 
             </div>
 
-            {# ── Mobile perks list ── #}
-            <div class="hdr-perks-mobile">
-                <span data-ru="✅ Бесплатная доставка" data-uk="✅ Безкоштовна доставка по Запоріжжю">✅ Безкоштовна доставка по Запоріжжю</span>
-                <span data-ru="✅ Монтаж за 1 день" data-uk="✅ Монтаж кондиціонерів та бойлерів за 1 день">✅ Монтаж кондиціонерів та бойлерів за 1 день</span>
-                <span data-ru="✅ Официальная гарантия" data-uk="✅ Офіційна гарантія">✅ Офіційна гарантія</span>
-                <span data-ru="✅ Оплата при получении" data-uk="✅ Оплата при отриманні">✅ Оплата при отриманні</span>
-                <span data-ru="✅ Более 1000 товаров" data-uk="✅ Понад 1000 товарів в наявності">✅ Понад 1000 товарів в наявності</span>
-            </div>
         </header>
 
     {% if category_groups %}
