@@ -233,13 +233,31 @@
                                 {% endif %}
 
                                 {% if product.description %}
-                                <div class="desc v2-product-description">
-                                    <div id="prodDescShort">{{ product.description[:400] | e }}{% if product.description | length > 400 %}...{% endif %}</div>
-                                    {% if product.description | length > 400 %}
-                                    <div id="prodDescFull" style="display:none">{{ product.description | e }}</div>
-                                    <button type="button" id="prodDescBtn" onclick="(function(){var s=document.getElementById('prodDescShort'),f=document.getElementById('prodDescFull'),b=document.getElementById('prodDescBtn');if(f.style.display==='none'){f.style.display='';s.style.display='none';b.textContent='Згорнути';}else{f.style.display='none';s.style.display='';b.textContent='Показати повністю';}})()" class="desc-toggle-btn" data-ru="Показать полностью" data-uk="Показати повністю">Показати повністю</button>
-                                    {% endif %}
+                                <div class="v2-product-description">
+                                    <div class="v2-desc-title">📄 <span data-ru="Описание товара" data-uk="Опис товару">Опис товару</span></div>
+                                    <div class="v2-desc-body" id="prodDescBody">{{ product.description | e }}</div>
+                                    <button type="button" class="v2-desc-toggle" id="prodDescBtn" style="display:none" onclick="prodDescToggle()">Показати повністю</button>
                                 </div>
+                                <script>
+                                (function(){
+                                    var body = document.getElementById('prodDescBody');
+                                    var btn  = document.getElementById('prodDescBtn');
+                                    if (body.scrollHeight > body.clientHeight + 4) {
+                                        btn.style.display = 'inline-block';
+                                    }
+                                })();
+                                function prodDescToggle(){
+                                    var body = document.getElementById('prodDescBody');
+                                    var btn  = document.getElementById('prodDescBtn');
+                                    if (body.classList.contains('v2-desc-expanded')) {
+                                        body.classList.remove('v2-desc-expanded');
+                                        btn.textContent = 'Показати повністю';
+                                    } else {
+                                        body.classList.add('v2-desc-expanded');
+                                        btn.textContent = 'Згорнути';
+                                    }
+                                }
+                                </script>
                                 {% endif %}
 
                 <form class="order-form" method="post" action="/order">
