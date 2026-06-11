@@ -268,17 +268,16 @@
 }
 .hdr-viber-btn:hover { background: #5a4bcf; }
 @media (max-width: 768px) {
-    .header-inner { flex-wrap: wrap !important; gap: 10px !important; }
-    .hdr-col-logo  { width: 100%; }
+    .header-inner { flex-wrap: nowrap !important; align-items: center !important; gap: 10px !important; }
+    .hdr-col-logo  { flex: 1; min-width: 0; }
     .hdr-col-right {
-        width: 100%;
+        flex-shrink: 0;
         flex-direction: row;
-        flex-wrap: wrap;
         align-items: center;
-        justify-content: space-between;
         gap: 8px;
+        width: auto;
     }
-    .hdr-phones { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .hdr-phones { display: none !important; }
     .hdr-phone-link { font-size: 12px; }
     .hdr-phone-row { gap: 4px; }
 }
@@ -403,6 +402,100 @@
 .v2-drawer-cat-link.active { background: var(--site-primary, #2e86c1); color: #fff; }
 .v2-drawer-cat-count { font-size: 11px; opacity: .55; margin-left: auto; }
 .v2-drawer-cat-link.active .v2-drawer-cat-count { opacity: .8; }
+/* ── Logo row (logo + lang inline) ── */
+.hdr-logo-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.hdr-logo-row .lang-dropdown-wrap { margin-left: auto; flex-shrink: 0; }
+/* ── Catalog bar: flex row ── */
+.v2-catalog-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.v2-catalog-bar-row .v2-catalog-open-btn { flex: 1; }
+/* ── Contacts open button ── */
+.v2-contacts-open-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-shrink: 0;
+    height: 52px;
+    padding: 0 16px;
+    border-radius: 16px;
+    background: rgba(255,255,255,.10);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.22);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+.v2-contacts-open-btn:hover { background: rgba(255,255,255,.18); }
+/* ── Contacts drawer ── */
+.v2-contacts-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 300px;
+    max-width: 88vw;
+    background: #fff;
+    z-index: 1100;
+    transform: translateX(100%);
+    transition: transform .32s ease;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 24px rgba(0,0,0,.18);
+    overflow: hidden;
+}
+.v2-contacts-drawer.is-open { transform: translateX(0); }
+.v2-contacts-drawer-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.contacts-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+.contacts-row:last-of-type { border-bottom: none; }
+.contacts-row-info { display: flex; flex-direction: column; gap: 2px; }
+.contacts-label { font-size: 11px; color: #6b7280; }
+.contacts-phone {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1b2a3b;
+    text-decoration: none;
+}
+.contacts-phone:hover { text-decoration: underline; }
+.contacts-social-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #f8fafc;
+    text-decoration: none;
+    color: #1b2a3b;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background .15s;
+}
+.contacts-social-link:hover { background: #e5e7eb; }
+.contacts-info-row { font-size: 13px; color: #374151; padding: 6px 0; }
 </style>
 </head>
 <body>
@@ -411,10 +504,22 @@
 
                 {# ── Col 1: Logo + subtitle ── #}
                 <div class="hdr-col-logo">
-                    <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
-                        <span class="logo-badge">T</span>
-                        <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
-                    </a>
+                    <div class="hdr-logo-row">
+                        <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                            <span class="logo-badge">T</span>
+                            <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+                        </a>
+                        {% if header_show_language %}
+                        <div class="lang-dropdown-wrap" id="langDropdownWrap">
+                            <button class="lang-globe-btn" id="langGlobeBtn" aria-label="Мова" aria-expanded="false">🌐</button>
+                            <div class="lang-switch">
+                                <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                                <span class="lang-separator">|</span>
+                                <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
                     <p class="hdr-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
                 </div>
 
@@ -441,16 +546,6 @@
                     {% endif %}
 
                     <div class="header-actions">
-                        {% if header_show_language %}
-                        <div class="lang-dropdown-wrap" id="langDropdownWrap">
-                            <button class="lang-globe-btn" id="langGlobeBtn" aria-label="Мова" aria-expanded="false">🌐</button>
-                            <div class="lang-switch">
-                                <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-                                <span class="lang-separator">|</span>
-                                <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
-                            </div>
-                        </div>
-                        {% endif %}
                         {% if header_show_cart %}
                         <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
                         {% endif %}
@@ -463,10 +558,17 @@
 
     {% if category_groups %}
     <div class="v2-catalog-bar">
-        <button type="button" id="v2CatalogOpen" class="v2-catalog-open-btn" aria-label="Каталог товарів">
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 4a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2z"/></svg>
-            <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span>
-        </button>
+        <div class="v2-catalog-bar-row">
+            <button type="button" id="v2CatalogOpen" class="v2-catalog-open-btn" aria-label="Каталог товарів">
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 4a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2z"/></svg>
+                <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span>
+            </button>
+            {% if header_show_contacts and (site_contacts.phones or site_contacts.phone or site_contacts.tg or site_contacts.instagram) %}
+            <button type="button" id="v2ContactsOpen" class="v2-contacts-open-btn" aria-label="Контакти">
+                📞 <span data-ru="Контакты" data-uk="Контакти">Контакти</span>
+            </button>
+            {% endif %}
+        </div>
     </div>
     {% endif %}
 
@@ -1039,6 +1141,80 @@
         {% endfor %}
     </nav>
 </aside>
+{% if header_show_contacts and (site_contacts.phones or site_contacts.phone or site_contacts.tg or site_contacts.instagram) %}
+<div class="v2-catalog-backdrop v2-contacts-backdrop" id="v2ContactsBackdrop" aria-hidden="true"></div>
+<aside class="v2-contacts-drawer" id="v2ContactsDrawer" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="v2-drawer-header">
+        <span class="v2-drawer-title">
+            📞 <span data-ru="Контакты" data-uk="Контакти">Контакти</span>
+        </span>
+        <button class="v2-drawer-close" id="v2ContactsClose" type="button" aria-label="Закрити">✕</button>
+    </div>
+    <div class="v2-contacts-drawer-body">
+        {% if site_contacts.phones %}
+            {% for p in site_contacts.phones %}
+            <div class="contacts-row">
+                <div class="contacts-row-info">
+                    {% if p.name %}<span class="contacts-label">{{ p.name }}</span>{% endif %}
+                    <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="contacts-phone">{{ p.phone }}</a>
+                </div>
+                <a href="viber://chat?number=%2B{{ (p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
+            </div>
+            {% endfor %}
+        {% elif site_contacts.phone %}
+            <div class="contacts-row">
+                <div class="contacts-row-info">
+                    <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="contacts-phone">{{ site_contacts.phone }}</a>
+                </div>
+                <a href="viber://chat?number=%2B{{ (site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
+            </div>
+        {% endif %}
+        {% if site_contacts.tg %}
+        <a href="{{ site_contacts.tg }}" class="contacts-social-link" target="_blank" rel="noopener">
+            <span>💬</span> Telegram
+        </a>
+        {% endif %}
+        {% if site_contacts.instagram %}
+        <a href="{{ site_contacts.instagram }}" class="contacts-social-link" target="_blank" rel="noopener">
+            <span>📸</span> Instagram
+        </a>
+        {% endif %}
+        {% if site_contacts.address %}
+        <div class="contacts-info-row">📍 {{ site_contacts.address }}</div>
+        {% endif %}
+        {% if site_contacts.schedule %}
+        <div class="contacts-info-row">🕐 {{ site_contacts.schedule }}</div>
+        {% endif %}
+    </div>
+</aside>
+<script>
+(function(){
+    var drawer   = document.getElementById('v2ContactsDrawer');
+    var backdrop = document.getElementById('v2ContactsBackdrop');
+    var openBtn  = document.getElementById('v2ContactsOpen');
+    var closeBtn = document.getElementById('v2ContactsClose');
+    if (!drawer) return;
+    function openContacts() {
+        drawer.classList.add('is-open');
+        if (backdrop) backdrop.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        drawer.setAttribute('aria-hidden', 'false');
+    }
+    function closeContacts() {
+        drawer.classList.remove('is-open');
+        if (backdrop) backdrop.classList.remove('is-open');
+        document.body.style.overflow = '';
+        drawer.setAttribute('aria-hidden', 'true');
+    }
+    if (openBtn)  openBtn.addEventListener('click', openContacts);
+    if (closeBtn) closeBtn.addEventListener('click', closeContacts);
+    if (backdrop) backdrop.addEventListener('click', closeContacts);
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeContacts();
+    });
+})();
+</script>
+{% endif %}
 {% endif %}
 </body>
 <script src="/static/cart.js"></script>
