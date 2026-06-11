@@ -199,65 +199,60 @@
 
                                 {% set has_specs = specifications and (specifications.values()|select|list)|length > 0 %}
                                 {% if has_specs %}
-                                <div class="specs-box">
-                                    <h3 data-ru="📋 Характеристики" data-uk="📋 Характеристики">📋 Характеристики</h3>
-                                    {% for key in spec_field_order %}
-                                        {% set val = specifications.get(key) %}
-                                        {% if val %}
-                                        <div class="spec-row">
-                                            <span>{{ spec_labels.get(key, key) }}</span>
-                                            <b>{{ val }}</b>
-                                        </div>
-                                        {% endif %}
-                                    {% endfor %}
+                                <div class="collapsible-block">
+                                    <div class="collapsible-title" data-ru="📋 Характеристики" data-uk="📋 Характеристики">📋 Характеристики</div>
+                                    <div class="collapsible-body collapsible-body--specs" id="specsBody">
+                                        {% for key in spec_field_order %}
+                                            {% set val = specifications.get(key) %}
+                                            {% if val %}
+                                            <div class="spec-row">
+                                                <span>{{ spec_labels.get(key, key) }}</span>
+                                                <b>{{ val }}</b>
+                                            </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                    <button type="button" class="collapsible-btn" data-toggle-target="specsBody"
+                                        data-collapsed-text="Показати всі характеристики"
+                                        data-expanded-text="Згорнути характеристики"
+                                        style="display:none">Показати всі характеристики</button>
                                 </div>
                                 {% elif product.specs %}
-                                <div class="specs-box">
-                                    <h3>Характеристики</h3>
-                                    {% for line in (product.specs or '').split('\n') %}
-                                        {% if line.strip() %}
-                                            {% if ':' in line %}
-                                                {% set parts = line.split(':', 1) %}
-                                                <div class="spec-row">
-                                                    <span>{{ parts[0].strip() }}</span>
-                                                    <b>{{ parts[1].strip() }}</b>
-                                                </div>
-                                            {% else %}
-                                                <div class="spec-row">
-                                                    <span>{{ line.strip() }}</span>
-                                                </div>
+                                <div class="collapsible-block">
+                                    <div class="collapsible-title">📋 Характеристики</div>
+                                    <div class="collapsible-body collapsible-body--specs" id="specsBodyLegacy">
+                                        {% for line in (product.specs or '').split('\n') %}
+                                            {% if line.strip() %}
+                                                {% if ':' in line %}
+                                                    {% set parts = line.split(':', 1) %}
+                                                    <div class="spec-row">
+                                                        <span>{{ parts[0].strip() }}</span>
+                                                        <b>{{ parts[1].strip() }}</b>
+                                                    </div>
+                                                {% else %}
+                                                    <div class="spec-row">
+                                                        <span>{{ line.strip() }}</span>
+                                                    </div>
+                                                {% endif %}
                                             {% endif %}
-                                        {% endif %}
-                                    {% endfor %}
+                                        {% endfor %}
+                                    </div>
+                                    <button type="button" class="collapsible-btn" data-toggle-target="specsBodyLegacy"
+                                        data-collapsed-text="Показати всі характеристики"
+                                        data-expanded-text="Згорнути характеристики"
+                                        style="display:none">Показати всі характеристики</button>
                                 </div>
                                 {% endif %}
 
                                 {% if product.description %}
-                                <div class="v2-product-description">
-                                    <div class="v2-desc-title">📄 <span data-ru="Описание товара" data-uk="Опис товару">Опис товару</span></div>
-                                    <div class="v2-desc-body" id="prodDescBody">{{ product.description | e }}</div>
-                                    <button type="button" class="v2-desc-toggle" id="prodDescBtn" style="display:none" onclick="prodDescToggle()">Показати повністю</button>
+                                <div class="collapsible-block">
+                                    <div class="collapsible-title" data-ru="📄 Описание товара" data-uk="📄 Опис товару">📄 Опис товару</div>
+                                    <div class="collapsible-body collapsible-body--desc" id="descBody">{{ product.description | e }}</div>
+                                    <button type="button" class="collapsible-btn" data-toggle-target="descBody"
+                                        data-collapsed-text="Показати повністю"
+                                        data-expanded-text="Згорнути"
+                                        style="display:none">Показати повністю</button>
                                 </div>
-                                <script>
-                                (function(){
-                                    var body = document.getElementById('prodDescBody');
-                                    var btn  = document.getElementById('prodDescBtn');
-                                    if (body.scrollHeight > body.clientHeight + 4) {
-                                        btn.style.display = 'inline-block';
-                                    }
-                                })();
-                                function prodDescToggle(){
-                                    var body = document.getElementById('prodDescBody');
-                                    var btn  = document.getElementById('prodDescBtn');
-                                    if (body.classList.contains('v2-desc-expanded')) {
-                                        body.classList.remove('v2-desc-expanded');
-                                        btn.textContent = 'Показати повністю';
-                                    } else {
-                                        body.classList.add('v2-desc-expanded');
-                                        btn.textContent = 'Згорнути';
-                                    }
-                                }
-                                </script>
                                 {% endif %}
 
                 <form class="order-form" method="post" action="/order">
@@ -442,6 +437,27 @@
 
 <script src="/static/cart.js"></script>
 <script src="/static/lang.js"></script>
+<script>
+(function(){
+    document.querySelectorAll('[data-toggle-target]').forEach(function(btn){
+        var body = document.getElementById(btn.getAttribute('data-toggle-target'));
+        if (!body) return;
+        if (body.scrollHeight > body.clientHeight + 4) {
+            btn.style.display = 'inline-block';
+        }
+        btn.addEventListener('click', function(){
+            var expanded = body.classList.contains('collapsible-expanded');
+            if (expanded) {
+                body.classList.remove('collapsible-expanded');
+                btn.textContent = btn.getAttribute('data-collapsed-text');
+            } else {
+                body.classList.add('collapsible-expanded');
+                btn.textContent = btn.getAttribute('data-expanded-text');
+            }
+        });
+    });
+})();
+</script>
 
 <footer class="site-footer" aria-label="Подвал сайта">
   <div class="footer-top">
