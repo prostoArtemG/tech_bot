@@ -1488,6 +1488,11 @@ class V2ProductSpecsState(StatesGroup):
     waiting_for_bulk_text = State()  # очікування вставки списком
 
 
+class V2ProductListState(StatesGroup):
+    browsing  = State()  # глобальний список з пагінацією
+    searching = State()  # очікуємо текст пошуку
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -6505,7 +6510,6 @@ _V2_QUICK_NAV_TARGET = {
     "📂 Категорії": "categories",
     "🏷 Бренди":    "brands",
     "🔧 Фільтри":   "filters",
-    "🛍 Товари":    "products",
 }
 
 
@@ -6697,6 +6701,174 @@ async def back_to_site_v2_settings(message: Message, state: FSMContext):
         parse_mode="HTML",
         reply_markup=admin_v2_kb,
     )
+
+
+# ── v2: Глобальний список товарів (з головного меню) ────────────────────────
+
+_V2_PL_PER_PAGE = 8
+
+
+async def _v2_show_global_product_list(
+    message: Message,
+    state: FSMContext,
+    page: int = 1,
+    status: str | None = None,
+    q: str | None = None,
+):
+    """Показує глобальний список товарів v2 з пагінацією."""
+    total = await db.v2_count_products(status=status, q=q)
+    pages = max(1, -(-total // _V2_PL_PER_PAGE))  # ceil division
+    page = max(1, min(page, pages))
+    products = await db.v2_list_products_paginated(
+        page=page, per_page=_V2_PL_PER_PAGE, status=status, q=q
+    )
+
+    # Заголовок
+    status_label = {
+        "no_filters": "⚪ Без фільтрів",
+        "partial": "🟡 Частково заповнені",
+        "complete": "✅ Готові",
+    }.get(status, "всі")
+    search_label = f" | 🔍 «{q}»" if q else ""
+    header = (
+        f"🛍 <b>Товари v2</b> — сторінка {page}/{pages}\n"
+        f"Фільтр: {status_label}{search_label}\n"
+        f"Всього: {total}"
+    )
+    if not products:
+        header += "\n\n<i>Нічого не знайдено.</i>"
+
+    # Кнопки товарів
+    buttons = []
+    for p in products:
+        icon = "🟢" if p["is_active"] else "🔴"
+        filled = int(p["filled_filters"])
+        total_f = int(p["total_filters"])
+        label = f"{icon} {p['brand_name']} — {p['model']} 🔧{filled}/{total_f}"
+        buttons.append([KeyboardButton(text=label)])
+
+    # Навігація
+    nav_row = []
+    if page > 1:
+        nav_row.append(KeyboardButton(text="⬅️ Попередня"))
+    if page < pages:
+        nav_row.append(KeyboardButton(text="➡️ Наступна"))
+    if nav_row:
+        buttons.append(nav_row)
+    buttons.append([KeyboardButton(text="🔍 Пошук товару")])
+    buttons.append([KeyboardButton(text="⬅️ Назад до меню")])
+
+    await state.update_data(
+        v2_pl_page=page,
+        v2_pl_status=status,
+        v2_pl_q=q,
+        v2_pl_products=[{"id": p["id"], "label": buttons[i][0].text} for i, p in enumerate(products)],
+    )
+    await state.set_state(V2ProductListState.browsing)
+    await message.answer(header, parse_mode="HTML",
+                         reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True))
+
+
+@router.message(lambda m: m.text == "🛍 Товари")
+async def v2_global_products_entry(message: Message, state: FSMContext):
+    """Entry: глобальний список товарів з головного меню адмін v2."""
+    if not await require_admin(message):
+        return
+    await state.set_state(V2ProductListState.browsing)
+    total = await db.v2_count_products()
+    await message.answer(
+        f"🛍 <b>Товари v2</b>\n\nВсього товарів: <b>{total}</b>\n\nОберіть дію:",
+        parse_mode="HTML",
+        reply_markup=v2_products_global_kb,
+    )
+
+
+@router.message(V2ProductListState.browsing)
+async def v2_product_list_browsing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    page = int(data.get("v2_pl_page") or 1)
+    status = data.get("v2_pl_status")
+    q = data.get("v2_pl_q")
+    pl_products: list = data.get("v2_pl_products") or []
+
+    if text == "⬅️ Назад до меню":
+        await state.set_state(V2ProductListState.browsing)
+        total = await db.v2_count_products()
+        await message.answer(
+            f"🛍 <b>Товари v2</b>\n\nВсього товарів: <b>{total}</b>\n\nОберіть дію:",
+            parse_mode="HTML",
+            reply_markup=v2_products_global_kb,
+        )
+        return
+
+    if text == "⬅️ Назад":
+        await state.clear()
+        await message.answer(
+            "🆕 <b>Адмін v2</b>\n\nОберіть розділ:",
+            parse_mode="HTML",
+            reply_markup=admin_v2_kb,
+        )
+        return
+
+    if text == "⬅️ Попередня":
+        await _v2_show_global_product_list(message, state, page=page - 1, status=status, q=q)
+        return
+
+    if text == "➡️ Наступна":
+        await _v2_show_global_product_list(message, state, page=page + 1, status=status, q=q)
+        return
+
+    if text == "🔍 Пошук товару":
+        await state.set_state(V2ProductListState.searching)
+        await message.answer(
+            "🔍 Введіть текст для пошуку (Brand, Model, категорія):",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="❌ Скасувати пошук")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    # клік на товар — шукаємо id по лейблу кнопки
+    for entry in pl_products:
+        if text == entry.get("label"):
+            await _v2_show_product_card(message, state, int(entry["id"]))
+            return
+
+    # кнопки фільтрів (можуть надійти з v2_products_global_kb)
+    _status_map = {
+        "📋 Список товарів": None,
+        "⚪ Без фільтрів": "no_filters",
+        "🟡 Частково заповнені": "partial",
+        "✅ Готові": "complete",
+    }
+    if text in _status_map:
+        await _v2_show_global_product_list(message, state, page=1, status=_status_map[text], q=None)
+        return
+
+    await message.answer("⚠️ Оберіть товар або дію зі списку.")
+
+
+@router.message(V2ProductListState.searching)
+async def v2_product_list_search_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+
+    if text == "❌ Скасувати пошук":
+        data = await state.get_data()
+        await _v2_show_global_product_list(
+            message, state,
+            page=int(data.get("v2_pl_page") or 1),
+            status=data.get("v2_pl_status"),
+            q=data.get("v2_pl_q"),
+        )
+        return
+
+    await _v2_show_global_product_list(message, state, page=1, status=None, q=text)
 
 
 def _make_category_key(text: str) -> str:

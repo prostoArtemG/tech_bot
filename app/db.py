@@ -3553,6 +3553,89 @@ class Database:
             category_id,
         )
 
+    async def v2_count_products(
+        self,
+        status: str | None = None,
+        q: str | None = None,
+    ) -> int:
+        row = await self.fetchrow(
+            """
+            WITH base AS (
+                SELECT
+                    p.id,
+                    b.name AS brand_name,
+                    p.model,
+                    c.name_uk AS category_name_uk,
+                    c.name_ru AS category_name_ru,
+                    (SELECT COUNT(*) FROM v2_filter_fields ff
+                     WHERE ff.category_id = p.category_id AND ff.is_active = TRUE) AS total_filters,
+                    (SELECT COUNT(*) FROM v2_product_filter_values pfv
+                     WHERE pfv.product_id = p.id) AS filled_filters
+                FROM v2_products p
+                JOIN v2_category_brands b ON b.id = p.category_brand_id
+                JOIN v2_categories c ON c.id = p.category_id
+                WHERE p.deleted_at IS NULL
+                  AND ($1::text IS NULL
+                       OR LOWER(b.name)        LIKE '%' || LOWER($1) || '%'
+                       OR LOWER(p.model)       LIKE '%' || LOWER($1) || '%'
+                       OR LOWER(c.name_uk)     LIKE '%' || LOWER($1) || '%'
+                       OR LOWER(c.name_ru)     LIKE '%' || LOWER($1) || '%')
+            )
+            SELECT COUNT(*) AS cnt FROM base
+            WHERE ($2::text IS NULL
+                   OR ($2 = 'no_filters'  AND filled_filters = 0)
+                   OR ($2 = 'partial'     AND filled_filters > 0
+                                          AND filled_filters < total_filters)
+                   OR ($2 = 'complete'    AND total_filters > 0
+                                          AND filled_filters >= total_filters))
+            """,
+            q, status,
+        )
+        return int(row["cnt"]) if row else 0
+
+    async def v2_list_products_paginated(
+        self,
+        page: int = 1,
+        per_page: int = 10,
+        status: str | None = None,
+        q: str | None = None,
+    ) -> list:
+        offset = (max(1, page) - 1) * per_page
+        return await self.fetch(
+            """
+            WITH base AS (
+                SELECT
+                    p.id, p.category_id, p.model, p.price, p.is_active,
+                    b.name AS brand_name,
+                    c.name_uk AS category_name_uk,
+                    c.name_ru AS category_name_ru,
+                    (SELECT COUNT(*) FROM v2_filter_fields ff
+                     WHERE ff.category_id = p.category_id AND ff.is_active = TRUE) AS total_filters,
+                    (SELECT COUNT(*) FROM v2_product_filter_values pfv
+                     WHERE pfv.product_id = p.id) AS filled_filters
+                FROM v2_products p
+                JOIN v2_category_brands b ON b.id = p.category_brand_id
+                JOIN v2_categories c ON c.id = p.category_id
+                WHERE p.deleted_at IS NULL
+                  AND ($1::text IS NULL
+                       OR LOWER(b.name)        LIKE '%' || LOWER($1) || '%'
+                       OR LOWER(p.model)       LIKE '%' || LOWER($1) || '%'
+                       OR LOWER(c.name_uk)     LIKE '%' || LOWER($1) || '%'
+                       OR LOWER(c.name_ru)     LIKE '%' || LOWER($1) || '%')
+            )
+            SELECT * FROM base
+            WHERE ($2::text IS NULL
+                   OR ($2 = 'no_filters'  AND filled_filters = 0)
+                   OR ($2 = 'partial'     AND filled_filters > 0
+                                          AND filled_filters < total_filters)
+                   OR ($2 = 'complete'    AND total_filters > 0
+                                          AND filled_filters >= total_filters))
+            ORDER BY brand_name ASC, model ASC
+            LIMIT $3 OFFSET $4
+            """,
+            q, status, per_page, offset,
+        )
+
     async def v2_create_product(
         self,
         category_id: int,
