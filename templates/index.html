@@ -268,23 +268,41 @@
 }
 .hdr-viber-btn:hover { background: #5a4bcf; }
 @media (max-width: 768px) {
-    .header-inner { flex-wrap: nowrap !important; align-items: center !important; gap: 10px !important; }
-    .hdr-col-logo  { flex: 1; min-width: 0; }
+    /* logo gets full width; lang+cart float out of the flow */
+    .header-inner { flex-wrap: nowrap !important; gap: 0 !important; align-items: stretch !important; }
+    .hdr-col-logo {
+        flex: 1 1 auto !important;
+        min-width: 0;
+        /* right-side room: 36px globe + 8px gap + 90px cart = 134, leave 10px breathing */
+        padding-right: 144px;
+        box-sizing: border-box;
+    }
+    /* 🌐 globe: pulled out of hdr-logo-row, placed absolute to header-inner */
+    .hdr-logo-row .lang-dropdown-wrap {
+        position: absolute !important;
+        top: 50%;
+        right: 98px; /* 90px cart + 8px */
+        transform: translateY(-50%);
+        margin: 0 !important;
+    }
+    /* right col: absolute on the right, shows only cart (phones hidden) */
     .hdr-col-right {
-        flex-shrink: 0;
-        flex-direction: row;
-        align-items: center;
-        gap: 8px;
+        position: absolute !important;
+        top: 50%;
+        right: 0;
+        transform: translateY(-50%);
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
         width: auto;
+        gap: 0;
     }
     .hdr-phones { display: none !important; }
     .hdr-phone-link { font-size: 12px; }
     .hdr-phone-row { gap: 4px; }
-    /* logo text truncation to avoid overflow near lang/cart */
-    .site-logo { min-width: 0; overflow: hidden; }
-    .logo-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .logo-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
-/* very narrow screens: shrink bar button text/padding */
+/* very narrow screens: bar buttons compact */
 @media (max-width: 360px) {
     .v2-catalog-open-btn,
     .v2-contacts-open-btn { font-size: 13px; padding: 0 10px; gap: 6px; }
