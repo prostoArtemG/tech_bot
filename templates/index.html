@@ -280,6 +280,14 @@
     .hdr-phones { display: none !important; }
     .hdr-phone-link { font-size: 12px; }
     .hdr-phone-row { gap: 4px; }
+    /* logo text truncation to avoid overflow near lang/cart */
+    .site-logo { min-width: 0; overflow: hidden; }
+    .logo-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+/* very narrow screens: shrink bar button text/padding */
+@media (max-width: 360px) {
+    .v2-catalog-open-btn,
+    .v2-contacts-open-btn { font-size: 13px; padding: 0 10px; gap: 6px; }
 }
 .v2-catalog-backdrop {
     position: fixed;
@@ -407,36 +415,39 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
 }
 .hdr-logo-row .lang-dropdown-wrap { margin-left: auto; flex-shrink: 0; }
 /* ── Catalog bar: flex row ── */
 .v2-catalog-bar-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
 }
-.v2-catalog-bar-row .v2-catalog-open-btn { flex: 1; }
-/* ── Contacts open button ── */
+/* ── Both bar buttons: equal size ── */
+.v2-catalog-open-btn,
 .v2-contacts-open-btn {
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    flex-shrink: 0;
+    gap: 10px;
     height: 52px;
-    padding: 0 16px;
+    padding: 0 18px;
     border-radius: 16px;
-    background: rgba(255,255,255,.10);
+    background: #1b2a3b;
     color: #fff;
-    border: 1px solid rgba(255,255,255,.22);
-    font-size: 14px;
-    font-weight: 600;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
     cursor: pointer;
     transition: background .15s;
     white-space: nowrap;
     box-sizing: border-box;
+    box-shadow: none;
 }
-.v2-contacts-open-btn:hover { background: rgba(255,255,255,.18); }
+.v2-catalog-open-btn:hover,
+.v2-contacts-open-btn:hover { background: #243447; }
 /* ── Contacts drawer ── */
 .v2-contacts-drawer {
     position: fixed;
