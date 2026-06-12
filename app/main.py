@@ -13034,6 +13034,7 @@ async def site_home(request: Request, q: str = "", category: str = "", page: int
             "seo_effective": seo_effective,
             "canonical_url": canonical_url,
             "catalog_base": "/",
+            "is_v2": False,
         }
     )
 
@@ -13387,6 +13388,7 @@ async def product_page(request: Request, slug: str):
                 await db.get_auto_seo_templates(),
             ),
             "canonical_url": f"{_seo_base_url(request)}/product/{(product.get('slug') or '').strip() or slug}",
+            "is_v2": False,
         }
     )
 
@@ -13832,6 +13834,7 @@ async def site_v2_home(
             "canonical_url": f"{_seo_base_url(request)}{_catalog_base}",
             "catalog_base": _catalog_base,
             "category_groups": category_groups,
+            "is_v2": True,
         },
     )
 
@@ -13939,6 +13942,7 @@ async def site_v2_product(request: Request, product_id: int):
             "seo_product": seo_product,
             "canonical_url": f"{_seo_base_url(request)}/v2/product/{product_id}",
             "catalog_base": "/v2",
+            "is_v2": True,
         },
     )
 

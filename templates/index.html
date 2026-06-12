@@ -401,6 +401,33 @@
 </style>
 </head>
 <body>
+        {% if is_v2 %}
+        <header class="site-header site-header--v2">
+            <div class="v2-header-inner">
+                <div class="v2-header-top">
+                    <a href="/v2" class="site-logo v2-header-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                        <span class="logo-badge">T</span>
+                        <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+                    </a>
+                    {% if header_show_language %}
+                    <details class="v2-lang-menu">
+                        <summary aria-label="Мова">🌐</summary>
+                        <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                        <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                    </details>
+                    {% endif %}
+                </div>
+
+                <p class="v2-header-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
+
+                {% if header_show_cart %}
+                <div class="v2-header-cart-row">
+                    <a href="/cart" class="header-pill cart-pill v2-header-cart">🛒 <span id="cartCount">0</span></a>
+                </div>
+                {% endif %}
+            </div>
+        </header>
+        {% else %}
         <header class="site-header">
             <div class="header-inner">
                 <div class="header-title">
@@ -435,6 +462,7 @@
                 </div>
             </div>
         </header>
+        {% endif %}
 
     {% if category_groups %}
     <div class="v2-catalog-bar">

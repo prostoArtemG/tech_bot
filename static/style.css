@@ -3566,3 +3566,169 @@ button:hover {
         position: static !important;
     }
 }
+
+/* ============================================================
+   V2 SCOPED HEADER — does not affect the old site header
+   ============================================================ */
+.site-header--v2 {
+    overflow: visible;
+}
+.site-header--v2 .v2-header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.site-header--v2 .v2-header-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+}
+.site-header--v2 .v2-header-logo {
+    min-width: 0;
+    margin-bottom: 0;
+}
+.site-header--v2 .v2-header-logo .logo-text {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.12;
+}
+.site-header--v2 .v2-header-subtitle {
+    margin: 0 0 0 60px;
+    color: #d1d5db;
+    font-size: 15px;
+    line-height: 1.35;
+}
+.site-header--v2 .v2-header-cart-row {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+.site-header--v2 .v2-header-cart {
+    width: auto !important;
+    min-width: 96px;
+    padding: 0 18px;
+}
+.site-header--v2 .v2-lang-menu {
+    position: relative;
+    justify-self: end;
+    flex-shrink: 0;
+}
+.site-header--v2 .v2-lang-menu summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.25);
+    color: #fff;
+    cursor: pointer;
+    list-style: none;
+    box-sizing: border-box;
+}
+.site-header--v2 .v2-lang-menu summary::-webkit-details-marker { display: none; }
+.site-header--v2 .v2-lang-menu[open] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+.site-header--v2 .v2-lang-menu .site-lang-btn {
+    width: 48px !important;
+    margin: 0 !important;
+    padding: 7px 0 !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,.08) !important;
+    border: 1px solid rgba(255,255,255,.25) !important;
+    color: #fff !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
+}
+.site-header--v2 .v2-lang-menu .site-lang-btn:hover,
+.site-header--v2 .v2-lang-menu .site-lang-btn.active {
+    background: #fff !important;
+    color: #111827 !important;
+}
+.v2-product-header-bar {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+}
+.v2-product-header-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 10px;
+    border-radius: 16px;
+    background: #1b2a3b;
+    color: #fff;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .site-header--v2 {
+        padding: 18px 16px 16px;
+    }
+    .site-header--v2 .v2-header-inner {
+        max-width: 100%;
+        gap: 10px;
+    }
+    .site-header--v2 .v2-header-top {
+        grid-template-columns: minmax(0, 1fr) 40px;
+        gap: 10px;
+    }
+    .site-header--v2 .v2-header-logo {
+        gap: 10px;
+    }
+    .site-header--v2 .v2-header-logo .logo-badge {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+        border-radius: 10px;
+    }
+    .site-header--v2 .v2-header-logo .logo-text {
+        font-size: 20px;
+    }
+    .site-header--v2 .v2-header-subtitle {
+        margin-left: 50px;
+        font-size: 15px;
+    }
+    .site-header--v2 .v2-header-cart {
+        height: 38px !important;
+        font-size: 15px;
+    }
+    .site-header--v2 .v2-header-cart span {
+        font-size: 13px;
+    }
+    .v2-catalog-bar-row,
+    .v2-product-header-bar {
+        gap: 10px;
+    }
+    .v2-catalog-open-btn,
+    .v2-contacts-open-btn,
+    .v2-product-header-btn {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        width: auto !important;
+        height: 52px !important;
+        padding: 0 10px !important;
+        font-size: 15px !important;
+        white-space: nowrap !important;
+    }
+}
