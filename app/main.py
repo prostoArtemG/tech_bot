@@ -1689,9 +1689,19 @@ def _is_cancel_text(message: Message) -> bool:
     return (message.text or "").strip() in SITE_SERVICE_BUTTON_TEXTS
 
 
-async def _cancel_to_menu(message: Message, state: FSMContext, reply_markup, text: str = "Скасовано."):
+def _is_back_text(message: Message) -> bool:
+    return (message.text or "").strip() == "⬅️ Назад"
+
+
+async def _cancel_to_menu(
+    message: Message,
+    state: FSMContext,
+    reply_markup,
+    text: str = "Скасовано.",
+    back_text: str | None = None,
+):
     await state.clear()
-    await message.answer(text, reply_markup=reply_markup)
+    await message.answer(back_text if _is_back_text(message) and back_text else text, reply_markup=reply_markup)
 
 
 reports_kb = ReplyKeyboardMarkup(
@@ -3070,7 +3080,7 @@ async def site_header_field_start(message: Message, state: FSMContext):
 @router.message(SiteContactsState.waiting_for_field)
 async def site_contact_field_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_contacts_kb)
+        await _cancel_to_menu(message, state, site_contacts_kb, back_text="Контакты сайта:")
         return
     data = await state.get_data()
     key = data.get("setting_key")
@@ -3090,7 +3100,7 @@ async def site_contact_field_save(message: Message, state: FSMContext):
 @router.message(SiteHeaderState.waiting_for_field)
 async def site_header_field_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, header_kb)
+        await _cancel_to_menu(message, state, header_kb, back_text="Настройки шапки сайта:")
         return
     data = await state.get_data()
     key = data.get("setting_key")
@@ -3189,7 +3199,7 @@ async def site_color_field_start(message: Message, state: FSMContext):
 @router.message(SiteColorsState.waiting_for_field)
 async def site_color_field_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_colors_kb)
+        await _cancel_to_menu(message, state, site_colors_kb, back_text="Цвета сайта:")
         return
     data = await state.get_data()
     key = data.get("setting_key")
@@ -3275,7 +3285,7 @@ async def site_banner_field_start(message: Message, state: FSMContext):
 @router.message(SiteBannerState.waiting_for_field)
 async def site_banner_field_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_banner_kb)
+        await _cancel_to_menu(message, state, site_banner_kb, back_text="Баннер сайта:")
         return
     data = await state.get_data()
     key = data.get("setting_key")
@@ -4348,7 +4358,7 @@ async def site_promo_field_start(message: Message, state: FSMContext):
 @router.message(SitePromoState.waiting_for_field)
 async def site_promo_field_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_promo_kb)
+        await _cancel_to_menu(message, state, site_promo_kb, back_text="Промо-плашка:")
         return
     data = await state.get_data()
     key = data.get("setting_key")
@@ -10330,7 +10340,7 @@ async def site_phone_add_start(message: Message, state: FSMContext):
 @router.message(SitePhonesState.waiting_for_add)
 async def site_phone_add_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_contacts_kb)
+        await _cancel_to_menu(message, state, site_contacts_kb, back_text="Контакты сайта:")
         return
     raw = (message.text or "").strip()
     if not raw:
@@ -10390,7 +10400,7 @@ async def site_phone_delete_start(message: Message, state: FSMContext):
 @router.message(SitePhonesState.waiting_for_delete)
 async def site_phone_delete_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_contacts_kb)
+        await _cancel_to_menu(message, state, site_contacts_kb, back_text="Контакты сайта:")
         return
     raw = (message.text or "").strip()
     if not raw.isdigit():
@@ -10471,7 +10481,7 @@ async def site_pages_menu_handler(message: Message, state: FSMContext):
 @router.message(SitePagesState.waiting_for_text)
 async def site_page_save_handler(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_pages_kb)
+        await _cancel_to_menu(message, state, site_pages_kb, back_text="📄 Страницы сайта:")
         return
     data = await state.get_data()
     key = data.get("page_key")
@@ -10592,7 +10602,7 @@ async def custom_category_start(message: Message, state: FSMContext):
 @router.message(SiteCategoryQuickState.waiting)
 async def custom_category_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_categories_kb)
+        await _cancel_to_menu(message, state, site_categories_kb, back_text="Категории сайта:")
         return
     try:
         parts = [p.strip() for p in (message.text or "").split("|")]
@@ -10629,7 +10639,7 @@ async def toggle_site_category_start(message: Message, state: FSMContext):
 @router.message(SiteCategoryState.waiting_for_toggle_id)
 async def toggle_site_category_finish(message: Message, state: FSMContext):
     if _is_cancel_text(message):
-        await _cancel_to_menu(message, state, site_categories_kb)
+        await _cancel_to_menu(message, state, site_categories_kb, back_text="Категории сайта:")
         return
     raw = (message.text or "").strip()
 
