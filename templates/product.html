@@ -7,6 +7,9 @@
     {% if seo_product and seo_product.meta_description %}
     <meta name="description" content="{{ seo_product.meta_description }}">
     {% endif %}
+    {% if seo_product and seo_product.meta_keywords %}
+    <meta name="keywords" content="{{ seo_product.meta_keywords }}">
+    {% endif %}
     {% if seo_product and not seo_product.indexable %}
     <meta name="robots" content="noindex, follow">
     {% endif %}

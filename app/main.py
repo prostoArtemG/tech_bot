@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import math
 import os
@@ -1488,6 +1489,13 @@ class V2ProductImageState(StatesGroup):
 class V2ProductDescriptionState(StatesGroup):
     viewing          = State()  # перегляд/меню опису
     waiting_for_text = State()  # очікуємо текст опису
+
+
+class V2ProductSeoState(StatesGroup):
+    menu                    = State()
+    waiting_for_title       = State()
+    waiting_for_description = State()
+    waiting_for_keywords    = State()
 
 
 class V2ProductEditState(StatesGroup):
@@ -6031,6 +6039,7 @@ async def _v2_show_product_card(message: Message, state: FSMContext, product_id:
         [KeyboardButton(text="🔥 Акция")],
         [KeyboardButton(text="🖼 Фото"), KeyboardButton(text="🔧 Заповнити фільтри")],
         [KeyboardButton(text="📝 Характеристики"), KeyboardButton(text="📄 Описання")],
+        [KeyboardButton(text="📋 Копіювати товар"), KeyboardButton(text="🔎 SEO товару")],
         [KeyboardButton(text="✏️ Редагувати"), KeyboardButton(text="🔄 Статус наявності")],
         [KeyboardButton(text="🗑 Видалити")],
         [KeyboardButton(text="⬅️ Назад до товарів")],
@@ -6123,6 +6132,27 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         is_sale = await db.v2_toggle_product_sale(int(product_id))
         await message.answer("🔥 Акция: <b>ВКЛ</b>" if is_sale else "🔥 Акция: <b>ВЫКЛ</b>", parse_mode="HTML")
         await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if text == "📋 Копіювати товар":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        new_product_id = await db.v2_copy_product(int(product_id))
+        if not new_product_id:
+            await message.answer("⚠️ Не вдалося скопіювати товар.")
+            return
+        new_product = await db.v2_get_product_by_id(int(new_product_id))
+        new_name = f"{new_product['brand_name']} {new_product['model']}" if new_product else f"#{new_product_id}"
+        await message.answer(f"✅ Товар скопійовано\nНова назва: <b>{new_name}</b>", parse_mode="HTML")
+        await _v2_show_product_card(message, state, int(new_product_id))
+        return
+
+    if text == "🔎 SEO товару":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await _v2_show_product_seo_menu(message, state, int(product_id))
         return
 
     if text == "📄 Описання":
@@ -6243,6 +6273,141 @@ async def v2_product_old_price_update_handler(message: Message, state: FSMContex
     await db.v2_update_product_old_price(int(product_id), old_price)
     await message.answer(f"✅ Старая цена обновлена: <b>{old_price:.2f} грн</b>", parse_mode="HTML")
     await _v2_show_product_card(message, state, int(product_id))
+
+
+# ── v2: SEO товару ──────────────────────────────────────────────────────────
+
+async def _v2_show_product_seo_menu(message: Message, state: FSMContext, product_id: int):
+    seo = await db.v2_get_product_seo(product_id)
+    title = html.escape(seo["title"] or "—")
+    description = html.escape(seo["description"] or "—")
+    keywords = html.escape(seo["keywords"] or "—")
+    await state.update_data(v2_seo_product_id=product_id)
+    await state.set_state(V2ProductSeoState.menu)
+    await message.answer(
+        "🔎 <b>SEO товару</b>\n\n"
+        f"Title: {title}\n"
+        f"Description: {description}\n"
+        f"Keywords: {keywords}",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[
+            [KeyboardButton(text="✏️ Title")],
+            [KeyboardButton(text="✏️ Description")],
+            [KeyboardButton(text="✏️ Keywords")],
+            [KeyboardButton(text="🧹 Очистити SEO")],
+            [KeyboardButton(text="⬅️ Назад до товару")],
+        ], resize_keyboard=True),
+    )
+
+
+@router.message(V2ProductSeoState.menu)
+async def v2_product_seo_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_seo_product_id") or data.get("v2_viewing_product_id")
+
+    if text == "⬅️ Назад до товару":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+
+    if text == "✏️ Title":
+        await state.set_state(V2ProductSeoState.waiting_for_title)
+        await message.answer(
+            "Введіть SEO Title:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="⬅️ Назад")]], resize_keyboard=True),
+        )
+        return
+
+    if text == "✏️ Description":
+        await state.set_state(V2ProductSeoState.waiting_for_description)
+        await message.answer(
+            "Введіть SEO Description:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="⬅️ Назад")]], resize_keyboard=True),
+        )
+        return
+
+    if text == "✏️ Keywords":
+        await state.set_state(V2ProductSeoState.waiting_for_keywords)
+        await message.answer(
+            "Введіть SEO Keywords:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="⬅️ Назад")]], resize_keyboard=True),
+        )
+        return
+
+    if text == "🧹 Очистити SEO":
+        await db.v2_update_product_seo(int(product_id), "", "", "")
+        await message.answer("✅ SEO очищено.")
+        await _v2_show_product_seo_menu(message, state, int(product_id))
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+async def _v2_update_one_seo_field(message: Message, state: FSMContext, field: str, value: str):
+    data = await state.get_data()
+    product_id = data.get("v2_seo_product_id") or data.get("v2_viewing_product_id")
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    seo = await db.v2_get_product_seo(int(product_id))
+    seo[field] = value
+    await db.v2_update_product_seo(
+        int(product_id),
+        seo["title"],
+        seo["description"],
+        seo["keywords"],
+    )
+    await message.answer("✅ SEO збережено.")
+    await _v2_show_product_seo_menu(message, state, int(product_id))
+
+
+@router.message(V2ProductSeoState.waiting_for_title)
+async def v2_product_seo_title_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_seo_product_id") or data.get("v2_viewing_product_id")
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_seo_menu(message, state, int(product_id))
+        return
+    await _v2_update_one_seo_field(message, state, "title", text)
+
+
+@router.message(V2ProductSeoState.waiting_for_description)
+async def v2_product_seo_description_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_seo_product_id") or data.get("v2_viewing_product_id")
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_seo_menu(message, state, int(product_id))
+        return
+    await _v2_update_one_seo_field(message, state, "description", text)
+
+
+@router.message(V2ProductSeoState.waiting_for_keywords)
+async def v2_product_seo_keywords_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_seo_product_id") or data.get("v2_viewing_product_id")
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_seo_menu(message, state, int(product_id))
+        return
+    await _v2_update_one_seo_field(message, state, "keywords", text)
 
 
 # ── v2: Опис товару ───────────────────────────────────────────────────────────
@@ -14586,8 +14751,9 @@ async def site_v2_product(request: Request, product_id: int):
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
     seo_product = {
-        "meta_title": f"{raw['brand_name']} {raw['model']} — {site_title}",
-        "meta_description": "",
+        "meta_title": raw.get("seo_title") or f"{raw['brand_name']} {raw['model']} — {site_title}",
+        "meta_description": raw.get("seo_description") or "",
+        "meta_keywords": raw.get("seo_keywords") or "",
         "h1": f"{raw['brand_name']} {raw['model']}",
         "seo_text": "",
         "indexable": False,

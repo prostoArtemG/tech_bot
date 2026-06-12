@@ -699,6 +699,9 @@ class Database:
             price             NUMERIC(12,2) NOT NULL DEFAULT 0,
             old_price         NUMERIC(12,2),
             is_sale           BOOLEAN NOT NULL DEFAULT FALSE,
+            seo_title         TEXT NOT NULL DEFAULT '',
+            seo_description   TEXT NOT NULL DEFAULT '',
+            seo_keywords      TEXT NOT NULL DEFAULT '',
             purchase_price    NUMERIC(12,2) NOT NULL DEFAULT 0,
             purchase_currency TEXT NOT NULL DEFAULT 'UAH',
             sku               TEXT,
@@ -718,6 +721,18 @@ class Database:
         await self.execute("""
         ALTER TABLE v2_products
         ADD COLUMN IF NOT EXISTS is_sale BOOLEAN NOT NULL DEFAULT FALSE;
+        """)
+        await self.execute("""
+        ALTER TABLE v2_products
+        ADD COLUMN IF NOT EXISTS seo_title TEXT NOT NULL DEFAULT '';
+        """)
+        await self.execute("""
+        ALTER TABLE v2_products
+        ADD COLUMN IF NOT EXISTS seo_description TEXT NOT NULL DEFAULT '';
+        """)
+        await self.execute("""
+        ALTER TABLE v2_products
+        ADD COLUMN IF NOT EXISTS seo_keywords TEXT NOT NULL DEFAULT '';
         """)
         await self.execute("""
         CREATE INDEX IF NOT EXISTS v2_products_category_idx
@@ -3796,12 +3811,119 @@ class Database:
         return await self.fetchrow(
             """
             SELECT p.id, p.category_id, p.category_brand_id, p.model, p.price,
-                   p.old_price, p.is_sale, p.is_active, b.name AS brand_name
+                   p.old_price, p.is_sale, p.is_active,
+                   p.seo_title, p.seo_description, p.seo_keywords,
+                   b.name AS brand_name
             FROM v2_products p
             JOIN v2_category_brands b ON b.id = p.category_brand_id
             WHERE p.id = $1
             """,
             product_id,
+        )
+
+    async def v2_copy_product(self, product_id: int) -> int | None:
+        import json
+
+        if not self.pool:
+            raise RuntimeError("База данных не подключена")
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                source = await conn.fetchrow(
+                    """
+                    SELECT category_id, category_brand_id, model, description,
+                           price, old_price, is_sale, sku, warranty_months,
+                           stock_qty, availability_status, specs_json
+                    FROM v2_products
+                    WHERE id = $1 AND deleted_at IS NULL
+                    """,
+                    product_id,
+                )
+                if not source:
+                    return None
+
+                raw_specs = source["specs_json"] or {}
+                specs_json = raw_specs if isinstance(raw_specs, str) else json.dumps(raw_specs, ensure_ascii=False)
+                sku = (source["sku"] + "-copy") if source["sku"] else ""
+                new_model = f"{source['model']} копія"
+
+                new_row = await conn.fetchrow(
+                    """
+                    INSERT INTO v2_products (
+                        category_id, category_brand_id, model, description,
+                        price, old_price, is_sale, sku, warranty_months,
+                        stock_qty, availability_status, specs_json
+                    )
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
+                    RETURNING id
+                    """,
+                    source["category_id"],
+                    source["category_brand_id"],
+                    new_model,
+                    source["description"] or "",
+                    source["price"],
+                    source["old_price"],
+                    source["is_sale"],
+                    sku,
+                    source["warranty_months"],
+                    source["stock_qty"],
+                    source["availability_status"],
+                    specs_json,
+                )
+                if not new_row:
+                    return None
+                new_id = int(new_row["id"])
+
+                await conn.execute(
+                    """
+                    INSERT INTO v2_product_filter_values (
+                        product_id, filter_field_id, filter_value_id, value_text
+                    )
+                    SELECT $2, filter_field_id, filter_value_id, value_text
+                    FROM v2_product_filter_values
+                    WHERE product_id = $1
+                    """,
+                    product_id,
+                    new_id,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO v2_product_images (product_id, url, sort_order)
+                    SELECT $2, url, sort_order
+                    FROM v2_product_images
+                    WHERE product_id = $1
+                    ORDER BY sort_order, id
+                    """,
+                    product_id,
+                    new_id,
+                )
+                return new_id
+
+    async def v2_get_product_seo(self, product_id: int) -> dict:
+        row = await self.fetchrow(
+            """
+            SELECT seo_title, seo_description, seo_keywords
+            FROM v2_products
+            WHERE id = $1
+            """,
+            product_id,
+        )
+        if not row:
+            return {"title": "", "description": "", "keywords": ""}
+        return {
+            "title": row["seo_title"] or "",
+            "description": row["seo_description"] or "",
+            "keywords": row["seo_keywords"] or "",
+        }
+
+    async def v2_update_product_seo(self, product_id: int, title: str, description: str, keywords: str) -> None:
+        await self.execute(
+            """
+            UPDATE v2_products
+            SET seo_title = $2, seo_description = $3, seo_keywords = $4
+            WHERE id = $1
+            """,
+            product_id, title, description, keywords,
         )
 
     async def v2_get_product_filter_values(self, product_id: int) -> list:
@@ -4149,6 +4271,7 @@ class Database:
             SELECT
                 p.id, p.model, p.price, p.old_price, p.is_sale, p.is_active,
                 p.specs_json, p.description,
+                p.seo_title, p.seo_description, p.seo_keywords,
                 b.name AS brand_name,
                 c.id AS category_id, c.slug AS category_slug,
                 c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
