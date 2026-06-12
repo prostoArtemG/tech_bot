@@ -32,36 +32,55 @@
 
 <header class="site-header">
     <div class="header-inner">
-        <div class="header-title">
-            <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
-                <span class="logo-badge">T</span>
-                <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
-            </a>
-            <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
+
+        <div class="hdr-col-logo">
+            <div class="hdr-logo-row">
+                <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                    <span class="logo-badge">T</span>
+                    <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+                </a>
+                {% if header_show_language %}
+                <div class="lang-dropdown-wrap" id="langDropdownWrap">
+                    <button class="lang-globe-btn" id="langGlobeBtn" aria-label="Мова" aria-expanded="false">🌐</button>
+                    <div class="lang-switch">
+                        <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                        <span class="lang-separator">|</span>
+                        <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            <p class="hdr-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
+        </div>
+
+        <div class="hdr-col-right">
             {% if header_show_contacts %}
             {% if site_contacts.phones %}
+            <div class="hdr-phones">
                 {% for p in site_contacts.phones %}
-                <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</a>
+                <div class="hdr-phone-row">
+                    <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="hdr-phone-link">📞{% if p.name %} {{ p.name }}:{% endif %} {{ p.phone }}</a>
+                    <a href="viber://chat?number=%2B{{ (p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
+                </div>
                 {% endfor %}
+            </div>
             {% elif site_contacts.phone %}
-                <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
-            {% endif %}
-            {% endif %}
-        </div>
-
-        <div class="header-actions">
-            {% if header_show_language %}
-            <div class="lang-switch">
-                <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-                <span class="lang-separator">|</span>
-                <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+            <div class="hdr-phones">
+                <div class="hdr-phone-row">
+                    <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="hdr-phone-link">📞 {{ site_contacts.phone }}</a>
+                    <a href="viber://chat?number=%2B{{ (site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
+                </div>
             </div>
             {% endif %}
-
-            {% if header_show_cart %}
-            <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
             {% endif %}
+
+            <div class="header-actions">
+                {% if header_show_cart %}
+                <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
+                {% endif %}
+            </div>
         </div>
+
     </div>
 </header>
 
@@ -115,6 +134,9 @@
                     <div class="price">{{ cur_price }} грн</div>
                     {% if product.is_sale and product.old_price %}
                     <div class="old-price">{{ product.old_price }} грн</div>
+                    {% endif %}
+                    {% if header_show_cart %}
+                    <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')"><span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
                     {% endif %}
                 </div>
 
@@ -281,10 +303,6 @@
                 </form>
 
             </div>
-        </div>
-
-        <div style="max-width:1100px;margin:0 auto;padding:0 20px 20px;">
-            <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')"><span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
         </div>
 
     </div>
@@ -456,10 +474,23 @@
             }
         });
     });
+    // Lang globe dropdown (mobile)
+    var langWrap  = document.getElementById('langDropdownWrap');
+    var langGlobe = document.getElementById('langGlobeBtn');
+    if (langWrap && langGlobe) {
+        var langMenu = langWrap.querySelector('.lang-switch');
+        langGlobe.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = langMenu.classList.toggle('is-open');
+            langGlobe.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        document.addEventListener('click', function () {
+            langMenu.classList.remove('is-open');
+            langGlobe.setAttribute('aria-expanded', 'false');
+        });
+    }
 })();
-</script>
-
-<footer class="site-footer" aria-label="Подвал сайта">
+</script> aria-label="Подвал сайта">
   <div class="footer-top">
     <div class="footer-brand">
       <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">

@@ -3409,3 +3409,152 @@ button:hover {
     .seo-text-block { margin: 24px 12px 16px; padding: 18px 16px; }
     .seo-h1 { font-size: 18px; }
 }
+
+/* ============================================================
+   HEADER V2 — hdr-col-logo / hdr-col-right layout
+   ============================================================ */
+
+/* ── Lang globe button: hidden on desktop, shown on mobile ── */
+.lang-globe-btn { display: none; }
+
+/* ── Base column styles ── */
+.hdr-col-logo {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.hdr-subtitle {
+    font-size: 13px;
+    color: #d1d5db;
+    margin: 2px 0 0;
+}
+.hdr-logo-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.hdr-logo-row .lang-dropdown-wrap { margin-left: auto; flex-shrink: 0; }
+.hdr-col-right {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+.hdr-phones { display: flex; flex-direction: column; gap: 5px; }
+.hdr-phone-row { display: flex; align-items: center; gap: 6px; }
+.hdr-phone-link {
+    color: #fff;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.hdr-phone-link:hover { text-decoration: underline; }
+.hdr-viber-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #7360f2;
+    color: #fff;
+    font-size: 14px;
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: background .15s;
+}
+.hdr-viber-btn:hover { background: #5a4bcf; }
+
+@media (max-width: 768px) {
+    /* ── Lang globe button ── */
+    .lang-globe-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.12);
+        border: 1px solid rgba(255,255,255,.25);
+        color: #fff;
+        font-size: 16px;
+        cursor: pointer;
+        flex-shrink: 0;
+        padding: 0;
+    }
+    .lang-dropdown-wrap { position: relative; }
+    .lang-dropdown-wrap .lang-switch {
+        display: none !important;
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        background: #1b2a3b;
+        border-radius: 10px;
+        padding: 6px 8px !important;
+        flex-direction: column !important;
+        gap: 2px !important;
+        min-width: 60px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.3);
+        z-index: 600;
+    }
+    .lang-dropdown-wrap .lang-switch.is-open { display: flex !important; }
+    .lang-dropdown-wrap .lang-separator { display: none !important; }
+    .lang-dropdown-wrap .site-lang-btn {
+        width: 100% !important;
+        text-align: center !important;
+        border-radius: 6px !important;
+    }
+
+    /* ── Mobile header 2-col layout ── */
+    /* logo col takes full width; globe + cart are absolutely placed */
+    .header-inner { flex-wrap: nowrap !important; gap: 0 !important; align-items: stretch !important; }
+    .hdr-col-logo {
+        flex: 1 1 auto !important;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+    /* logo row: right padding avoids 🌐 overlap (32px globe + 12px gap) */
+    .hdr-logo-row {
+        padding-right: 44px !important;
+        box-sizing: border-box;
+    }
+    /* subtitle: right padding avoids 🛒 overlap (72px cart + 10px gap) */
+    .hdr-subtitle {
+        padding-right: 82px !important;
+        box-sizing: border-box;
+        font-size: 13px !important;
+    }
+    /* 🌐 globe: top-right, vertically centred against logo badge height */
+    .hdr-logo-row .lang-dropdown-wrap {
+        position: absolute !important;
+        top: 0;
+        right: 0;
+        height: 40px;
+        display: flex !important;
+        align-items: center !important;
+        margin: 0 !important;
+    }
+    /* right col: bottom-right, aligned with subtitle row */
+    .hdr-col-right {
+        position: absolute !important;
+        bottom: 0;
+        top: auto !important;
+        right: 0;
+        transform: none !important;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        width: auto;
+        gap: 0;
+    }
+    /* cancel margin-top that style.css adds to .header-actions on mobile */
+    .hdr-col-right .header-actions {
+        margin-top: 0 !important;
+    }
+    .hdr-phones { display: none !important; }
+    .logo-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

@@ -182,126 +182,7 @@
     margin: 0;
     box-sizing: border-box;
 }
-/* ── lang globe dropdown (mobile only) ── */
-.lang-globe-btn { display: none; }
-@media (max-width: 768px) {
-    .lang-globe-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: rgba(255,255,255,.12);
-        border: 1px solid rgba(255,255,255,.25);
-        color: #fff;
-        font-size: 16px;
-        cursor: pointer;
-        flex-shrink: 0;
-        padding: 0;
-    }
-    .lang-dropdown-wrap { position: relative; }
-    .lang-dropdown-wrap .lang-switch {
-        display: none !important;
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
-        background: #1b2a3b;
-        border-radius: 10px;
-        padding: 6px 8px !important;
-        flex-direction: column !important;
-        gap: 2px !important;
-        min-width: 60px;
-        box-shadow: 0 4px 16px rgba(0,0,0,.3);
-        z-index: 600;
-    }
-    .lang-dropdown-wrap .lang-switch.is-open { display: flex !important; }
-    .lang-dropdown-wrap .lang-separator { display: none !important; }
-    .lang-dropdown-wrap .site-lang-btn {
-        width: 100% !important;
-        text-align: center !important;
-        border-radius: 6px !important;
-    }
-}
-/* ── 3-col header layout ── */
-.hdr-col-logo {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-.hdr-subtitle {
-    font-size: 12px !important;
-    color: #d1d5db;
-    margin: 2px 0 0 !important;
-}
-.hdr-col-right {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
-}
-.hdr-phones { display: flex; flex-direction: column; gap: 5px; }
-.hdr-phone-row { display: flex; align-items: center; gap: 6px; }
-.hdr-phone-link {
-    color: #fff;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 700;
-    white-space: nowrap;
-}
-.hdr-phone-link:hover { text-decoration: underline; }
-.hdr-viber-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #7360f2;
-    color: #fff;
-    font-size: 14px;
-    text-decoration: none;
-    flex-shrink: 0;
-    transition: background .15s;
-}
-.hdr-viber-btn:hover { background: #5a4bcf; }
-@media (max-width: 768px) {
-    /* logo gets full width; lang+cart float out of the flow */
-    .header-inner { flex-wrap: nowrap !important; gap: 0 !important; align-items: stretch !important; }
-    .hdr-col-logo {
-        flex: 1 1 auto !important;
-        min-width: 0;
-        /* right-side room: 36px globe + 8px gap + 90px cart = 134, leave 10px breathing */
-        padding-right: 144px;
-        box-sizing: border-box;
-    }
-    /* 🌐 globe: pulled out of hdr-logo-row, placed absolute to header-inner */
-    .hdr-logo-row .lang-dropdown-wrap {
-        position: absolute !important;
-        top: 50%;
-        right: 98px; /* 90px cart + 8px */
-        transform: translateY(-50%);
-        margin: 0 !important;
-    }
-    /* right col: absolute on the right, shows only cart (phones hidden) */
-    .hdr-col-right {
-        position: absolute !important;
-        top: 50%;
-        right: 0;
-        transform: translateY(-50%);
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        width: auto;
-        gap: 0;
-    }
-    .hdr-phones { display: none !important; }
-    .hdr-phone-link { font-size: 12px; }
-    .hdr-phone-row { gap: 4px; }
-    .logo-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-}
+/* header v2 base + mobile CSS moved to static/style.css */
 /* very narrow screens: bar buttons compact */
 @media (max-width: 360px) {
     .v2-catalog-open-btn,
@@ -428,14 +309,6 @@
 .v2-drawer-cat-link.active { background: var(--site-primary, #2e86c1); color: #fff; }
 .v2-drawer-cat-count { font-size: 11px; opacity: .55; margin-left: auto; }
 .v2-drawer-cat-link.active .v2-drawer-cat-count { opacity: .8; }
-/* ── Logo row (logo + lang inline) ── */
-.hdr-logo-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-.hdr-logo-row .lang-dropdown-wrap { margin-left: auto; flex-shrink: 0; }
 /* ── Catalog bar: flex row ── */
 .v2-catalog-bar-row {
     display: flex;
