@@ -401,6 +401,7 @@
 </style>
 </head>
 <body>
+{% set products_anchor = '#products' if is_v2 or catalog_base == '/v2' else '' %}
         {% if is_v2 %}
         <header class="site-header site-header--v2">
             <div class="v2-header-inner">
@@ -663,7 +664,7 @@
         {# ── v2: toggle-all + accordion groups ── #}
         <div class="v2-nav">
             {% if current_category %}
-            <a href="{{ catalog_base }}" class="v2-show-all-link">← Показати всі товари</a>
+            <a href="{{ catalog_base }}{{ products_anchor }}" class="v2-show-all-link">← Показати всі товари</a>
             {% endif %}
             <button class="v2-toggle-all-btn" id="v2ToggleAll" type="button" aria-expanded="false">
                 <span class="v2-toggle-all-inner">
@@ -689,7 +690,7 @@
                     </button>
                     <div class="v2-group-body">
                         {% for cat in group.categories %}
-                        <a href="{{ catalog_base }}?category={{ cat.filter_value | urlencode }}" class="v2-cat-tile {% if current_category == cat.filter_value %}active{% endif %}">
+                        <a href="{{ catalog_base }}?category={{ cat.filter_value | urlencode }}{{ products_anchor }}" class="v2-cat-tile {% if current_category == cat.filter_value %}active{% endif %}">
                             <span class="v2-cat-tile-emoji">{{ cat.emoji }}</span>
                             <span class="v2-cat-tile-name" data-ru="{{ cat.name_ru }}" data-uk="{{ cat.name_uk }}">{{ cat.name_uk or cat.name_ru }}</span>
                             <span class="v2-cat-tile-count">{{ cat.product_count }}</span>
@@ -702,12 +703,12 @@
         </div>
         {% else %}
         {# ── старий сайт: плоскі плитки ── #}
-        <a href="{{ catalog_base }}" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">
+        <a href="{{ catalog_base }}{{ products_anchor }}" class="site-category-card {% if not current_category and not current_brand %}active{% endif %}">
             <div class="site-category-emoji">📦</div>
             <div class="site-category-title" data-ru="Все товары" data-uk="Всі товари">Все товары</div>
         </a>
         {% for cat in category_cards %}
-        <a href="{{ catalog_base }}?category={{ cat.filter_value }}" class="site-category-card {% if (current_category_key and current_category_key == cat.key) or (not current_category_key and current_category == cat.filter_value) %}active{% endif %}">
+        <a href="{{ catalog_base }}?category={{ cat.filter_value }}{{ products_anchor }}" class="site-category-card {% if (current_category_key and current_category_key == cat.key) or (not current_category_key and current_category == cat.filter_value) %}active{% endif %}">
             {% if cat.key == 'hoods' %}
             <div class="site-category-emoji"><img src="/static/icons/hood.png" class="site-category-img" alt="{{ cat.name_ru }}"></div>
             {% else %}
@@ -721,7 +722,7 @@
 
     <div class="catalog-layout" id="catalog">
     <section class="search-box">
-        <form class="search-form" method="get" action="{{ catalog_base }}">
+        <form class="search-form" method="get" action="{{ catalog_base }}{{ products_anchor }}">
             {% if current_category %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
             <div class="search-main-row">
                 <input type="text" name="q"
@@ -783,7 +784,7 @@
                 <div class="filters-cat-grid">
                     {% for card in category_cards %}
                     <a class="filters-cat-pill"
-                       href="{{ catalog_base }}?category={{ card.filter_value | urlencode }}{{ _cat_qs }}"
+                       href="{{ catalog_base }}?category={{ card.filter_value | urlencode }}{{ _cat_qs }}{{ products_anchor }}"
                        data-ru="{{ card.name_ru }}"
                        data-uk="{{ card.name_uk }}">
                         <span class="filters-cat-emoji" aria-hidden="true">{{ card.emoji }}</span>
@@ -897,10 +898,11 @@
     </script>
 
     <div class="catalog-content">
+    <div id="products"></div>
     <div class="catalog-toolbar" id="catalogToolbar">
       <div class="chips-row" id="chipsRow">
         <div class="active-chips" id="activeChips"></div>
-        <a class="clear-filters-btn" id="clearFiltersBtn" href="{{ catalog_base }}"
+        <a class="clear-filters-btn" id="clearFiltersBtn" href="{{ catalog_base }}{{ products_anchor }}"
            style="display:none"
            data-ru="Скинути фільтри" data-uk="Скинути фільтри">Скинути фільтри</a>
       </div>
@@ -980,15 +982,15 @@
     {% set _qs = _qs_ns.s %}
     <div class="pagination">
       {% if page > 1 %}
-      <a href="{{ catalog_base }}?page={{ page - 1 }}{{ _qs }}">← Назад</a>
+            <a href="{{ catalog_base }}?page={{ page - 1 }}{{ _qs }}{{ products_anchor }}">← Назад</a>
       {% endif %}
 
       {% for p in range(1, pages + 1) %}
-      <a class="{% if p == page %}active{% endif %}" href="{{ catalog_base }}?page={{ p }}{{ _qs }}">{{ p }}</a>
+            <a class="{% if p == page %}active{% endif %}" href="{{ catalog_base }}?page={{ p }}{{ _qs }}{{ products_anchor }}">{{ p }}</a>
       {% endfor %}
 
       {% if page < pages %}
-      <a href="{{ catalog_base }}?page={{ page + 1 }}{{ _qs }}">Вперёд →</a>
+            <a href="{{ catalog_base }}?page={{ page + 1 }}{{ _qs }}{{ products_anchor }}">Вперёд →</a>
       {% endif %}
     </div>
     {% endif %}
@@ -1018,7 +1020,7 @@
         <button class="v2-drawer-close" id="v2CatalogClose" type="button" aria-label="Закрити">✕</button>
     </div>
     <nav class="v2-drawer-body">
-        <a href="{{ catalog_base }}" class="v2-drawer-all-link {% if not current_category %}active{% endif %}">
+        <a href="{{ catalog_base }}{{ products_anchor }}" class="v2-drawer-all-link {% if not current_category %}active{% endif %}">
             <span>📦</span>
             <span data-ru="Все товары" data-uk="Всі товари">Всі товари</span>
         </a>
@@ -1038,7 +1040,7 @@
             </button>
             <div class="v2-drawer-cats">
                 {% for cat in group.categories %}
-                <a href="{{ catalog_base }}?category={{ cat.filter_value | urlencode }}" class="v2-drawer-cat-link {% if current_category == cat.filter_value %}active{% endif %}">
+                <a href="{{ catalog_base }}?category={{ cat.filter_value | urlencode }}{{ products_anchor }}" class="v2-drawer-cat-link {% if current_category == cat.filter_value %}active{% endif %}">
                     <span>{{ cat.emoji }}</span>
                     <span data-ru="{{ cat.name_ru }}" data-uk="{{ cat.name_uk }}">{{ cat.name_uk or cat.name_ru }}</span>
                     <span class="v2-drawer-cat-count">{{ cat.product_count }}</span>
@@ -1347,6 +1349,7 @@
 
 <script>
 var _CAT_BASE = {{ catalog_base | tojson }};
+var _PRODUCTS_ANCHOR = {{ products_anchor | tojson }};
 /* ─── Filter metadata: built by Jinja, consumed by chips JS ─── */
 var FILTER_META = {
   {% for attr in dyn_attrs %}
@@ -1429,7 +1432,7 @@ var FILTER_META = {
       all.forEach(function (v) { if (v !== chip.value) p.append(chip.key, v); });
       p.delete('page');
       var qs = p.toString();
-      window.location.href = _CAT_BASE + (qs ? '?' + qs : '');
+            window.location.href = _CAT_BASE + (qs ? '?' + qs : '') + _PRODUCTS_ANCHOR;
     });
     chipsEl.appendChild(btn);
   });
@@ -1437,7 +1440,7 @@ var FILTER_META = {
   if (clearBtn) {
     clearBtn.style.display = '';
     var cat = params.get('category');
-    clearBtn.href = cat ? _CAT_BASE + '?category=' + encodeURIComponent(cat) : _CAT_BASE;
+    clearBtn.href = (cat ? _CAT_BASE + '?category=' + encodeURIComponent(cat) : _CAT_BASE) + _PRODUCTS_ANCHOR;
   }
 }());
 
@@ -1452,7 +1455,7 @@ var FILTER_META = {
     else p.delete('sort');
     p.delete('page');
     var qs = p.toString();
-    window.location.href = _CAT_BASE + (qs ? '?' + qs : '');
+    window.location.href = _CAT_BASE + (qs ? '?' + qs : '') + _PRODUCTS_ANCHOR;
   });
 }());
 
