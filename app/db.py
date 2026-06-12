@@ -3667,7 +3667,7 @@ class Database:
         return await self.fetchrow(
             """
             SELECT p.id, p.category_id, p.category_brand_id, p.model, p.price,
-                   p.is_active, b.name AS brand_name
+                   p.old_price, p.is_sale, p.is_active, b.name AS brand_name
             FROM v2_products p
             JOIN v2_category_brands b ON b.id = p.category_brand_id
             WHERE p.id = $1
