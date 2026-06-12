@@ -923,7 +923,8 @@
         {% if (_b and _b not in ['-', 'None']) or (_m and _m not in ['-', 'None']) %}
         <div class="card" data-href="{{ product.url or ('/product/' ~ product.id|string) }}" data-id="{{ product.id }}" data-price="{{ product.current_price or product.price }}" data-specs="{{ (product.specifications_json or {})|tojson|e }}" tabindex="0" role="link" aria-label="{{ product.brand }} {{ product.model }}">
             <div class="card-image-wrap">
-                {% if product.is_sale %}
+                {% set cur_price = product.current_price or product.price %}
+                {% if product.is_sale and product.old_price and product.old_price > cur_price %}
                 <div class="card-sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></div>
                 {% endif %}
                 {% if product.photo_url %}
@@ -950,10 +951,9 @@
                 {% endif %}
             </div>
 
-            {% set cur_price = product.current_price or product.price %}
             <div class="price-block">
                 <p class="price">{{ cur_price }} грн</p>
-                {% if product.is_sale and product.old_price %}
+                {% if product.is_sale and product.old_price and product.old_price > cur_price %}
                 <p class="old-price">{{ product.old_price }} грн</p>
                 {% endif %}
             </div>

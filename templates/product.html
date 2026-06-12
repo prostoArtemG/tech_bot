@@ -144,15 +144,15 @@
 
                 {% set cur_price = product.current_price or product.price %}
                 <div class="price-block">
-                    {% if product.is_sale %}
+                    {% if product.is_sale and product.old_price and product.old_price > cur_price %}
                     <span class="sale-badge">🔥 <span data-ru="Акция" data-uk="Акція">Акция</span></span>
                     {% endif %}
                     <div class="price">{{ cur_price }} грн</div>
-                    {% if product.is_sale and product.old_price %}
+                    {% if product.is_sale and product.old_price and product.old_price > cur_price %}
                     <div class="old-price">{{ product.old_price }} грн</div>
                     {% endif %}
                     {% if header_show_cart %}
-                    <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ product.price }}')"><span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
+                    <button type="button" class="details-btn" onclick="addToCart('{{ product.id }}', '{{ (product.brand ~ ' ' ~ product.model)|replace("'","\\'") }}', '{{ cur_price }}')"><span data-ru="В корзину" data-uk="У кошик">В корзину</span></button>
                     {% endif %}
                 </div>
 
@@ -182,7 +182,7 @@
                                     {% endif %}
                                     <div class="variant-price-row">
                                         <span class="variant-price">{{ v_price }} <span data-ru="грн" data-uk="грн">грн</span></span>
-                                        {% if v.is_sale and v.old_price %}
+                                        {% if v.is_sale and v.old_price and v.old_price > v_price %}
                                         <span class="variant-old-price">{{ v.old_price }}</span>
                                         {% endif %}
                                     </div>

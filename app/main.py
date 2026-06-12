@@ -1460,6 +1460,11 @@ class V2ProductState(StatesGroup):
     waiting_for_price = State()  # введення ціни
 
 
+class V2ProductPriceState(StatesGroup):
+    waiting_for_price     = State()
+    waiting_for_old_price = State()
+
+
 class V2ProductFilterState(StatesGroup):
     waiting_for_field = State()  # вибір з передвизначених значень
     waiting_for_value = State()  # довільний текстовий ввід
@@ -5619,13 +5624,20 @@ async def _v2_show_product_card(message: Message, state: FSMContext, product_id:
     is_active = bool(product["is_active"])
     status_icon = "🟢" if is_active else "🔴"
     status_text = "В наявності" if is_active else "Немає в наявності"
+    old_price = product["old_price"]
+    old_price_line = f"\n💸 Старая цена: {float(old_price):.2f} грн" if old_price is not None else ""
+    sale_text = "ВКЛ" if bool(product["is_sale"]) else "ВЫКЛ"
     header = (
         f"🛍 <b>{product['brand_name']} {product['model']}</b>\n"
-        f"💰 {float(product['price']):.2f} грн\n"
+        f"💰 Цена: {float(product['price']):.2f} грн"
+        f"{old_price_line}\n"
+        f"🔥 Акция: {sale_text}\n"
         f"{status_icon} {status_text}\n\n"
         f"🔧 Фільтри: {filled_cnt}/{total_cnt}"
     )
     kb = ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="💰 Цена"), KeyboardButton(text="💸 Старая цена")],
+        [KeyboardButton(text="🔥 Акция")],
         [KeyboardButton(text="🖼 Фото"), KeyboardButton(text="🔧 Заповнити фільтри")],
         [KeyboardButton(text="📝 Характеристики"), KeyboardButton(text="📄 Описання")],
         [KeyboardButton(text="✏️ Редагувати"), KeyboardButton(text="🔄 Статус наявності")],
@@ -5683,6 +5695,45 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         await _v2_show_product_images(message, state, int(product_id))
         return
 
+    if text == "💰 Цена":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await state.update_data(v2_price_product_id=int(product_id))
+        await state.set_state(V2ProductPriceState.waiting_for_price)
+        await message.answer(
+            "💰 Введите новую цену (грн):",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "💸 Старая цена":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        await state.update_data(v2_price_product_id=int(product_id))
+        await state.set_state(V2ProductPriceState.waiting_for_old_price)
+        await message.answer(
+            "💸 Введите старую цену (грн) или '-' чтобы очистить:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "🔥 Акция":
+        if not product_id:
+            await message.answer("⚠️ Товар не знайдено.")
+            return
+        is_sale = await db.v2_toggle_product_sale(int(product_id))
+        await message.answer("🔥 Акция: <b>ВКЛ</b>" if is_sale else "🔥 Акция: <b>ВЫКЛ</b>", parse_mode="HTML")
+        await _v2_show_product_card(message, state, int(product_id))
+        return
+
     if text == "📄 Описання":
         if not product_id:
             await message.answer("⚠️ Товар не знайдено.")
@@ -5735,6 +5786,72 @@ async def v2_product_viewing_handler(message: Message, state: FSMContext):
         return
 
     await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2ProductPriceState.waiting_for_price)
+async def v2_product_price_update_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_price_product_id") or data.get("v2_viewing_product_id")
+
+    if (message.text or "").strip() == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    price_text = (message.text or "").strip().replace(",", ".")
+    try:
+        price = float(price_text)
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("⚠️ Неправильная цена. Введите число:")
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+    await db.v2_update_product_price(int(product_id), price)
+    await message.answer(f"✅ Цена обновлена: <b>{price:.2f} грн</b>", parse_mode="HTML")
+    await _v2_show_product_card(message, state, int(product_id))
+
+
+@router.message(V2ProductPriceState.waiting_for_old_price)
+async def v2_product_old_price_update_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    product_id = data.get("v2_price_product_id") or data.get("v2_viewing_product_id")
+    text = (message.text or "").strip()
+
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+
+    if text == "-":
+        await db.v2_update_product_old_price(int(product_id), None)
+        await message.answer("✅ Старая цена очищена.")
+        await _v2_show_product_card(message, state, int(product_id))
+        return
+
+    price_text = text.replace(",", ".")
+    try:
+        old_price = float(price_text)
+        if old_price < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("⚠️ Неправильная старая цена. Введите число или '-':")
+        return
+
+    await db.v2_update_product_old_price(int(product_id), old_price)
+    await message.answer(f"✅ Старая цена обновлена: <b>{old_price:.2f} грн</b>", parse_mode="HTML")
+    await _v2_show_product_card(message, state, int(product_id))
 
 
 # ── v2: Опис товару ───────────────────────────────────────────────────────────
@@ -13892,8 +14009,8 @@ async def site_v2_home(
             "model": p["model"],
             "price": p["price"],
             "current_price": p["price"],
-            "old_price": None,
-            "is_sale": False,
+            "old_price": p.get("old_price"),
+            "is_sale": bool(p.get("is_sale")),
             "category": p["category_name_uk"] or p["category_name_ru"] or p["category_slug"],
             "category_key": p["category_slug"],
             "photo_url": p["first_image"] or "",
@@ -14050,8 +14167,8 @@ async def site_v2_product(request: Request, product_id: int):
         "model": raw["model"],
         "price": raw["price"],
         "current_price": raw["price"],
-        "old_price": None,
-        "is_sale": False,
+        "old_price": raw.get("old_price"),
+        "is_sale": bool(raw.get("is_sale")),
         "category": raw["category_name_uk"] or raw["category_name_ru"] or raw["category_slug"],
         "stock_status": "in_stock",
         "photo_url": photo_url,

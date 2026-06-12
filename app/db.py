@@ -697,6 +697,8 @@ class Database:
             slug              TEXT UNIQUE,
             description       TEXT NOT NULL DEFAULT '',
             price             NUMERIC(12,2) NOT NULL DEFAULT 0,
+            old_price         NUMERIC(12,2),
+            is_sale           BOOLEAN NOT NULL DEFAULT FALSE,
             purchase_price    NUMERIC(12,2) NOT NULL DEFAULT 0,
             purchase_currency TEXT NOT NULL DEFAULT 'UAH',
             sku               TEXT,
@@ -708,6 +710,14 @@ class Database:
             deleted_at        TIMESTAMPTZ,
             created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        """)
+        await self.execute("""
+        ALTER TABLE v2_products
+        ADD COLUMN IF NOT EXISTS old_price NUMERIC(12,2);
+        """)
+        await self.execute("""
+        ALTER TABLE v2_products
+        ADD COLUMN IF NOT EXISTS is_sale BOOLEAN NOT NULL DEFAULT FALSE;
         """)
         await self.execute("""
         CREATE INDEX IF NOT EXISTS v2_products_category_idx
@@ -3544,7 +3554,7 @@ class Database:
         return await self.fetch(
             """
             SELECT p.id, p.category_id, p.category_brand_id, p.model, p.price,
-                   p.is_active, b.name AS brand_name
+                   p.old_price, p.is_sale, p.is_active, b.name AS brand_name
             FROM v2_products p
             JOIN v2_category_brands b ON b.id = p.category_brand_id
             WHERE p.category_id = $1 AND p.deleted_at IS NULL
@@ -3805,6 +3815,25 @@ class Database:
             product_id, price,
         )
 
+    async def v2_update_product_old_price(self, product_id: int, old_price) -> None:
+        await self.execute(
+            "UPDATE v2_products SET old_price = $2 WHERE id = $1",
+            product_id, old_price,
+        )
+
+    async def v2_update_product_sale(self, product_id: int, is_sale: bool) -> None:
+        await self.execute(
+            "UPDATE v2_products SET is_sale = $2 WHERE id = $1",
+            product_id, is_sale,
+        )
+
+    async def v2_toggle_product_sale(self, product_id: int) -> bool:
+        row = await self.fetchrow(
+            "UPDATE v2_products SET is_sale = NOT is_sale WHERE id = $1 RETURNING is_sale",
+            product_id,
+        )
+        return bool(row["is_sale"]) if row else False
+
     async def v2_update_product_brand(self, product_id: int, brand_id: int) -> None:
         await self.execute(
             "UPDATE v2_products SET category_brand_id = $2 WHERE id = $1",
@@ -3902,7 +3931,7 @@ class Database:
         where = " AND ".join(conditions)
         sql = f"""
             SELECT
-                p.id, p.model, p.price, p.is_active,
+                p.id, p.model, p.price, p.old_price, p.is_sale, p.is_active,
                 b.name AS brand_name,
                 c.id AS category_id, c.slug AS category_slug,
                 c.name_uk AS category_name_uk, c.name_ru AS category_name_ru,
@@ -3978,7 +4007,7 @@ class Database:
         row = await self.fetchrow(
             """
             SELECT
-                p.id, p.model, p.price, p.is_active,
+                p.id, p.model, p.price, p.old_price, p.is_sale, p.is_active,
                 p.specs_json, p.description,
                 b.name AS brand_name,
                 c.id AS category_id, c.slug AS category_slug,
