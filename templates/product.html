@@ -32,55 +32,36 @@
 
 <header class="site-header">
     <div class="header-inner">
-
-        <div class="hdr-col-logo">
-            <div class="hdr-logo-row">
-                <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
-                    <span class="logo-badge">T</span>
-                    <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
-                </a>
-                {% if header_show_language %}
-                <div class="lang-dropdown-wrap" id="langDropdownWrap">
-                    <button class="lang-globe-btn" id="langGlobeBtn" aria-label="Мова" aria-expanded="false">🌐</button>
-                    <div class="lang-switch">
-                        <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-                        <span class="lang-separator">|</span>
-                        <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-            <p class="hdr-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
-        </div>
-
-        <div class="hdr-col-right">
+        <div class="header-title">
+            <a href="/" class="site-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                <span class="logo-badge">T</span>
+                <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+            </a>
+            <p data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
             {% if header_show_contacts %}
             {% if site_contacts.phones %}
-            <div class="hdr-phones">
                 {% for p in site_contacts.phones %}
-                <div class="hdr-phone-row">
-                    <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="hdr-phone-link">📞{% if p.name %} {{ p.name }}:{% endif %} {{ p.phone }}</a>
-                    <a href="viber://chat?number=%2B{{ (p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
-                </div>
+                <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {% if p.name %}{{ p.name }}: {% endif %}{{ p.phone }}</a>
                 {% endfor %}
-            </div>
             {% elif site_contacts.phone %}
-            <div class="hdr-phones">
-                <div class="hdr-phone-row">
-                    <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="hdr-phone-link">📞 {{ site_contacts.phone }}</a>
-                    <a href="viber://chat?number=%2B{{ (site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
-                </div>
-            </div>
+                <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="header-phone">📞 {{ site_contacts.phone }}</a>
             {% endif %}
             {% endif %}
-
-            <div class="header-actions">
-                {% if header_show_cart %}
-                <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
-                {% endif %}
-            </div>
         </div>
 
+        <div class="header-actions">
+            {% if header_show_language %}
+            <div class="lang-switch">
+                <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                <span class="lang-separator">|</span>
+                <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+            </div>
+            {% endif %}
+
+            {% if header_show_cart %}
+            <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
+            {% endif %}
+        </div>
     </div>
 </header>
 
