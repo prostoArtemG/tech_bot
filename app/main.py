@@ -1419,6 +1419,9 @@ class SetProductFilterState(StatesGroup):
 class V2ProductGroupState(StatesGroup):
     browsing    = State()  # список груп — чекаємо вибору
     viewing     = State()  # карточка групи
+    editing     = State()  # меню редагування групи
+    waiting_for_edit_value = State()
+    confirming_delete = State()
     waiting_for_name_uk = State()
     waiting_for_name_ru = State()
     waiting_for_emoji   = State()
@@ -1427,6 +1430,10 @@ class V2ProductGroupState(StatesGroup):
 class V2CategoryState(StatesGroup):
     browsing          = State()  # список категорій групи
     viewing           = State()  # карточка категорії
+    editing           = State()  # меню редагування категорії
+    waiting_for_edit_value = State()
+    waiting_for_group = State()
+    confirming_delete = State()
     waiting_for_name  = State()
     waiting_for_emoji = State()
 
@@ -4690,6 +4697,20 @@ async def _v2_do_import_old_categories() -> tuple[int, int, int]:
     return created_groups, created_cats, skipped
 
 
+def _v2_group_label(group: dict) -> str:
+    em = (group.get("emoji") or "").strip()
+    name = (group.get("name_uk") or group.get("name_ru") or group.get("slug") or "?").strip()
+    label = f"{em} {name}".strip() if em else name
+    return label if group.get("is_active", True) else f"🔴 {label}"
+
+
+def _v2_category_label(cat: dict) -> str:
+    em = (cat.get("emoji") or "").strip()
+    name = (cat.get("name_uk") or cat.get("name_ru") or cat.get("slug") or "?").strip()
+    label = f"{em} {name}".strip() if em else name
+    return label if cat.get("is_active", True) else f"🔴 {label}"
+
+
 async def _v2_show_product_groups(message: Message, state: FSMContext):
     """Показує список груп v2 — кожна група окремою кнопкою."""
     groups = await db.v2_list_product_groups()
@@ -4699,9 +4720,7 @@ async def _v2_show_product_groups(message: Message, state: FSMContext):
     buttons.append([KeyboardButton(text="➕ Додати групу")])
     buttons.append([KeyboardButton(text="📥 Імпорт старих категорій")])
     for g in groups:
-        em = (g["emoji"] or "").strip()
-        name = (g["name_uk"] or g["name_ru"] or g["slug"] or "?").strip()
-        label = f"{em} {name}".strip() if em else name
+        label = _v2_group_label(dict(g))
         if label:
             buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="⬅️ Назад")])
@@ -4718,16 +4737,21 @@ async def _v2_show_product_groups(message: Message, state: FSMContext):
 
 async def _v2_show_group_card(message: Message, state: FSMContext, group: dict):
     """Показує карточку однієї групи."""
-    cat_count_row = await db.fetchrow(
-        "SELECT COUNT(*) AS cnt FROM v2_categories WHERE group_id = $1",
-        group["id"],
-    )
-    cat_count = int(cat_count_row["cnt"]) if cat_count_row else 0
-    em = (group["emoji"] or "").strip()
-    name = (group["name_uk"] or group["name_ru"] or "").strip()
+    cat_count = await db.v2_count_categories_by_group(int(group["id"]))
+    em = (group.get("emoji") or "").strip()
+    name = (group.get("name_uk") or group.get("name_ru") or group.get("slug") or "").strip()
+    is_active = bool(group.get("is_active", True))
+    status = "активна" if is_active else "🔴 скрыта"
+    toggle_text = "👁 Сховати" if is_active else "👁 Показати"
     text = (
-        f"{em} <b>{name}</b>\n\n"
-        f"📂 Категорії групи: {cat_count}"
+        f"📁 <b>{em} {name}</b>\n"
+        f"Статус: {status}\n"
+        f"Категорій: {cat_count}\n\n"
+        f"RU: {group.get('name_ru') or '—'}\n"
+        f"UA: {group.get('name_uk') or '—'}\n"
+        f"Emoji: {group.get('emoji') or '—'}\n"
+        f"slug: <code>{group.get('slug') or ''}</code>\n"
+        f"sort_order: {group.get('sort_order')}"
     )
     await state.update_data(v2_viewing_group_id=group["id"])
     await state.set_state(V2ProductGroupState.viewing)
@@ -4737,8 +4761,10 @@ async def _v2_show_group_card(message: Message, state: FSMContext, group: dict):
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="📂 Категорії")],
-                [KeyboardButton(text="✏️ Перейменувати")],
+                [KeyboardButton(text="✏️ Редагувати")],
+                [KeyboardButton(text=toggle_text)],
                 [KeyboardButton(text="🗑 Видалити")],
+                [KeyboardButton(text="⬆️ Вище"), KeyboardButton(text="⬇️ Нижче")],
                 [KeyboardButton(text="⬅️ Назад")],
             ],
             resize_keyboard=True,
@@ -4797,10 +4823,7 @@ async def v2_product_groups_browsing_handler(message: Message, state: FSMContext
     # Інакше — вибір групи за текстом кнопки
     groups = await db.v2_list_product_groups()
     for g in groups:
-        em = (g["emoji"] or "").strip()
-        name = (g["name_uk"] or g["name_ru"] or g["slug"] or "?").strip()
-        label = f"{em} {name}".strip() if em else name
-        if text == label:
+        if text == _v2_group_label(dict(g)):
             await _v2_show_group_card(message, state, dict(g))
             return
     await message.answer("⚠️ Оберіть групу зі списку або натисніть ⬅️ Назад.")
@@ -4815,18 +4838,176 @@ async def v2_product_group_card_handler(message: Message, state: FSMContext):
     if text == "⬅️ Назад":
         await _v2_show_product_groups(message, state)
         return
+    data = await state.get_data()
+    group_id = data.get("v2_viewing_group_id")
     if text == "📂 Категорії":
-        data = await state.get_data()
-        group_id = data.get("v2_viewing_group_id")
         if not group_id:
             await message.answer("⚠️ Групу не знайдено. Поверніться до списку.")
             await _v2_show_product_groups(message, state)
             return
         await _v2_show_group_categories(message, state, int(group_id))
         return
-    if text in ("✏️ Перейменувати", "🗑 Видалити"):
-        await message.answer("🚧 У розробці.")
+    if not group_id:
+        await message.answer("⚠️ Групу не знайдено.")
+        await _v2_show_product_groups(message, state)
         return
+    if text == "✏️ Редагувати":
+        await _v2_show_group_edit_menu(message, state, int(group_id))
+        return
+    if text in {"👁 Сховати", "👁 Показати"}:
+        is_active = await db.v2_toggle_product_group_active(int(group_id))
+        await message.answer("✅ Групу показано." if is_active else "🔴 Групу приховано.")
+        group = await db.v2_get_product_group_by_id(int(group_id))
+        if group:
+            await _v2_show_group_card(message, state, dict(group))
+        return
+    if text == "🗑 Видалити":
+        await state.set_state(V2ProductGroupState.confirming_delete)
+        await message.answer(
+            "Видалити групу?",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[
+                [KeyboardButton(text="✅ Так"), KeyboardButton(text="❌ Ні")],
+            ], resize_keyboard=True),
+        )
+        return
+    if text in {"⬆️ Вище", "⬇️ Нижче"}:
+        moved = await db.v2_move_product_group(int(group_id), "up" if text == "⬆️ Вище" else "down")
+        await message.answer("✅ Порядок оновлено." if moved else "⚠️ Група вже на межі списку.")
+        await _v2_show_product_groups(message, state)
+        return
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+async def _v2_show_group_edit_menu(message: Message, state: FSMContext, group_id: int):
+    group = await db.v2_get_product_group_by_id(group_id)
+    if not group:
+        await message.answer("⚠️ Групу не знайдено.")
+        await _v2_show_product_groups(message, state)
+        return
+    await state.update_data(v2_editing_group_id=group_id)
+    await state.set_state(V2ProductGroupState.editing)
+    await message.answer(
+        "✏️ <b>Редагування групи</b>\n\n"
+        f"RU: {group['name_ru'] or '—'}\n"
+        f"UA: {group['name_uk'] or '—'}\n"
+        f"Emoji: {group['emoji'] or '—'}\n"
+        f"slug: <code>{group['slug']}</code>\n"
+        f"sort_order: {group['sort_order']}",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[
+            [KeyboardButton(text="Назва RU"), KeyboardButton(text="Назва UA")],
+            [KeyboardButton(text="Emoji"), KeyboardButton(text="slug")],
+            [KeyboardButton(text="sort_order")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ], resize_keyboard=True),
+    )
+
+
+@router.message(V2ProductGroupState.editing)
+async def v2_product_group_editing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    group_id = data.get("v2_editing_group_id") or data.get("v2_viewing_group_id")
+    if text == "⬅️ Назад":
+        group = await db.v2_get_product_group_by_id(int(group_id)) if group_id else None
+        if group:
+            await _v2_show_group_card(message, state, dict(group))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+    field_map = {
+        "Назва RU": "name_ru",
+        "Назва UA": "name_uk",
+        "Emoji": "emoji",
+        "slug": "slug",
+        "sort_order": "sort_order",
+    }
+    if text not in field_map or not group_id:
+        await message.answer("⚠️ Оберіть поле зі списку.")
+        return
+    field = field_map[text]
+    await state.update_data(v2_group_edit_field=field)
+    await state.set_state(V2ProductGroupState.waiting_for_edit_value)
+    await message.answer(
+        f"Введіть нове значення для {text}:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="⬅️ Назад")]], resize_keyboard=True),
+    )
+
+
+@router.message(V2ProductGroupState.waiting_for_edit_value)
+async def v2_product_group_edit_value_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    group_id = data.get("v2_editing_group_id") or data.get("v2_viewing_group_id")
+    field = data.get("v2_group_edit_field")
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        if group_id:
+            await _v2_show_group_edit_menu(message, state, int(group_id))
+        return
+    if not group_id or not field:
+        await message.answer("⚠️ Групу не знайдено.")
+        await _v2_show_product_groups(message, state)
+        return
+    if field == "sort_order":
+        try:
+            value = int(text)
+        except ValueError:
+            await message.answer("⚠️ Введіть ціле число.")
+            return
+    else:
+        value = text
+        if not value:
+            await message.answer("⚠️ Значення не може бути порожнім.")
+            return
+        if field == "slug":
+            value = _make_category_key(value)
+            if not value:
+                await message.answer("⚠️ Некоректний slug.")
+                return
+    try:
+        await db.v2_update_product_group_field(int(group_id), field, value)
+    except Exception as e:
+        print(f"[v2_update_group] {e}")
+        await message.answer("⚠️ Не вдалося зберегти. Можливо, slug вже існує.")
+        return
+    await message.answer("✅ Збережено.")
+    await _v2_show_group_edit_menu(message, state, int(group_id))
+
+
+@router.message(V2ProductGroupState.confirming_delete)
+async def v2_product_group_delete_confirm_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    group_id = data.get("v2_viewing_group_id")
+    if text == "❌ Ні":
+        group = await db.v2_get_product_group_by_id(int(group_id)) if group_id else None
+        if group:
+            await _v2_show_group_card(message, state, dict(group))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+    if text != "✅ Так":
+        await message.answer("⚠️ Натисніть ✅ Так або ❌ Ні.")
+        return
+    if not group_id:
+        await message.answer("⚠️ Групу не знайдено.")
+        await _v2_show_product_groups(message, state)
+        return
+    deleted = await db.v2_delete_product_group_if_empty(int(group_id))
+    if not deleted:
+        await message.answer("⚠️ Групу не можна видалити, бо в ній є категорії.")
+        group = await db.v2_get_product_group_by_id(int(group_id))
+        if group:
+            await _v2_show_group_card(message, state, dict(group))
+        return
+    await message.answer("✅ Групу видалено.")
+    await _v2_show_product_groups(message, state)
 
 
 # ── v2: Категорії групи ───────────────────────────────────────────────────────
@@ -4838,9 +5019,7 @@ async def _v2_show_group_categories(message: Message, state: FSMContext, group_i
     buttons = []
     buttons.append([KeyboardButton(text="➕ Додати категорію v2")])
     for c in cats:
-        em = (c["emoji"] or "").strip()
-        name = (c["name_uk"] or c["name_ru"] or c["slug"] or "?").strip()
-        label = f"{em} {name}".strip() if em else name
+        label = _v2_category_label(dict(c))
         if label:
             buttons.append([KeyboardButton(text=label)])
     buttons.append([KeyboardButton(text="⬅️ Назад до групи")])
@@ -4890,10 +5069,7 @@ async def v2_category_browsing_handler(message: Message, state: FSMContext):
     if group_id:
         cats = await db.v2_list_categories_by_group(int(group_id))
         for c in cats:
-            em = (c["emoji"] or "").strip()
-            name = (c["name_uk"] or c["name_ru"] or c["slug"] or "?").strip()
-            label = f"{em} {name}".strip() if em else name
-            if text == label:
+            if text == _v2_category_label(dict(c)):
                 await _v2_show_category_card(message, state, dict(c))
                 return
     await message.answer("⚠️ Оберіть категорію зі списку.")
@@ -4966,29 +5142,44 @@ async def v2_category_emoji(message: Message, state: FSMContext):
 
 async def _v2_show_category_card(message: Message, state: FSMContext, cat: dict):
     """Показує карточку категорії через ReplyKeyboard."""
-    em = (cat["emoji"] or "").strip()
-    name = cat["name_uk"] or cat["name_ru"] or ""
     cat_id = cat["id"]
+    fresh = await db.v2_get_category_by_id(int(cat_id))
+    if fresh:
+        cat = dict(fresh)
+    em = (cat.get("emoji") or "").strip()
+    name = cat.get("name_uk") or cat.get("name_ru") or cat.get("slug") or ""
     group_id = cat.get("group_id") or 0
+    group_name = cat.get("group_name_uk") or cat.get("group_name_ru") or "—"
     brand_row = await db.fetchrow(
         "SELECT COUNT(*) AS cnt FROM v2_category_brands WHERE category_id = $1", cat_id
     )
     filter_row = await db.fetchrow(
         "SELECT COUNT(*) AS cnt FROM v2_filter_fields WHERE category_id = $1", cat_id
     )
-    product_row = await db.fetchrow(
-        "SELECT COUNT(*) AS cnt FROM v2_products WHERE category_id = $1", cat_id
-    )
     brand_cnt = int(brand_row["cnt"]) if brand_row else 0
     filter_cnt = int(filter_row["cnt"]) if filter_row else 0
-    product_cnt = int(product_row["cnt"]) if product_row else 0
+    product_cnt = await db.v2_count_products_by_category(int(cat_id))
+    is_active = bool(cat.get("is_active", True))
+    status = "активна" if is_active else "🔴 скрыта"
+    toggle_text = "👁 Сховати" if is_active else "👁 Показати"
     header = (
-        f"📂 <b>Категорія:</b> {em} {name}\n\n"
+        f"📂 <b>{em} {name}</b>\n"
+        f"Група: {group_name}\n"
+        f"Статус: {status}\n"
+        f"Товарів: {product_cnt}\n\n"
+        f"RU: {cat.get('name_ru') or '—'}\n"
+        f"UA: {cat.get('name_uk') or '—'}\n"
+        f"Emoji: {cat.get('emoji') or '—'}\n"
+        f"slug: <code>{cat.get('slug') or ''}</code>\n"
+        f"sort_order: {cat.get('sort_order')}\n\n"
         f"🏷 Бренди: {brand_cnt}\n"
-        f"🔧 Фільтри: {filter_cnt}\n"
-        f"🛍 Товари: {product_cnt}"
+        f"🔧 Фільтри: {filter_cnt}"
     )
     kb = ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="✏️ Редагувати")],
+        [KeyboardButton(text=toggle_text)],
+        [KeyboardButton(text="🗑 Видалити")],
+        [KeyboardButton(text="⬆️ Вище"), KeyboardButton(text="⬇️ Нижче")],
         [KeyboardButton(text="🏷 Бренди"), KeyboardButton(text="🔧 Фільтри")],
         [KeyboardButton(text="🛍 Товари")],
         [KeyboardButton(text="⬅️ Назад до категорій")],
@@ -5014,26 +5205,226 @@ async def v2_category_card_handler(message: Message, state: FSMContext):
             await _v2_show_product_groups(message, state)
         return
 
+    if not category_id:
+        await message.answer("⚠️ Категорію не знайдено.")
+        await _v2_show_product_groups(message, state)
+        return
+
+    if text == "✏️ Редагувати":
+        await _v2_show_category_edit_menu(message, state, int(category_id))
+        return
+
+    if text in {"👁 Сховати", "👁 Показати"}:
+        is_active = await db.v2_toggle_category_active(int(category_id))
+        await message.answer("✅ Категорію показано." if is_active else "🔴 Категорію приховано.")
+        cat = await db.v2_get_category_by_id(int(category_id))
+        if cat:
+            await _v2_show_category_card(message, state, dict(cat))
+        return
+
+    if text == "🗑 Видалити":
+        await state.set_state(V2CategoryState.confirming_delete)
+        await message.answer(
+            "Видалити категорію?",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[
+                [KeyboardButton(text="✅ Так"), KeyboardButton(text="❌ Ні")],
+            ], resize_keyboard=True),
+        )
+        return
+
+    if text in {"⬆️ Вище", "⬇️ Нижче"}:
+        moved = await db.v2_move_category(int(category_id), "up" if text == "⬆️ Вище" else "down")
+        await message.answer("✅ Порядок оновлено." if moved else "⚠️ Категорія вже на межі списку.")
+        if group_id:
+            await _v2_show_group_categories(message, state, int(group_id))
+        return
+
     if text == "🏷 Бренди":
-        if not category_id:
-            await message.answer("⚠️ Категорію не знайдено.")
-            return
         await _v2_show_category_brands(message, state, int(category_id))
         return
 
     if text == "🔧 Фільтри":
-        if not category_id:
-            await message.answer("⚠️ Категорію не знайдено.")
-            return
         await _v2_show_category_filters(message, state, int(category_id))
         return
 
     if text == "🛍 Товари":
-        if not category_id:
-            await message.answer("⚠️ Категорію не знайдено.")
-            return
         await _v2_show_category_products(message, state, int(category_id))
         return
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+async def _v2_show_category_edit_menu(message: Message, state: FSMContext, category_id: int):
+    cat = await db.v2_get_category_by_id(category_id)
+    if not cat:
+        await message.answer("⚠️ Категорію не знайдено.")
+        await _v2_show_product_groups(message, state)
+        return
+    await state.update_data(v2_editing_cat_id=category_id, v2_cats_group_id=int(cat["group_id"]))
+    await state.set_state(V2CategoryState.editing)
+    await message.answer(
+        "✏️ <b>Редагування категорії</b>\n\n"
+        f"RU: {cat['name_ru'] or '—'}\n"
+        f"UA: {cat['name_uk'] or '—'}\n"
+        f"Emoji: {cat['emoji'] or '—'}\n"
+        f"slug: <code>{cat['slug']}</code>\n"
+        f"Група: {cat['group_name_uk'] or cat['group_name_ru'] or '—'}\n"
+        f"sort_order: {cat['sort_order']}",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[
+            [KeyboardButton(text="Назва RU"), KeyboardButton(text="Назва UA")],
+            [KeyboardButton(text="Emoji"), KeyboardButton(text="slug")],
+            [KeyboardButton(text="группа"), KeyboardButton(text="sort_order")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ], resize_keyboard=True),
+    )
+
+
+@router.message(V2CategoryState.editing)
+async def v2_category_editing_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_editing_cat_id") or data.get("v2_viewing_cat_id")
+    if text == "⬅️ Назад":
+        cat = await db.v2_get_category_by_id(int(category_id)) if category_id else None
+        if cat:
+            await _v2_show_category_card(message, state, dict(cat))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+    field_map = {
+        "Назва RU": "name_ru",
+        "Назва UA": "name_uk",
+        "Emoji": "emoji",
+        "slug": "slug",
+        "sort_order": "sort_order",
+    }
+    if text == "группа":
+        groups = await db.v2_list_product_groups()
+        group_buttons = [[KeyboardButton(text=_v2_group_label(dict(g)))] for g in groups]
+        group_buttons.append([KeyboardButton(text="⬅️ Назад")])
+        await state.set_state(V2CategoryState.waiting_for_group)
+        await message.answer(
+            "Оберіть групу:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=group_buttons,
+                resize_keyboard=True,
+            ),
+        )
+        return
+    if text not in field_map or not category_id:
+        await message.answer("⚠️ Оберіть поле зі списку.")
+        return
+    field = field_map[text]
+    await state.update_data(v2_category_edit_field=field)
+    await state.set_state(V2CategoryState.waiting_for_edit_value)
+    await message.answer(
+        f"Введіть нове значення для {text}:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="⬅️ Назад")]], resize_keyboard=True),
+    )
+
+
+@router.message(V2CategoryState.waiting_for_group)
+async def v2_category_edit_group_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_editing_cat_id") or data.get("v2_viewing_cat_id")
+    if text == "⬅️ Назад":
+        if category_id:
+            await _v2_show_category_edit_menu(message, state, int(category_id))
+        return
+    groups = await db.v2_list_product_groups()
+    for group in groups:
+        if text == _v2_group_label(dict(group)):
+            await db.v2_update_category_field(int(category_id), "group_id", int(group["id"]))
+            await state.update_data(v2_cats_group_id=int(group["id"]))
+            await message.answer("✅ Групу оновлено.")
+            await _v2_show_category_edit_menu(message, state, int(category_id))
+            return
+    await message.answer("⚠️ Оберіть групу зі списку.")
+
+
+@router.message(V2CategoryState.waiting_for_edit_value)
+async def v2_category_edit_value_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    data = await state.get_data()
+    category_id = data.get("v2_editing_cat_id") or data.get("v2_viewing_cat_id")
+    field = data.get("v2_category_edit_field")
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        if category_id:
+            await _v2_show_category_edit_menu(message, state, int(category_id))
+        return
+    if not category_id or not field:
+        await message.answer("⚠️ Категорію не знайдено.")
+        await _v2_show_product_groups(message, state)
+        return
+    if field == "sort_order":
+        try:
+            value = int(text)
+        except ValueError:
+            await message.answer("⚠️ Введіть ціле число.")
+            return
+    else:
+        value = text
+        if not value:
+            await message.answer("⚠️ Значення не може бути порожнім.")
+            return
+        if field == "slug":
+            value = _make_category_key(value)
+            if not value:
+                await message.answer("⚠️ Некоректний slug.")
+                return
+    try:
+        await db.v2_update_category_field(int(category_id), field, value)
+    except Exception as e:
+        print(f"[v2_update_category] {e}")
+        await message.answer("⚠️ Не вдалося зберегти. Можливо, slug вже існує.")
+        return
+    await message.answer("✅ Збережено.")
+    await _v2_show_category_edit_menu(message, state, int(category_id))
+
+
+@router.message(V2CategoryState.confirming_delete)
+async def v2_category_delete_confirm_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_viewing_cat_id")
+    group_id = data.get("v2_cats_group_id")
+    if text == "❌ Ні":
+        cat = await db.v2_get_category_by_id(int(category_id)) if category_id else None
+        if cat:
+            await _v2_show_category_card(message, state, dict(cat))
+        elif group_id:
+            await _v2_show_group_categories(message, state, int(group_id))
+        else:
+            await _v2_show_product_groups(message, state)
+        return
+    if text != "✅ Так":
+        await message.answer("⚠️ Натисніть ✅ Так або ❌ Ні.")
+        return
+    if not category_id:
+        await message.answer("⚠️ Категорію не знайдено.")
+        await _v2_show_product_groups(message, state)
+        return
+    deleted = await db.v2_delete_category_if_empty(int(category_id))
+    if not deleted:
+        await message.answer("⚠️ Категорію не можна видалити, бо в ній є товари.")
+        cat = await db.v2_get_category_by_id(int(category_id))
+        if cat:
+            await _v2_show_category_card(message, state, dict(cat))
+        return
+    await message.answer("✅ Категорію видалено.")
+    if group_id:
+        await _v2_show_group_categories(message, state, int(group_id))
+    else:
+        await _v2_show_product_groups(message, state)
 
 
 # ── v2: Фільтри категорії ─────────────────────────────────────────────────────

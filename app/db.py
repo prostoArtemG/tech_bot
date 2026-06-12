@@ -3412,6 +3412,66 @@ class Database:
             slug,
         )
 
+    async def v2_get_product_group_by_id(self, group_id: int):
+        return await self.fetchrow(
+            "SELECT id, slug, name_ru, name_uk, emoji, sort_order, is_active "
+            "FROM v2_product_groups WHERE id = $1",
+            group_id,
+        )
+
+    async def v2_count_categories_by_group(self, group_id: int) -> int:
+        row = await self.fetchrow(
+            "SELECT COUNT(*) AS cnt FROM v2_categories WHERE group_id = $1",
+            group_id,
+        )
+        return int(row["cnt"]) if row else 0
+
+    async def v2_update_product_group_field(self, group_id: int, field: str, value) -> None:
+        allowed = {"name_ru", "name_uk", "emoji", "slug", "sort_order"}
+        if field not in allowed:
+            raise ValueError("Unsupported v2 product group field")
+        await self.execute(
+            f"UPDATE v2_product_groups SET {field} = $2 WHERE id = $1",
+            group_id, value,
+        )
+
+    async def v2_toggle_product_group_active(self, group_id: int) -> bool:
+        row = await self.fetchrow(
+            "UPDATE v2_product_groups SET is_active = NOT is_active WHERE id = $1 RETURNING is_active",
+            group_id,
+        )
+        return bool(row["is_active"]) if row else False
+
+    async def v2_delete_product_group_if_empty(self, group_id: int) -> bool:
+        if await self.v2_count_categories_by_group(group_id) > 0:
+            return False
+        await self.execute("DELETE FROM v2_product_groups WHERE id = $1", group_id)
+        return True
+
+    async def v2_move_product_group(self, group_id: int, direction: str) -> bool:
+        groups = await self.v2_list_product_groups()
+        ids = [int(g["id"]) for g in groups]
+        if group_id not in ids:
+            return False
+        idx = ids.index(group_id)
+        if direction == "up":
+            if idx == 0:
+                return False
+            swap_idx = idx - 1
+        elif direction == "down":
+            if idx >= len(ids) - 1:
+                return False
+            swap_idx = idx + 1
+        else:
+            return False
+        ids[idx], ids[swap_idx] = ids[swap_idx], ids[idx]
+        for sort_order, item_id in enumerate(ids, start=10):
+            await self.execute(
+                "UPDATE v2_product_groups SET sort_order = $1 WHERE id = $2",
+                sort_order * 10, item_id,
+            )
+        return True
+
     async def v2_list_categories_by_group(self, group_id: int) -> list:
         return await self.fetch(
             """
@@ -3422,6 +3482,75 @@ class Database:
             """,
             group_id,
         )
+
+    async def v2_get_category_by_id(self, category_id: int):
+        return await self.fetchrow(
+            """
+            SELECT c.id, c.group_id, c.slug, c.name_ru, c.name_uk, c.emoji,
+                   c.sort_order, c.is_active,
+                   g.name_uk AS group_name_uk, g.name_ru AS group_name_ru
+            FROM v2_categories c
+            JOIN v2_product_groups g ON g.id = c.group_id
+            WHERE c.id = $1
+            """,
+            category_id,
+        )
+
+    async def v2_count_products_by_category(self, category_id: int) -> int:
+        row = await self.fetchrow(
+            "SELECT COUNT(*) AS cnt FROM v2_products WHERE category_id = $1 AND deleted_at IS NULL",
+            category_id,
+        )
+        return int(row["cnt"]) if row else 0
+
+    async def v2_update_category_field(self, category_id: int, field: str, value) -> None:
+        allowed = {"name_ru", "name_uk", "emoji", "slug", "sort_order", "group_id"}
+        if field not in allowed:
+            raise ValueError("Unsupported v2 category field")
+        await self.execute(
+            f"UPDATE v2_categories SET {field} = $2 WHERE id = $1",
+            category_id, value,
+        )
+
+    async def v2_toggle_category_active(self, category_id: int) -> bool:
+        row = await self.fetchrow(
+            "UPDATE v2_categories SET is_active = NOT is_active WHERE id = $1 RETURNING is_active",
+            category_id,
+        )
+        return bool(row["is_active"]) if row else False
+
+    async def v2_delete_category_if_empty(self, category_id: int) -> bool:
+        if await self.v2_count_products_by_category(category_id) > 0:
+            return False
+        await self.execute("DELETE FROM v2_categories WHERE id = $1", category_id)
+        return True
+
+    async def v2_move_category(self, category_id: int, direction: str) -> bool:
+        category = await self.v2_get_category_by_id(category_id)
+        if not category:
+            return False
+        categories = await self.v2_list_categories_by_group(int(category["group_id"]))
+        ids = [int(c["id"]) for c in categories]
+        if category_id not in ids:
+            return False
+        idx = ids.index(category_id)
+        if direction == "up":
+            if idx == 0:
+                return False
+            swap_idx = idx - 1
+        elif direction == "down":
+            if idx >= len(ids) - 1:
+                return False
+            swap_idx = idx + 1
+        else:
+            return False
+        ids[idx], ids[swap_idx] = ids[swap_idx], ids[idx]
+        for sort_order, item_id in enumerate(ids, start=10):
+            await self.execute(
+                "UPDATE v2_categories SET sort_order = $1 WHERE id = $2",
+                sort_order * 10, item_id,
+            )
+        return True
 
     async def v2_create_category(
         self,
@@ -3887,7 +4016,12 @@ class Database:
         self, q: str = "", category: str = "", brand: str = "", selected_filters: dict = None
     ) -> list:
         """Повертає активні v2-товари. Підтримує пошук (q), категорію (слаг), бренд і динамічні фільтри."""
-        conditions = ["p.is_active = TRUE", "p.deleted_at IS NULL"]
+        conditions = [
+            "p.is_active = TRUE",
+            "p.deleted_at IS NULL",
+            "c.is_active = TRUE",
+            "g.is_active = TRUE",
+        ]
         params: list = []
 
         q = (q or "").strip()
@@ -3964,16 +4098,22 @@ class Database:
                 fv.sort_order AS value_sort_order
             FROM v2_filter_fields ff
             JOIN v2_categories c ON c.id = ff.category_id
+                        JOIN v2_product_groups g ON g.id = c.group_id
             JOIN v2_filter_values fv ON fv.filter_field_id = ff.id
             WHERE c.slug = $1
+                            AND c.is_active = TRUE
+                            AND g.is_active = TRUE
               AND ff.is_active = TRUE
               AND fv.id IN (
                 SELECT DISTINCT pfv.filter_value_id
                 FROM v2_product_filter_values pfv
                 JOIN v2_products p ON p.id = pfv.product_id
                 JOIN v2_categories cat2 ON cat2.id = p.category_id
+                                JOIN v2_product_groups g2 ON g2.id = cat2.group_id
                 WHERE p.is_active = TRUE AND p.deleted_at IS NULL
                   AND pfv.filter_value_id IS NOT NULL
+                  AND cat2.is_active = TRUE
+                                    AND g2.is_active = TRUE
                   AND cat2.slug = $1
               )
             ORDER BY ff.sort_order, ff.id, fv.sort_order, fv.id
@@ -4020,7 +4160,8 @@ class Database:
             JOIN v2_category_brands b ON b.id = p.category_brand_id
             JOIN v2_categories c ON c.id = p.category_id
             JOIN v2_product_groups g ON g.id = c.group_id
-            WHERE p.id = $1 AND p.is_active = TRUE AND p.deleted_at IS NULL
+                        WHERE p.id = $1 AND p.is_active = TRUE AND p.deleted_at IS NULL
+                            AND c.is_active = TRUE AND g.is_active = TRUE
             """,
             product_id,
         )
