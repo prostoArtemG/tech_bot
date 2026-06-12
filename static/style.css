@@ -3509,52 +3509,60 @@ button:hover {
         border-radius: 6px !important;
     }
 
-    /* ── Mobile header 2-col layout ── */
-    /* logo col takes full width; globe + cart are absolutely placed */
-    .header-inner { flex-wrap: nowrap !important; gap: 0 !important; align-items: stretch !important; }
+    /* ── Mobile header: flex column, no absolute positioning ── */
+    .site-header .header-inner {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
+    }
+    /* logo col: full width */
     .hdr-col-logo {
-        flex: 1 1 auto !important;
+        flex: none !important;
+        width: 100% !important;
         min-width: 0;
         box-sizing: border-box;
     }
-    /* logo row: right padding avoids 🌐 overlap (32px globe + 12px gap) */
+    /* logo row: [badge][title][🌐] — single flex row, no padding tricks */
     .hdr-logo-row {
-        padding-right: 44px !important;
-        box-sizing: border-box;
+        padding-right: 0 !important;
+        min-width: 0;
+        flex-wrap: nowrap;
     }
-    /* subtitle: right padding avoids 🛒 overlap (72px cart + 10px gap) */
+    /* logo text: allow wrap instead of truncation */
+    .logo-text { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+    /* subtitle: full width, no padding-right */
     .hdr-subtitle {
-        padding-right: 82px !important;
-        box-sizing: border-box;
+        padding-right: 0 !important;
         font-size: 13px !important;
     }
-    /* 🌐 globe: top-right, vertically centred against logo badge height */
+    /* lang dropdown: static, no absolute */
     .hdr-logo-row .lang-dropdown-wrap {
-        position: absolute !important;
-        top: 0;
-        right: 0;
-        height: 40px;
+        position: static !important;
+        margin: 0 !important;
+        height: auto !important;
         display: flex !important;
         align-items: center !important;
-        margin: 0 !important;
     }
-    /* right col: bottom-right, aligned with subtitle row */
+    /* right col: static, full width, aligned right, phones hidden */
     .hdr-col-right {
-        position: absolute !important;
-        bottom: 0;
+        position: static !important;
+        bottom: auto !important;
         top: auto !important;
-        right: 0;
+        right: auto !important;
         transform: none !important;
+        width: 100% !important;
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
-        width: auto;
+        justify-content: flex-end !important;
         gap: 0;
     }
-    /* cancel margin-top that style.css adds to .header-actions on mobile */
+    .hdr-phones { display: none !important; }
+    /* cancel the margin-top from the global .site-header .header-actions mobile rule */
     .hdr-col-right .header-actions {
         margin-top: 0 !important;
+        position: static !important;
     }
-    .hdr-phones { display: none !important; }
-    .logo-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
