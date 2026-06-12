@@ -1671,6 +1671,29 @@ order_status_kb = ReplyKeyboardMarkup(
 )
 
 
+SITE_SERVICE_BUTTON_TEXTS = {
+    "⬅️ Назад",
+    "❌ Отмена",
+    "❌ Скасувати",
+    "✅ Готово",
+    "🌐 Сайт",
+    "🌐 Сайт v2",
+    "🆕 Адмін v2",
+    "🏠 Главное меню",
+    "/menu",
+    "/start",
+}
+
+
+def _is_cancel_text(message: Message) -> bool:
+    return (message.text or "").strip() in SITE_SERVICE_BUTTON_TEXTS
+
+
+async def _cancel_to_menu(message: Message, state: FSMContext, reply_markup, text: str = "Скасовано."):
+    await state.clear()
+    await message.answer(text, reply_markup=reply_markup)
+
+
 reports_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📅 Отчёт за сегодня")],
@@ -3046,6 +3069,9 @@ async def site_header_field_start(message: Message, state: FSMContext):
 
 @router.message(SiteContactsState.waiting_for_field)
 async def site_contact_field_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_contacts_kb)
+        return
     data = await state.get_data()
     key = data.get("setting_key")
 
@@ -3063,6 +3089,9 @@ async def site_contact_field_save(message: Message, state: FSMContext):
 
 @router.message(SiteHeaderState.waiting_for_field)
 async def site_header_field_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, header_kb)
+        return
     data = await state.get_data()
     key = data.get("setting_key")
 
@@ -3159,6 +3188,9 @@ async def site_color_field_start(message: Message, state: FSMContext):
 
 @router.message(SiteColorsState.waiting_for_field)
 async def site_color_field_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_colors_kb)
+        return
     data = await state.get_data()
     key = data.get("setting_key")
     if not key:
@@ -3242,6 +3274,9 @@ async def site_banner_field_start(message: Message, state: FSMContext):
 
 @router.message(SiteBannerState.waiting_for_field)
 async def site_banner_field_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_banner_kb)
+        return
     data = await state.get_data()
     key = data.get("setting_key")
     if not key:
@@ -3410,6 +3445,11 @@ async def bnr_add_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(BannersAddState.title)
 async def bnr_add_title(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.")
+        await _send_banners_list(message)
+        return
     await state.update_data(title="" if message.text.strip() == "-" else message.text.strip())
     await state.set_state(BannersAddState.subtitle)
     await message.answer("Шаг 2/6 — Подзаголовок (отправьте «-» чтобы пропустить):")
@@ -3417,6 +3457,11 @@ async def bnr_add_title(message: Message, state: FSMContext):
 
 @router.message(BannersAddState.subtitle)
 async def bnr_add_subtitle(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.")
+        await _send_banners_list(message)
+        return
     await state.update_data(subtitle="" if message.text.strip() == "-" else message.text.strip())
     await state.set_state(BannersAddState.button_text)
     await message.answer("Шаг 3/6 — Текст кнопки (например: «Смотреть»; «-» пропустить):")
@@ -3424,6 +3469,11 @@ async def bnr_add_subtitle(message: Message, state: FSMContext):
 
 @router.message(BannersAddState.button_text)
 async def bnr_add_button_text(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.")
+        await _send_banners_list(message)
+        return
     await state.update_data(button_text="" if message.text.strip() == "-" else message.text.strip())
     await state.set_state(BannersAddState.button_link)
     await message.answer("Шаг 4/6 — URL кнопки (например: «/?category=konditsionery»; «-» пропустить):")
@@ -3431,6 +3481,11 @@ async def bnr_add_button_text(message: Message, state: FSMContext):
 
 @router.message(BannersAddState.button_link)
 async def bnr_add_button_link(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.")
+        await _send_banners_list(message)
+        return
     await state.update_data(button_link="" if message.text.strip() == "-" else message.text.strip())
     await state.set_state(BannersAddState.image_url)
     await message.answer("Шаг 5/6 — URL изображения баннера («-» пропустить):")
@@ -3438,6 +3493,11 @@ async def bnr_add_button_link(message: Message, state: FSMContext):
 
 @router.message(BannersAddState.image_url)
 async def bnr_add_image_url(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.")
+        await _send_banners_list(message)
+        return
     await state.update_data(image_url="" if message.text.strip() == "-" else message.text.strip())
     await state.set_state(BannersAddState.sort_order)
     await message.answer("Шаг 6/6 — Порядок сортировки (число; меньше = раньше; по умолчанию 100; «-» пропустить):")
@@ -3445,6 +3505,11 @@ async def bnr_add_image_url(message: Message, state: FSMContext):
 
 @router.message(BannersAddState.sort_order)
 async def bnr_add_sort_order(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.")
+        await _send_banners_list(message)
+        return
     raw = message.text.strip()
     sort_order = 100
     if raw != "-":
@@ -3542,6 +3607,14 @@ async def bnr_edit_field_save(message: Message, state: FSMContext):
     data = await state.get_data()
     banner_id = data.get("bnr_edit_id")
     field = data.get("bnr_edit_field")
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.")
+        if banner_id:
+            await _send_banner_card(message, int(banner_id))
+        else:
+            await _send_banners_list(message)
+        return
     if not banner_id or not field:
         await state.clear()
         await message.answer("Ошибка состояния.")
@@ -3837,6 +3910,20 @@ async def seo_cat_edit_save(message: Message, state: FSMContext):
     data = await state.get_data()
     cat_id = data.get("seo_cat_id")
     field = data.get("seo_field")
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=seo_kb)
+        if cat_id:
+            cats = await db.list_site_categories()
+            cat = next((c for c in cats if c["id"] == cat_id), None)
+            if cat:
+                seo = await db.get_category_seo(cat_id)
+                await message.answer(
+                    _seo_cat_card_text(cat["name_ru"], seo),
+                    reply_markup=_seo_cat_inline_kb(cat_id, seo),
+                    parse_mode="HTML",
+                )
+        return
     if not cat_id or not field:
         await state.clear()
         await message.answer("Ошибка состояния.")
@@ -3963,6 +4050,18 @@ async def seo_prod_edit_save(message: Message, state: FSMContext):
     data = await state.get_data()
     product_id = data.get("seo_product_id")
     field = data.get("seo_field")
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=seo_kb)
+        if product_id:
+            product = await db.get_product_by_id(product_id)
+            seo = await db.get_product_seo(product_id)
+            await message.answer(
+                _seo_product_card_text(product, seo),
+                reply_markup=_seo_product_inline_kb(product_id, seo),
+                parse_mode="HTML",
+            )
+        return
     if not product_id or not field:
         await state.clear()
         await message.answer("Ошибка состояния.")
@@ -4109,6 +4208,11 @@ async def auto_seo_edit_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AutoSeoState.waiting_for_value)
 async def auto_seo_edit_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=seo_kb)
+        await _send_auto_seo_card(message)
+        return
     data = await state.get_data()
     key = data.get("auto_seo_key")
     if not key or key not in _AUTO_SEO_LABEL_MAP:
@@ -4151,6 +4255,11 @@ async def seo_close_callback(callback: CallbackQuery):
 
 @router.message(SeoMainState.waiting_for_value)
 async def seo_edit_field_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=seo_kb)
+        await _send_seo_main_card(message)
+        return
     data = await state.get_data()
     page_key = data.get("seo_page_key", "index")
     field = data.get("seo_field")
@@ -4238,6 +4347,9 @@ async def site_promo_field_start(message: Message, state: FSMContext):
 
 @router.message(SitePromoState.waiting_for_field)
 async def site_promo_field_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_promo_kb)
+        return
     data = await state.get_data()
     key = data.get("setting_key")
     if not key:
@@ -10217,6 +10329,9 @@ async def site_phone_add_start(message: Message, state: FSMContext):
 
 @router.message(SitePhonesState.waiting_for_add)
 async def site_phone_add_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_contacts_kb)
+        return
     raw = (message.text or "").strip()
     if not raw:
         await message.answer("Пустой ввод. Попробуйте ещё раз.")
@@ -10274,6 +10389,9 @@ async def site_phone_delete_start(message: Message, state: FSMContext):
 
 @router.message(SitePhonesState.waiting_for_delete)
 async def site_phone_delete_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_contacts_kb)
+        return
     raw = (message.text or "").strip()
     if not raw.isdigit():
         await message.answer("Введите номер позиции (число).")
@@ -10352,6 +10470,9 @@ async def site_pages_menu_handler(message: Message, state: FSMContext):
 
 @router.message(SitePagesState.waiting_for_text)
 async def site_page_save_handler(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_pages_kb)
+        return
     data = await state.get_data()
     key = data.get("page_key")
     if not key:
@@ -10470,6 +10591,9 @@ async def custom_category_start(message: Message, state: FSMContext):
 
 @router.message(SiteCategoryQuickState.waiting)
 async def custom_category_save(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_categories_kb)
+        return
     try:
         parts = [p.strip() for p in (message.text or "").split("|")]
 
@@ -10504,6 +10628,9 @@ async def toggle_site_category_start(message: Message, state: FSMContext):
 
 @router.message(SiteCategoryState.waiting_for_toggle_id)
 async def toggle_site_category_finish(message: Message, state: FSMContext):
+    if _is_cancel_text(message):
+        await _cancel_to_menu(message, state, site_categories_kb)
+        return
     raw = (message.text or "").strip()
 
     if not raw.isdigit():
