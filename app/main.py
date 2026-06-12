@@ -1511,6 +1511,13 @@ class V2QuickNavState(StatesGroup):
     choosing_category = State()  # вибір категорії для швидкої навігації
 
 
+class V2SiteState(StatesGroup):
+    menu                      = State()
+    catalog                   = State()
+    submenu                   = State()
+    waiting_for_preview_query = State()
+
+
 class V2ProductSpecsState(StatesGroup):
     menu              = State()  # меню характеристик
     waiting_for_bulk_text = State()  # очікування вставки списком
@@ -1894,6 +1901,39 @@ admin_v2_kb = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+
+v2_site_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📞 Контакти сайту")],
+        [KeyboardButton(text="🧢 Шапка сайту")],
+        [KeyboardButton(text="🖼 Банер сайту"), KeyboardButton(text="🖼 Банери")],
+        [KeyboardButton(text="📣 Промо-плашка")],
+        [KeyboardButton(text="👀 Перегляд товару на сайті")],
+        [KeyboardButton(text="📂 Каталог на сайті")],
+        [KeyboardButton(text="📄 Сторінки сайту")],
+        [KeyboardButton(text="🌐 Мова сайту")],
+        [KeyboardButton(text="📊 Аналітика сайту")],
+        [KeyboardButton(text="📋 Заявки/Покупці")],
+        [KeyboardButton(text="🔎 SEO сайту")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
+)
+
+
+v2_site_catalog_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📁 Групи товарів")],
+        [KeyboardButton(text="📂 Категорії")],
+        [KeyboardButton(text="🏷 Бренди")],
+        [KeyboardButton(text="🔧 Фільтри")],
+        [KeyboardButton(text="🛍 Товари")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
+)
+
+
 # ── Site v2 settings keyboard ────────────────────────────────────────────────
 site_v2_settings_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -1903,6 +1943,7 @@ site_v2_settings_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True,
 )
+
 
 # ── v2: глобальний список товарів ────────────────────────────────────────────
 v2_products_global_kb = ReplyKeyboardMarkup(
@@ -4780,7 +4821,7 @@ async def _v2_show_group_card(message: Message, state: FSMContext, group: dict):
     )
 
 
-@router.message(lambda m: m.text == "📁 Групи товарів")
+@router.message(StateFilter(None), lambda m: m.text == "📁 Групи товарів")
 async def v2_product_groups_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
@@ -7543,7 +7584,7 @@ async def _v2_qnav_show_groups(message: Message, state: FSMContext, target: str)
     )
 
 
-@router.message(lambda m: m.text in _V2_QUICK_NAV_TARGET)
+@router.message(StateFilter(None), lambda m: m.text in _V2_QUICK_NAV_TARGET)
 async def v2_quick_nav_start(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
@@ -7655,22 +7696,247 @@ async def admin_v2_stub_handler(message: Message, state: FSMContext):
     await message.answer("🚧 Розділ v2 у розробці.")
 
 
-# ── Сайт v2: версія каталогу ─────────────────────────────────────────────────
+# ── Сайт v2 ──────────────────────────────────────────────────────────────────
+
+def _public_site_base_url() -> str:
+    base_url = os.getenv("PUBLIC_SITE_URL", "").rstrip("/")
+    if not base_url:
+        base_url = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").rstrip("/")
+        if base_url and not base_url.startswith("http"):
+            base_url = "https://" + base_url
+    return base_url or "https://techbot-production-11c5.up.railway.app"
+
+
+async def _show_v2_site_menu(message: Message, state: FSMContext):
+    await state.set_state(V2SiteState.menu)
+    await message.answer(
+        "🌐 <b>Сайт v2</b>\n\nОберіть розділ:",
+        parse_mode="HTML",
+        reply_markup=v2_site_kb,
+    )
+
+
+async def _show_v2_site_catalog_menu(message: Message, state: FSMContext):
+    await state.set_state(V2SiteState.catalog)
+    await message.answer(
+        "📂 <b>Каталог на сайті v2</b>\n\nОберіть розділ каталогу:",
+        parse_mode="HTML",
+        reply_markup=v2_site_catalog_kb,
+    )
+
+
+async def _show_v2_site_analytics(message: Message, state: FSMContext):
+    stats = await db.get_site_analytics_today()
+    top = await db.get_top_site_products(limit=10)
+
+    views = int(stats["views"] or 0) if stats else 0
+    cart_adds = int(stats["cart_adds"] or 0) if stats else 0
+    orders = int(stats["orders"] or 0) if stats else 0
+
+    lines = [
+        "📊 Аналітика сайту за сьогодні\n",
+        f"👁 Переглядів товарів: {views}",
+        f"🛒 Додавань у кошик: {cart_adds}",
+        f"🧾 Замовлень: {orders}",
+    ]
+
+    if top:
+        lines.append("\n🔥 Популярні товари:")
+        for i, row in enumerate(top, start=1):
+            lines.append(f"{i}. {row['product_name'].strip()} — {row['views']} переглядів")
+
+    await state.set_state(V2SiteState.menu)
+    await message.answer("\n".join(lines), reply_markup=v2_site_kb)
 
 @router.message(lambda m: m.text == "🌐 Сайт v2")
 async def site_v2_settings_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
         return
     await state.clear()
-    version = await db.get_catalog_version()
-    label = "V2" if version == "v2" else "Старий (old)"
-    await message.answer(
-        f"🌐 <b>Сайт v2 — Версія каталогу</b>\n\n"
-        f"Поточна версія: <b>{label}</b>\n\n"
-        f"Оберіть версію каталогу для головної сторінки сайту:",
-        parse_mode="HTML",
-        reply_markup=site_v2_settings_kb,
+    await _show_v2_site_menu(message, state)
+
+
+@router.message(V2SiteState.menu)
+async def site_v2_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+
+    if text == "⬅️ Назад":
+        await state.clear()
+        await message.answer(
+            "🆕 <b>Адмін v2</b>\n\nОберіть розділ:",
+            parse_mode="HTML",
+            reply_markup=admin_v2_kb,
+        )
+        return
+
+    if text == "📞 Контакти сайту":
+        await state.set_state(V2SiteState.submenu)
+        await message.answer("Контакти сайту:", reply_markup=site_contacts_kb)
+        return
+
+    if text == "🧢 Шапка сайту":
+        await state.set_state(V2SiteState.submenu)
+        await message.answer("Налаштування шапки сайту:", reply_markup=header_kb)
+        return
+
+    if text == "🖼 Банер сайту":
+        await state.set_state(V2SiteState.submenu)
+        await message.answer("Банер сайту:", reply_markup=site_banner_kb)
+        return
+
+    if text == "🖼 Банери":
+        await state.set_state(V2SiteState.submenu)
+        await _send_banners_list(message)
+        return
+
+    if text == "📣 Промо-плашка":
+        await state.set_state(V2SiteState.submenu)
+        await message.answer("Промо-плашка:", reply_markup=site_promo_kb)
+        return
+
+    if text == "👀 Перегляд товару на сайті":
+        await state.set_state(V2SiteState.waiting_for_preview_query)
+        await message.answer(
+            "Введіть ID, бренд або модель V2-товару:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="⬅️ Назад")]], resize_keyboard=True),
+        )
+        return
+
+    if text == "📂 Каталог на сайті":
+        await _show_v2_site_catalog_menu(message, state)
+        return
+
+    if text == "📄 Сторінки сайту":
+        await state.set_state(V2SiteState.submenu)
+        await message.answer("📄 Сторінки сайту:", reply_markup=site_pages_kb)
+        return
+
+    if text == "🌐 Мова сайту":
+        await state.set_state(V2SiteState.menu)
+        await message.answer("Тут буде налаштування мови сайту RU / UA.", reply_markup=v2_site_kb)
+        return
+
+    if text == "📊 Аналітика сайту":
+        await _show_v2_site_analytics(message, state)
+        return
+
+    if text == "📋 Заявки/Покупці":
+        await state.set_state(V2SiteState.submenu)
+        await message.answer("Розділ покупців:", reply_markup=customers_kb)
+        return
+
+    if text == "🔎 SEO сайту":
+        await state.set_state(V2SiteState.submenu)
+        await message.answer("🔎 SEO сайту", reply_markup=seo_kb)
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2SiteState.catalog)
+async def site_v2_catalog_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+
+    if text == "⬅️ Назад":
+        await _show_v2_site_menu(message, state)
+        return
+
+    if text == "📁 Групи товарів":
+        await state.clear()
+        await _v2_show_product_groups(message, state)
+        return
+
+    if text == "📂 Категорії":
+        await _v2_qnav_show_groups(message, state, "categories")
+        return
+
+    if text == "🏷 Бренди":
+        await _v2_qnav_show_groups(message, state, "brands")
+        return
+
+    if text == "🔧 Фільтри":
+        await _v2_qnav_show_groups(message, state, "filters")
+        return
+
+    if text == "🛍 Товари":
+        await state.set_state(V2ProductListState.browsing)
+        total = await db.v2_count_products()
+        await message.answer(
+            f"🛍 <b>Товари v2</b>\n\nВсього товарів: <b>{total}</b>\n\nОберіть дію:",
+            parse_mode="HTML",
+            reply_markup=v2_products_global_kb,
+        )
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2SiteState.submenu, lambda m: (m.text or "").strip() == "⬅️ Назад")
+async def site_v2_submenu_back_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await _show_v2_site_menu(message, state)
+
+
+@router.message(V2SiteState.waiting_for_preview_query)
+async def site_v2_product_preview_search(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    query = (message.text or "").strip()
+
+    if query == "⬅️ Назад":
+        await _show_v2_site_menu(message, state)
+        return
+
+    rows = []
+    if query.isdigit():
+        product = await db.v2_get_product_by_id(int(query))
+        if product:
+            rows = [product]
+    else:
+        rows = await db.v2_list_products_paginated(page=1, per_page=10, q=query)
+
+    if not rows:
+        await message.answer("Нічого не знайдено. Спробуйте ще:")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text=f"{row['brand_name'] or '-'} {row['model'] or '-'} | {float(row['price'] or 0):.0f} грн",
+                callback_data=f"v2_site_preview_product:{row['id']}",
+            )]
+            for row in rows[:10]
+        ] + [[InlineKeyboardButton(text="❌ Скасувати", callback_data="cancel_flow")]]
     )
+    await message.answer("Оберіть V2-товар:", reply_markup=keyboard)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("v2_site_preview_product:"))
+async def site_v2_product_preview_callback(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split(":")[1])
+    product = await db.v2_get_product_by_id(product_id)
+    if not product:
+        await callback.message.answer("Товар не знайдено.")
+        await callback.answer()
+        return
+
+    await state.set_state(V2SiteState.menu)
+    url = f"{_public_site_base_url()}/v2/product/{product_id}"
+    await callback.message.answer(
+        "👀 Карточка V2-товару на сайті:\n\n"
+        f"{product['brand_name'] or '-'} {product['model'] or '-'}\n"
+        f"{url}",
+        reply_markup=v2_site_kb,
+    )
+    await callback.answer()
+
+
+# ── Сайт v2: версія каталогу ─────────────────────────────────────────────────
 
 
 @router.message(lambda m: m.text == "🟢 Старий каталог")
@@ -7773,7 +8039,7 @@ async def _v2_show_global_product_list(
                          reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True))
 
 
-@router.message(lambda m: m.text == "🛍 Товари")
+@router.message(StateFilter(None), lambda m: m.text == "🛍 Товари")
 async def v2_global_products_entry(message: Message, state: FSMContext):
     """Entry: глобальний список товарів з головного меню адмін v2."""
     if not await require_admin(message):
