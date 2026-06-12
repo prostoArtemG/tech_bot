@@ -3738,10 +3738,53 @@ class Database:
         return row["id"] if row else None
 
     async def v2_delete_product_image(self, image_id: int) -> None:
-        await self.execute(
-            "DELETE FROM v2_product_images WHERE id = $1",
+        row = await self.fetchrow(
+            "DELETE FROM v2_product_images WHERE id = $1 RETURNING product_id",
             image_id,
         )
+        if row:
+            await self.v2_normalize_product_image_order(int(row["product_id"]))
+
+    async def v2_normalize_product_image_order(self, product_id: int) -> None:
+        await self.execute(
+            """
+            WITH ordered AS (
+                SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order, id) - 1 AS rn
+                FROM v2_product_images
+                WHERE product_id = $1
+            )
+            UPDATE v2_product_images img
+            SET sort_order = ordered.rn
+            FROM ordered
+            WHERE img.id = ordered.id
+            """,
+            product_id,
+        )
+
+    async def v2_move_product_image(self, product_id: int, image_id: int, direction: str) -> bool:
+        images = await self.v2_list_product_images(product_id)
+        ids = [int(img["id"]) for img in images]
+        if image_id not in ids:
+            return False
+        idx = ids.index(image_id)
+        if direction == "up":
+            if idx == 0:
+                return False
+            swap_idx = idx - 1
+        elif direction == "down":
+            if idx >= len(ids) - 1:
+                return False
+            swap_idx = idx + 1
+        else:
+            return False
+
+        ids[idx], ids[swap_idx] = ids[swap_idx], ids[idx]
+        for sort_order, img_id in enumerate(ids):
+            await self.execute(
+                "UPDATE v2_product_images SET sort_order = $1 WHERE id = $2 AND product_id = $3",
+                sort_order, img_id, product_id,
+            )
+        return True
 
     async def v2_delete_product(self, product_id: int) -> None:
         """Soft-delete товару (deleted_at = NOW())."""

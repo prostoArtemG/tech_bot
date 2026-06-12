@@ -1466,8 +1466,11 @@ class V2ProductFilterState(StatesGroup):
 
 
 class V2ProductImageState(StatesGroup):
-    browsing          = State()  # список фото
-    waiting_for_photo = State()  # очікуємо фото від користувача
+    browsing           = State()  # меню / список фото
+    waiting_for_photo  = State()  # legacy: очікуємо одне фото
+    uploading_multiple = State()  # завантаження кількох фото
+    confirming_delete  = State()  # підтвердження видалення фото
+    reordering         = State()  # зміна порядку фото
 
 
 class V2ProductDescriptionState(StatesGroup):
@@ -5821,19 +5824,27 @@ async def v2_product_description_text_handler(message: Message, state: FSMContex
 # ── v2: Фото товару ──────────────────────────────────────────────────────────
 
 async def _v2_show_product_images(message: Message, state: FSMContext, product_id: int):
-    """Показує список фото товару."""
+    """Показує меню керування фото товару."""
     images = await db.v2_list_product_images(product_id)
     label_map: dict = {}
     for i, img in enumerate(images, 1):
         label = f"⭐ Фото {i}" if i == 1 else f"Фото {i}"
         label_map[label] = img["id"]
 
-    header = f"🖼 <b>Фото товару</b>\n\nВсього: {len(images)}"
-    keyboard = [[KeyboardButton(text="➕ Додати фото")]]
-    if len(images) > 1:
-        keyboard.append([KeyboardButton(text="⭐ Зробити головним")])
-    if images:
-        keyboard.append([KeyboardButton(text="🗑 Видалити фото")])
+    main_label = "Фото 1" if images else "—"
+    labels_text = "\n".join(label_map.keys()) if label_map else "—"
+    header = (
+        "🖼 <b>Управління фото</b>\n\n"
+        f"📸 Всього фото: {len(images)}\n"
+        f"⭐ Головне фото: {main_label}\n\n"
+        f"{labels_text}"
+    )
+    keyboard = [
+        [KeyboardButton(text="➕ Додати фото")],
+        [KeyboardButton(text="⭐ Зробити головним")],
+        [KeyboardButton(text="🗑 Видалити фото")],
+        [KeyboardButton(text="🔢 Змінити порядок")],
+    ]
     keyboard.append([KeyboardButton(text="⬅️ Назад до товару")])
 
     kb = ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -5841,6 +5852,9 @@ async def _v2_show_product_images(message: Message, state: FSMContext, product_i
         v2_images_product_id=product_id,
         v2_image_label_map=label_map,
         v2_image_action=None,
+        v2_pending_delete_image_id=None,
+        v2_pending_delete_label=None,
+        v2_reorder_image_id=None,
     )
     await state.set_state(V2ProductImageState.browsing)
     await message.answer(header, parse_mode="HTML", reply_markup=kb)
@@ -5852,6 +5866,35 @@ async def _v2_show_product_images(message: Message, state: FSMContext, product_i
             await message.answer_photo(img_data["url"], caption=label)
         except Exception:
             await message.answer(f"{label}: {img_data['url']}")
+
+
+async def _v2_show_image_select(message: Message, label_map: dict, prompt: str):
+    select_kb = [[KeyboardButton(text=lbl)] for lbl in label_map]
+    select_kb.append([KeyboardButton(text="⬅️ Скасувати")])
+    await message.answer(
+        prompt,
+        reply_markup=ReplyKeyboardMarkup(keyboard=select_kb, resize_keyboard=True),
+    )
+
+
+async def _v2_show_reorder_controls(message: Message, state: FSMContext, product_id: int, image_id: int):
+    images = await db.v2_list_product_images(product_id)
+    label = "Фото"
+    for i, img in enumerate(images, 1):
+        if img["id"] == image_id:
+            label = f"⭐ Фото {i}" if i == 1 else f"Фото {i}"
+            break
+    await state.update_data(v2_reorder_image_id=image_id)
+    await state.set_state(V2ProductImageState.reordering)
+    await message.answer(
+        f"🔢 Зміна порядку: <b>{label}</b>",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[
+            [KeyboardButton(text="⬆️ Вище")],
+            [KeyboardButton(text="⬇️ Нижче")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ], resize_keyboard=True),
+    )
 
 
 # ── v2: Редагування / Видалення товару ───────────────────────────────────────
@@ -6074,11 +6117,17 @@ async def v2_product_images_browsing_handler(message: Message, state: FSMContext
         return
 
     if text == "➕ Додати фото":
-        await state.set_state(V2ProductImageState.waiting_for_photo)
+        await state.update_data(v2_upload_added_count=0)
+        await state.set_state(V2ProductImageState.uploading_multiple)
         await message.answer(
-            "📷 Надішліть фото товару:",
+            "Надішліть одне або декілька фото.\n"
+            "Можна надсилати фото підряд.\n\n"
+            "Натисніть:\n"
+            "✅ Готово\n"
+            "або\n"
+            "❌ Скасувати",
             reply_markup=ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                keyboard=[[KeyboardButton(text="✅ Готово")], [KeyboardButton(text="❌ Скасувати")]],
                 resize_keyboard=True,
             ),
         )
@@ -6089,13 +6138,7 @@ async def v2_product_images_browsing_handler(message: Message, state: FSMContext
             await message.answer("⚠️ Потрібно мінімум 2 фото щоб змінити головне.")
             return
         await state.update_data(v2_image_action="set_main")
-        non_main = {lbl: iid for lbl, iid in label_map.items() if not lbl.startswith("⭐")}
-        select_kb = [[KeyboardButton(text=lbl)] for lbl in non_main]
-        select_kb.append([KeyboardButton(text="⬅️ Скасувати")])
-        await message.answer(
-            "Оберіть фото, яке стане головним:",
-            reply_markup=ReplyKeyboardMarkup(keyboard=select_kb, resize_keyboard=True),
-        )
+        await _v2_show_image_select(message, label_map, "Оберіть фото, яке стане головним:")
         return
 
     if text == "🗑 Видалити фото":
@@ -6103,23 +6146,42 @@ async def v2_product_images_browsing_handler(message: Message, state: FSMContext
             await message.answer("⚠️ Фотографій немає.")
             return
         await state.update_data(v2_image_action="delete")
-        select_kb = [[KeyboardButton(text=lbl)] for lbl in label_map]
-        select_kb.append([KeyboardButton(text="⬅️ Скасувати")])
-        await message.answer(
-            "Оберіть фото для видалення:",
-            reply_markup=ReplyKeyboardMarkup(keyboard=select_kb, resize_keyboard=True),
-        )
+        await _v2_show_image_select(message, label_map, "Оберіть фото для видалення:")
+        return
+
+    if text == "🔢 Змінити порядок":
+        if not label_map or len(label_map) <= 1:
+            await message.answer("⚠️ Потрібно мінімум 2 фото щоб змінити порядок.")
+            return
+        await state.update_data(v2_image_action="reorder_select")
+        await _v2_show_image_select(message, label_map, "Оберіть фото для зміни порядку:")
         return
 
     if action and text in label_map:
         image_id = label_map[text]
         if action == "set_main":
             await db.v2_set_main_product_image(int(product_id), image_id)
-            await message.answer("✅ Головне фото оновлено.")
+            clean_label = text.replace("⭐ ", "")
+            await message.answer(f"⭐ {clean_label} встановлено головним")
+            await _v2_show_product_images(message, state, int(product_id))
         elif action == "delete":
-            await db.v2_delete_product_image(image_id)
-            await message.answer("✅ Фото видалено.")
-        await _v2_show_product_images(message, state, int(product_id))
+            clean_label = text.replace("⭐ ", "")
+            await state.update_data(
+                v2_pending_delete_image_id=image_id,
+                v2_pending_delete_label=clean_label,
+                v2_image_action=None,
+            )
+            await state.set_state(V2ProductImageState.confirming_delete)
+            await message.answer(
+                f"Видалити {clean_label}?",
+                reply_markup=ReplyKeyboardMarkup(keyboard=[
+                    [KeyboardButton(text="✅ Так")],
+                    [KeyboardButton(text="❌ Ні")],
+                ], resize_keyboard=True),
+            )
+        elif action == "reorder_select":
+            await state.update_data(v2_image_action=None)
+            await _v2_show_reorder_controls(message, state, int(product_id), image_id)
         return
 
     await message.answer("⚠️ Оберіть дію зі списку.")
@@ -6157,6 +6219,107 @@ async def v2_product_image_upload_handler(message: Message, state: FSMContext):
         return
 
     await _v2_show_product_images(message, state, int(product_id))
+
+
+@router.message(V2ProductImageState.uploading_multiple)
+async def v2_product_image_uploading_multiple_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_images_product_id")
+    added_count = int(data.get("v2_upload_added_count") or 0)
+
+    if text == "❌ Скасувати":
+        await message.answer("❌ Завантаження скасовано.")
+        if product_id:
+            await _v2_show_product_images(message, state, int(product_id))
+        return
+
+    if text == "✅ Готово":
+        await message.answer(f"✅ Додано фото: {added_count}")
+        if product_id:
+            await _v2_show_product_images(message, state, int(product_id))
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Товар не знайдено.")
+        return
+
+    if not message.photo:
+        await message.answer("⚠️ Надішліть фото або натисніть ✅ Готово / ❌ Скасувати.")
+        return
+
+    try:
+        file_id = message.photo[-1].file_id
+        url = await save_telegram_photo(telegram_bot, file_id)
+        await db.v2_add_product_image(int(product_id), url)
+        added_count += 1
+        await state.update_data(v2_upload_added_count=added_count)
+        await message.answer(f"Фото {added_count}")
+    except Exception as e:
+        print(f"[v2_image_upload_multiple] {e}")
+        await message.answer("⚠️ Не вдалося завантажити фото. Спробуйте ще раз.")
+
+
+@router.message(V2ProductImageState.confirming_delete)
+async def v2_product_image_confirm_delete_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_images_product_id")
+    image_id = data.get("v2_pending_delete_image_id")
+
+    if text == "❌ Ні":
+        if product_id:
+            await _v2_show_product_images(message, state, int(product_id))
+        return
+
+    if text == "✅ Так":
+        if not product_id or not image_id:
+            await message.answer("⚠️ Фото не знайдено.")
+            return
+        await db.v2_delete_product_image(int(image_id))
+        await message.answer("✅ Фото видалено.")
+        await _v2_show_product_images(message, state, int(product_id))
+        return
+
+    await message.answer("⚠️ Натисніть ✅ Так або ❌ Ні.")
+
+
+@router.message(V2ProductImageState.reordering)
+async def v2_product_image_reorder_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    product_id = data.get("v2_images_product_id")
+    image_id = data.get("v2_reorder_image_id")
+
+    if text == "⬅️ Назад":
+        if product_id:
+            await _v2_show_product_images(message, state, int(product_id))
+        return
+
+    if text not in {"⬆️ Вище", "⬇️ Нижче"}:
+        await message.answer("⚠️ Оберіть дію зі списку.")
+        return
+
+    if not product_id or not image_id:
+        await message.answer("⚠️ Фото не знайдено.")
+        return
+
+    moved = await db.v2_move_product_image(
+        int(product_id),
+        int(image_id),
+        "up" if text == "⬆️ Вище" else "down",
+    )
+    if moved:
+        await message.answer("✅ Порядок оновлено")
+    else:
+        await message.answer("⚠️ Фото вже на межі списку.")
+    await _v2_show_reorder_controls(message, state, int(product_id), int(image_id))
 
 
 # ── v2: Характеристики товару ─────────────────────────────────────────────────
