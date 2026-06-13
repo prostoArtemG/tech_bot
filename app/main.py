@@ -7939,7 +7939,7 @@ async def site_v2_menu_handler(message: Message, state: FSMContext):
         await message.answer("Налаштування шапки сайту:", reply_markup=header_kb)
         return
 
-    if text == "🧾 Шапка сторінки товару":
+    if text == "🧯 Шапка сторінки товару":
         await _show_v2_product_header_menu(message, state)
         return
 
@@ -8044,7 +8044,7 @@ async def _show_v2_product_header_menu(message: Message, state: FSMContext):
     ru = await db.get_setting("product_header_text_ru") or "(порожньо)"
     await state.set_state(V2ProductHeaderState.menu)
     await message.answer(
-        f"🧾 Шапка сторінки товару\n\nUA: {uk}\nRU: {ru}",
+        f"🧯 Шапка сторінки товару\n\nUA: {uk}\nRU: {ru}",
         reply_markup=v2_product_header_kb,
     )
 
