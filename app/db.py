@@ -3998,6 +3998,34 @@ class Database:
                 )
                 return new_id
 
+    async def v2_search_products_for_seo(self, q: str = "", limit: int = 25) -> list:
+        """Search V2 products by name/model for SEO management list."""
+        q = q.strip()
+        if q:
+            return await self.fetch(
+                """
+                SELECT p.id, p.model, b.name AS brand_name, c.name_uk AS category_name
+                FROM v2_products p
+                LEFT JOIN v2_category_brands b ON b.id = p.category_brand_id
+                LEFT JOIN v2_categories c ON c.id = p.category_id
+                WHERE p.model ILIKE $1 OR b.name ILIKE $1
+                ORDER BY p.model
+                LIMIT $2
+                """,
+                f"%{q}%", limit,
+            )
+        return await self.fetch(
+            """
+            SELECT p.id, p.model, b.name AS brand_name, c.name_uk AS category_name
+            FROM v2_products p
+            LEFT JOIN v2_category_brands b ON b.id = p.category_brand_id
+            LEFT JOIN v2_categories c ON c.id = p.category_id
+            ORDER BY p.model
+            LIMIT $1
+            """,
+            limit,
+        )
+
     async def v2_get_product_seo(self, product_id: int) -> dict:
         row = await self.fetchrow(
             """

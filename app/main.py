@@ -1360,6 +1360,10 @@ class SeoV2CategoryState(StatesGroup):
     waiting_for_value = State()
 
 
+class SeoV2ProductSearchState(StatesGroup):
+    searching = State()
+
+
 class SeoProductState(StatesGroup):
     waiting_for_value = State()
 
@@ -1766,14 +1770,28 @@ seo_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🏠 Главная страница")],
         [KeyboardButton(text="📂 Категории SEO")],
-        [KeyboardButton(text="📂 Категорії SEO v2")],
-        [KeyboardButton(text="�🗺 Sitemap")],
+        [KeyboardButton(text="🗺 Sitemap")],
         [KeyboardButton(text="🤖 Robots.txt")],
         [KeyboardButton(text="⚙️ Авто SEO")],
         [KeyboardButton(text="ℹ️ SEO Підказка")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
+)
+
+
+v2_seo_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🏠 Головна v2")],
+        [KeyboardButton(text="📂 Категорії SEO v2")],
+        [KeyboardButton(text="🛍 Товари SEO v2")],
+        [KeyboardButton(text="🗺 Sitemap v2")],
+        [KeyboardButton(text="🤖 Robots.txt")],
+        [KeyboardButton(text="⚙️ Авто SEO v2")],
+        [KeyboardButton(text="ℹ️ SEO Підказка")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
 )
 
 
@@ -3789,6 +3807,43 @@ async def seo_menu_handler(message: Message):
     await message.answer("🔎 SEO", reply_markup=seo_kb)
 
 
+def _seo_v2main_inline_kb() -> InlineKeyboardMarkup:
+    fields = ["meta_title", "meta_description", "h1", "seo_text"]
+    rows = [
+        [InlineKeyboardButton(
+            text=f"✏️ {_seo_field_label(f)}",
+            callback_data=f"seo_ef:v2_index:{f}"
+        )]
+        for f in fields
+    ]
+    rows.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="seo_close")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _send_seo_v2main_card(target, edit: bool = False):
+    seo = await db.get_seo_page("v2_index")
+
+    def _v(val):
+        return val if val else "—"
+
+    seo_text_preview = seo['seo_text'][:80] + '…' if seo['seo_text'] and len(seo['seo_text']) > 80 else seo['seo_text']
+    text = (
+        "🏠 <b>SEO: Головна v2</b>\n\n"
+        f"🔤 <b>meta title:</b> {_v(seo['meta_title'])}\n"
+        f"📄 <b>meta description:</b> {_v(seo['meta_description'])}\n"
+        f"📌 <b>H1:</b> {_v(seo['h1'])}\n"
+        f"📝 <b>SEO-текст:</b> {_v(seo_text_preview)}\n"
+    )
+    kb = _seo_v2main_inline_kb()
+    if edit and hasattr(target, "edit_text"):
+        try:
+            await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            return
+        except Exception:
+            pass
+    await target.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
 @router.message(lambda m: m.text == "🏠 Главная страница")
 async def seo_main_page_handler(message: Message):
     if not (is_system_admin(message.from_user.id) or await is_admin(message)):
@@ -4046,6 +4101,96 @@ async def _send_seo_v2cat_list(target):
     await target.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
+@router.message(lambda m: m.text == "🏠 Головна v2")
+async def seo_v2_main_page_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await _send_seo_v2main_card(message)
+
+
+@router.message(lambda m: m.text == "🗺 Sitemap v2")
+async def seo_v2_sitemap_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    base = await db.get_setting("site_url") or ""
+    url = f"{base.rstrip('/')}/sitemap.xml" if base else "/sitemap.xml"
+    await message.answer(f"🗺 Sitemap доступний по адресу:\n<code>{url}</code>", parse_mode="HTML")
+
+
+@router.message(lambda m: m.text == "⚙️ Авто SEO v2")
+async def seo_v2_auto_seo_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await _send_auto_seo_card(message)
+
+
+@router.message(lambda m: m.text == "🛍 Товари SEO v2")
+async def seo_v2_products_handler(message: Message, state: FSMContext):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await state.set_state(SeoV2ProductSearchState.searching)
+    await message.answer(
+        "🔍 <b>Товари SEO v2</b>\n\n"
+        "Введіть назву товару або бренд для пошуку.\n"
+        "Надішліть <b>.</b> для перегляду перших 25 товарів.",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(SeoV2ProductSearchState.searching)
+async def seo_v2_product_search_handler(message: Message, state: FSMContext):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    text = (message.text or "").strip()
+    if text == "⬅️ Назад":
+        await state.clear()
+        await message.answer("🔎 SEO сайту v2", reply_markup=v2_seo_kb)
+        return
+    q = "" if text == "." else text
+    products = await db.v2_search_products_for_seo(q)
+    if not products:
+        await message.answer("❌ Товарів не знайдено. Спробуйте інший запит.")
+        return
+    rows = []
+    for p in products:
+        brand = p["brand_name"] or ""
+        model = p["model"] or ""
+        label = f"{brand} {model}".strip()
+        rows.append([InlineKeyboardButton(text=label[:60], callback_data=f"seo_v2prod:{p['id']}")])
+    rows.append([InlineKeyboardButton(text="❌ Закрити", callback_data="seo_v2prod_close")])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    count_note = f" (знайдено: {len(products)})" if products else ""
+    await message.answer(f"📋 Оберіть товар{count_note}:", reply_markup=kb)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_v2prod:"))
+async def seo_v2prod_select(callback: CallbackQuery, state: FSMContext):
+    if not (is_system_admin(callback.from_user.id) or await is_admin(callback)):
+        await callback.answer()
+        return
+    product_id = int(callback.data.split(":")[1])
+    await state.update_data(v2_seo_product_id=product_id)
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await _v2_show_product_seo_menu(callback.message, state, product_id)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "seo_v2prod_close")
+async def seo_v2prod_close(callback: CallbackQuery):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.answer()
+
+
 @router.message(lambda m: m.text == "📂 Категорії SEO v2")
 async def seo_v2cat_menu_handler(message: Message):
     if not (is_system_admin(message.from_user.id) or await is_admin(message)):
@@ -4129,7 +4274,7 @@ async def seo_v2cat_edit_save(message: Message, state: FSMContext):
     field = data.get("seo_field")
     if _is_cancel_text(message):
         await state.clear()
-        await message.answer("Скасовано.", reply_markup=seo_kb)
+        await message.answer("Скасовано.", reply_markup=v2_seo_kb)
         if cat_id:
             cats = await db.v2_list_categories_for_seo()
             cat = next((c for c in cats if c["id"] == cat_id), None)
@@ -4475,9 +4620,15 @@ async def seo_close_callback(callback: CallbackQuery):
 @router.message(SeoMainState.waiting_for_value)
 async def seo_edit_field_save(message: Message, state: FSMContext):
     if _is_cancel_text(message):
+        data = await state.get_data()
+        _pk = data.get("seo_page_key", "index")
         await state.clear()
-        await message.answer("Скасовано.", reply_markup=seo_kb)
-        await _send_seo_main_card(message)
+        if _pk == "v2_index":
+            await message.answer("Скасовано.", reply_markup=v2_seo_kb)
+            await _send_seo_v2main_card(message)
+        else:
+            await message.answer("Скасовано.", reply_markup=seo_kb)
+            await _send_seo_main_card(message)
         return
     data = await state.get_data()
     page_key = data.get("seo_page_key", "index")
@@ -4494,7 +4645,10 @@ async def seo_edit_field_save(message: Message, state: FSMContext):
     await state.clear()
     warning = _seo_length_warning(field, value)
     await message.answer(f"✅ Сохранено.{warning}", parse_mode="HTML")
-    await _send_seo_main_card(message)
+    if page_key == "v2_index":
+        await _send_seo_v2main_card(message)
+    else:
+        await _send_seo_main_card(message)
 
 
 # ===== Promo bar =====
@@ -8184,7 +8338,7 @@ async def site_v2_menu_handler(message: Message, state: FSMContext):
 
     if text == "🔎 SEO сайту":
         await state.set_state(V2SiteState.submenu)
-        await message.answer("🔎 SEO сайту", reply_markup=seo_kb)
+        await message.answer("🔎 SEO сайту", reply_markup=v2_seo_kb)
         return
 
     await message.answer("⚠️ Оберіть дію зі списку.")
@@ -15340,11 +15494,12 @@ async def site_v2_home(
             "indexable": bool(_cat_seo["indexable"]),
         }
     else:
+        _v2_main_seo = await db.get_seo_page("v2_index")
         seo_effective = {
-            "meta_title": f"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 v2 \u2014 {site_title}",
-            "meta_description": "",
-            "h1": "",
-            "seo_text": "",
+            "meta_title": _v2_main_seo.get("meta_title") or f"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 v2 \u2014 {site_title}",
+            "meta_description": _v2_main_seo.get("meta_description") or "",
+            "h1": _v2_main_seo.get("h1") or "",
+            "seo_text": _v2_main_seo.get("seo_text") or "",
             "indexable": False,
         }
 
