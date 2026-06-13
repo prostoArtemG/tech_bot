@@ -34,6 +34,31 @@ def make_slug(text: str) -> str:
     return slug[:80]
 
 
+def _parse_specs_json(val) -> list:
+    """Конвертує specs_json (list або dict) у list[{name, value}].
+    Зберігає порядок для list-формату; dict-формат теж підтримується (старі товари).
+    """
+    import json as _json
+    if val is None:
+        return []
+    if isinstance(val, str):
+        try:
+            val = _json.loads(val)
+        except Exception:
+            return []
+    if isinstance(val, list):
+        # Новий формат: [{name, value}, ...]
+        result = []
+        for item in val:
+            if isinstance(item, dict) and "name" in item:
+                result.append({"name": str(item["name"]), "value": str(item.get("value") or "")})
+        return result
+    if isinstance(val, dict):
+        # Старий формат: {key: value} — конвертуємо, зберігаємо порядок Python 3.7+
+        return [{"name": str(k), "value": str(v)} for k, v in val.items() if k]
+    return []
+
+
 class Database:
     def __init__(self, database_url: str):
         self.database_url = database_url
@@ -4316,26 +4341,27 @@ class Database:
 
         return product
 
-    async def v2_get_product_specs(self, product_id: int) -> dict:
-        """Повертає specs_json словник товару."""
+    async def v2_get_product_specs(self, product_id: int) -> list:
+        """Повертає specs_json як list [{name, value}] (зберігає порядок).
+        Старий dict-формат конвертується у list для сумісності.
+        """
         row = await self.fetchrow(
             "SELECT specs_json FROM v2_products WHERE id = $1",
             product_id,
         )
         if not row:
-            return {}
+            return []
         val = row["specs_json"]
-        if isinstance(val, dict):
-            return val
-        try:
-            import json as _json
-            return _json.loads(val) if val else {}
-        except Exception:
-            return {}
+        return _parse_specs_json(val)
 
-    async def v2_update_product_specs(self, product_id: int, specs: dict) -> None:
-        """Зберігає specs_json для товару."""
+    async def v2_update_product_specs(self, product_id: int, specs) -> None:
+        """Зберігає specs_json для товару.
+        Приймає list [{name, value}] або dict {key: value}.
+        """
         import json as _json
+        if isinstance(specs, dict):
+            # конвертуємо старий dict у list, зберігаючи порядок Python 3.7+
+            specs = [{"name": k, "value": v} for k, v in specs.items()]
         await self.execute(
             "UPDATE v2_products SET specs_json = $2::jsonb WHERE id = $1",
             product_id,

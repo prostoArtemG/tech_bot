@@ -7217,7 +7217,7 @@ async def v2_specs_menu_handler(message: Message, state: FSMContext):
         if not product_id:
             await message.answer("⚠️ Товар не знайдено.")
             return
-        await db.v2_update_product_specs(int(product_id), {})
+        await db.v2_update_product_specs(int(product_id), [])
         await message.answer("🧹 Характеристики очищено.")
         await _v2_show_specs_menu(message, state, int(product_id), category_id)
         return
@@ -7243,27 +7243,33 @@ async def v2_specs_bulk_text_handler(message: Message, state: FSMContext):
         await message.answer("⚠️ Товар не знайдено.")
         return
 
-    # Парсимо рядки "ключ: значення"
-    specs: dict = {}
+    # Парсимо рядки "Назва: Значення" → list [{name, value}], зберігаємо порядок
+    specs: list = []
     for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
         if ":" in line:
-            key, _, val = line.partition(":")
-            key = key.strip()
+            name, _, val = line.partition(":")
+            name = name.strip()
             val = val.strip()
-            if key and val:
-                specs[key] = val
+            if name:
+                specs.append({"name": name, "value": val if val else "є"})
+        else:
+            # Рядок без ":" → value = "є"
+            specs.append({"name": line, "value": "є"})
 
     if not specs:
         await message.answer(
-            "⚠️ Не знайдено жодного рядка у форматі <b>ключ: значення</b>.",
+            "⚠️ Не знайдено жодного рядка у форматі <b>Назва: Значення</b>.",
             parse_mode="HTML",
         )
         return
 
-    # Зберігаємо specs_json
+    # Зберігаємо specs_json як list (порядок зберігається)
     await db.v2_update_product_specs(int(product_id), specs)
 
-    # Намагаємось зіставити з filter_fields
+    # Намагаємось зіставити з filter_fields (не змінює порядок specs)
     matched = 0
     if category_id:
         fields = await db.v2_list_filter_fields_by_category(int(category_id))
@@ -7274,7 +7280,9 @@ async def v2_specs_bulk_text_handler(message: Message, state: FSMContext):
                 (field.get("field_key") or "").lower().strip(),
             }
             field_keys.discard("")
-            for spec_key, spec_val in specs.items():
+            for item in specs:
+                spec_key = item["name"]
+                spec_val = item["value"]
                 if spec_key.lower().strip() in field_keys:
                     values = await db.v2_list_filter_values(int(field["id"]))
                     value_id = None
@@ -15092,16 +15100,27 @@ async def site_v2_product(request: Request, product_id: int):
     ]
     photo_url = images[0]["image_url"] if images else ""
 
-    # specs_json
-    specs_json = raw.get("specs_json") or {}
-    if not isinstance(specs_json, dict):
-        import json as _json
+    # specs_json — новий формат list [{name,value}], старий dict теж підтримується
+    import json as _json
+    _raw_specs = raw.get("specs_json") or []
+    if isinstance(_raw_specs, str):
         try:
-            specs_json = _json.loads(specs_json)
+            _raw_specs = _json.loads(_raw_specs)
         except Exception:
-            specs_json = {}
+            _raw_specs = []
+    # Нормалізуємо до list[{name, value}]
+    if isinstance(_raw_specs, dict):
+        specs_list = [{"name": k, "value": str(v)} for k, v in _raw_specs.items() if k]
+    elif isinstance(_raw_specs, list):
+        specs_list = [
+            {"name": str(s["name"]), "value": str(s.get("value") or "")}
+            for s in _raw_specs if isinstance(s, dict) and s.get("name")
+        ]
+    else:
+        specs_list = []
 
-    # Характеристики з filter_values + specs_json → specifications / spec_labels / spec_field_order
+    # Характеристики з filter_values + specs_list → specifications / spec_labels / spec_field_order
+    # filter_values йдуть першими, потім specs_list у порядку вставки
     specifications: dict = {}
     spec_labels: dict = {}
     spec_field_order: list = []
@@ -15113,11 +15132,13 @@ async def site_v2_product(request: Request, product_id: int):
             specifications[key] = value
             spec_labels[key] = label
             spec_field_order.append(key)
-    for key, value in specs_json.items():
-        if key not in specifications and value is not None and str(value).strip():
-            specifications[key] = str(value)
-            spec_labels[key] = key
-            spec_field_order.append(key)
+    for item in specs_list:
+        name = item["name"]
+        value = item["value"]
+        if name not in specifications and value is not None and str(value).strip():
+            specifications[name] = str(value)
+            spec_labels[name] = name
+            spec_field_order.append(name)
 
     # Адаптований product-dict для product.html
     product = {
