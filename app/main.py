@@ -1962,7 +1962,7 @@ v2_site_kb = ReplyKeyboardMarkup(
 
 v2_product_header_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="✏️ Текст UA"), KeyboardButton(text="✏️ Текст RU")],
+        [KeyboardButton(text="✏️ Текст")],
         [KeyboardButton(text="🧹 Очистити")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -8040,11 +8040,13 @@ async def site_v2_catalog_handler(message: Message, state: FSMContext):
 # ── V2 product page header text ──────────────────────────────────────────────
 
 async def _show_v2_product_header_menu(message: Message, state: FSMContext):
-    uk = await db.get_setting("product_header_text_uk") or "(порожньо)"
-    ru = await db.get_setting("product_header_text_ru") or "(порожньо)"
+    current = await db.get_setting("product_header_text") or ""
+    if not current:
+        current = await db.get_setting("product_header_text_uk") or ""
+    display = current if current else "(порожньо)"
     await state.set_state(V2ProductHeaderState.menu)
     await message.answer(
-        f"🧯 Шапка сторінки товару\n\nUA: {uk}\nRU: {ru}",
+        f"🧯 Шапка сторінки товару\n\nТекст: {display}",
         reply_markup=v2_product_header_kb,
     )
 
@@ -8060,18 +8062,15 @@ async def v2_product_header_menu_handler(message: Message, state: FSMContext):
         return
 
     if text == "🧹 Очистити":
-        await db.set_setting("product_header_text_uk", "")
-        await db.set_setting("product_header_text_ru", "")
+        await db.set_setting("product_header_text", "")
         await _show_v2_product_header_menu(message, state)
         return
 
-    if text in ("✏️ Текст UA", "✏️ Текст RU"):
-        key = "product_header_text_uk" if text == "✏️ Текст UA" else "product_header_text_ru"
-        lang = "UA" if text == "✏️ Текст UA" else "RU"
-        await state.update_data(setting_key=key)
+    if text == "✏️ Текст":
+        await state.update_data(setting_key="product_header_text")
         await state.set_state(V2ProductHeaderState.waiting_for_field)
         await message.answer(
-            f"Введіть текст шапки ({lang}):",
+            "Введіть текст шапки:",
             reply_markup=ReplyKeyboardMarkup(
                 keyboard=[[KeyboardButton(text="⬅️ Назад")]],
                 resize_keyboard=True,
@@ -15340,9 +15339,11 @@ async def site_v2_product(request: Request, product_id: int):
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
     _lang_raw = await db.get_setting("site_language") or "uk"
-    product_header_text = await db.get_setting(
-        "product_header_text_uk" if _lang_raw == "uk" else "product_header_text_ru"
-    ) or ""
+    product_header_text = (
+        await db.get_setting("product_header_text")
+        or await db.get_setting("product_header_text_uk")
+        or ""
+    )
     seo_product = {
         "meta_title": raw.get("seo_title") or f"{raw['brand_name']} {raw['model']} — {site_title}",
         "meta_description": raw.get("seo_description") or "",

@@ -41,15 +41,16 @@
                 <span class="logo-badge">T</span>
                 <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
             </a>
-            {% if product_header_text %}
-            <p class="v2-product-header-subtitle">{{ product_header_text }}</p>
-            {% endif %}
             <div class="v2-header-top-right">
                 {% if header_show_cart %}
                 <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
                 {% endif %}
             </div>
         </div>
+
+        {% if product_header_text %}
+        <div class="v2-product-header-note">{{ product_header_text }}</div>
+        {% endif %}
 
         <div class="v2-product-header-bar">
             {% if category_groups %}
