@@ -15132,10 +15132,12 @@ async def site_v2_product(request: Request, product_id: int):
         specs_list = []
 
     # Характеристики з filter_values + specs_list → specifications / spec_labels / spec_field_order
-    # filter_values йдуть першими, потім specs_list у порядку вставки
+    # filter_values йдуть першими, потім specs_list у порядку вставки.
+    # Деdup: порівнюємо нормалізовані ключі (lower+strip), щоб не дублювати фільтри і ручні specs.
     specifications: dict = {}
     spec_labels: dict = {}
     spec_field_order: list = []
+    _seen_norm: set = set()  # нормалізовані ключі та лейбли для деdup
     for f in raw.get("filters") or []:
         key = f.get("field_key") or ""
         label = f.get("label_uk") or f.get("label_ru") or key
@@ -15144,13 +15146,22 @@ async def site_v2_product(request: Request, product_id: int):
             specifications[key] = value
             spec_labels[key] = label
             spec_field_order.append(key)
+            _seen_norm.add(key.lower().strip())
+            _seen_norm.add(label.lower().strip())
     for item in specs_list:
         name = item["name"]
         value = item["value"]
-        if name not in specifications and value is not None and str(value).strip():
+        name_norm = name.lower().strip()
+        if (
+            name not in specifications
+            and name_norm not in _seen_norm
+            and value is not None
+            and str(value).strip()
+        ):
             specifications[name] = str(value)
             spec_labels[name] = name
             spec_field_order.append(name)
+            _seen_norm.add(name_norm)
 
     # Адаптований product-dict для product.html
     product = {
@@ -15216,6 +15227,10 @@ async def site_v2_product(request: Request, product_id: int):
             "canonical_url": f"{_seo_base_url(request)}/v2/product/{product_id}",
             "catalog_base": "/v2",
             "is_v2": True,
+            "v2_cat_slug": raw["category_slug"],
+            "v2_cat_name": raw["category_name_uk"] or raw["category_name_ru"] or raw["category_slug"],
+            "v2_brand_name": raw["brand_name"],
+            "v2_brand_slug": make_slug(raw["brand_name"]),
         },
     )
 

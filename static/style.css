@@ -3681,6 +3681,38 @@ button:hover {
     box-sizing: border-box;
 }
 
+/* Compact header: logo row + cart in one line */
+.v2-header-top-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+/* Category quick-links below product card */
+.v2-cat-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+    padding: 0 0 4px;
+}
+.v2-cat-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: #1b2a3b;
+    color: #fff;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+.v2-cat-link:hover {
+    background: #243547;
+}
+
 @media (max-width: 768px) {
     .site-header--v2 {
         padding: 18px 16px 16px;
@@ -3690,7 +3722,7 @@ button:hover {
         gap: 10px;
     }
     .site-header--v2 .v2-header-top {
-        grid-template-columns: minmax(0, 1fr) 40px;
+        grid-template-columns: minmax(0, 1fr) auto;
         gap: 10px;
     }
     .site-header--v2 .v2-header-logo {
@@ -3705,16 +3737,9 @@ button:hover {
     .site-header--v2 .v2-header-logo .logo-text {
         font-size: 20px;
     }
-    .site-header--v2 .v2-header-subtitle {
-        margin-left: 50px;
-        font-size: 15px;
-    }
-    .site-header--v2 .v2-header-cart {
+    .v2-header-top-right .header-pill {
         height: 38px !important;
         font-size: 15px;
-    }
-    .site-header--v2 .v2-header-cart span {
-        font-size: 13px;
     }
     .v2-catalog-bar-row,
     .v2-product-header-bar {

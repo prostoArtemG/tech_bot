@@ -34,29 +34,26 @@
 <body>
 
 {% if is_v2 %}
-<header class="site-header site-header--v2">
+<header class="site-header site-header--v2 site-header--v2-compact">
     <div class="v2-header-inner">
         <div class="v2-header-top">
             <a href="/v2" class="site-logo v2-header-logo" aria-label="{{ site_title or 'Technovlada' }}">
                 <span class="logo-badge">T</span>
                 <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
             </a>
-            {% if header_show_language %}
-            <details class="v2-lang-menu">
-                <summary aria-label="Мова">🌐</summary>
-                <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-                <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
-            </details>
-            {% endif %}
+            <div class="v2-header-top-right">
+                {% if header_show_language %}
+                <details class="v2-lang-menu">
+                    <summary aria-label="Мова">🌐</summary>
+                    <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+                    <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
+                </details>
+                {% endif %}
+                {% if header_show_cart %}
+                <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
+                {% endif %}
+            </div>
         </div>
-
-        <p class="v2-header-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</p>
-
-        {% if header_show_cart %}
-        <div class="v2-header-cart-row">
-            <a href="/cart" class="header-pill cart-pill v2-header-cart">🛒 <span id="cartCount">0</span></a>
-        </div>
-        {% endif %}
 
         <div class="v2-product-header-bar">
             <a href="{{ catalog_base or '/v2' }}" class="v2-product-header-btn">☰ <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span></a>
@@ -160,7 +157,9 @@
                 </div>
 
                 <div class="product-info-meta">
+                    {% if product.warranty_months %}
                     <div class="info"><span data-ru="Гарантия:" data-uk="Гарантія:">Гарантия:</span> {{ product.warranty_months }} <span data-ru="мес" data-uk="міс">мес</span></div>
+                    {% endif %}
                 </div>
 
                 {% if variants and variants|length > 1 %}
@@ -325,6 +324,20 @@
         </div>
 
     </div>
+
+    {% if is_v2 and v2_cat_slug %}
+    <div class="v2-cat-links">
+        <a href="/v2?category={{ v2_cat_slug }}#products" class="v2-cat-link">
+            ← <span data-ru="Усі товари: " data-uk="Усі товари: ">Усі товари: </span>{{ v2_cat_name }}
+        </a>
+        {% if v2_brand_name and v2_brand_slug %}
+        <a href="/v2?category={{ v2_cat_slug }}&brand={{ v2_brand_slug }}#products" class="v2-cat-link">
+            🏷 {{ v2_brand_name }}
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
 </main>
 
 {% if seo_product and seo_product.seo_text %}
@@ -332,7 +345,7 @@
     {% if seo_product.h1 %}<h1 class="seo-h1">{{ seo_product.h1 }}</h1>{% endif %}
     <div class="seo-text">{{ seo_product.seo_text }}</div>
 </div>
-{% elif seo_product and seo_product.h1 %}
+{% elif not is_v2 and seo_product and seo_product.h1 %}
 <div class="seo-text-block">
     <h1 class="seo-h1">{{ seo_product.h1 }}</h1>
 </div>
