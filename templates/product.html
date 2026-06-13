@@ -42,13 +42,6 @@
                 <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
             </a>
             <div class="v2-header-top-right">
-                {% if header_show_language %}
-                <details class="v2-lang-menu">
-                    <summary aria-label="Мова">🌐</summary>
-                    <button class="site-lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
-                    <button class="site-lang-btn" data-lang="uk" onclick="setLang('uk')">UA</button>
-                </details>
-                {% endif %}
                 {% if header_show_cart %}
                 <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
                 {% endif %}
@@ -239,7 +232,7 @@
 
                                 {% set has_specs = specifications and (specifications.values()|select|list)|length > 0 %}
                                 {% if has_specs %}
-                                <div class="collapsible-block">
+                                <div class="collapsible-block" id="productSpecs">
                                     <div class="collapsible-title" data-ru="📋 Характеристики" data-uk="📋 Характеристики">📋 Характеристики</div>
                                     <div class="collapsible-body collapsible-body--specs" id="specsBody">
                                         {% for key in spec_field_order %}
@@ -324,6 +317,46 @@
         </div>
 
     </div>
+
+    {% if is_v2 and dyn_attrs %}
+    <div class="v2-pf-wrap">
+        <button class="v2-pf-toggle" id="v2PFToggle" type="button" aria-expanded="false" aria-controls="v2PFPanel">
+            <svg class="v2-pf-icon" width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 5a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zm3 5a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm3 5a1 1 0 011-1h2a1 1 0 110 2h-2a1 1 0 01-1-1z"/></svg>
+            <span data-ru="Фільтри" data-uk="Фільтри">Фільтри</span>
+            <svg class="v2-pf-chevron" width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+        </button>
+        <div id="v2PFPanel" class="v2-pf-panel" hidden>
+            {% if v2_brands %}
+            <div class="v2-pf-group">
+                <div class="v2-pf-label" data-ru="Бренд" data-uk="Бренд">Бренд</div>
+                <div class="v2-pf-options">
+                    {% for b in v2_brands %}
+                    <a href="/v2?category={{ v2_cat_slug }}&amp;brand={{ b.slug }}#products"
+                       class="v2-pf-chip{% if v2_brand_slug == b.slug %} active{% endif %}">{{ b.name }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% for attr in dyn_attrs %}
+            {% set opts = dyn_options.get(attr.attribute_key) or [] %}
+            {% if opts %}
+            <div class="v2-pf-group">
+                <div class="v2-pf-label" data-ru="{{ attr.name_ru }}" data-uk="{{ attr.name_ua }}">{{ attr.name_ua }}{% if attr.unit %}, {{ attr.unit }}{% endif %}</div>
+                <div class="v2-pf-options">
+                    {% for opt in opts %}
+                    <a href="/v2?category={{ v2_cat_slug }}&amp;{{ attr.attribute_key }}={{ opt.value }}#products"
+                       class="v2-pf-chip">{{ opt.label_uk }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+            <a href="/v2?category={{ v2_cat_slug }}#products" class="v2-pf-all-link">
+                ↗ <span data-ru="Усі товари: " data-uk="Усі товари: ">Усі товари: </span>{{ v2_cat_name }}
+            </a>
+        </div>
+    </div>
+    {% endif %}
 
     {% if is_v2 and v2_cat_slug %}
     <div class="v2-cat-links">
@@ -500,12 +533,28 @@
             if (expanded) {
                 body.classList.remove('collapsible-expanded');
                 btn.textContent = btn.getAttribute('data-collapsed-text');
+                // Прокрутить к началу блока при сворачивании
+                var block = body.closest ? body.closest('.collapsible-block') : body.parentElement;
+                if (block) { block.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
             } else {
                 body.classList.add('collapsible-expanded');
                 btn.textContent = btn.getAttribute('data-expanded-text');
             }
         });
     });
+    // V2 filters toggle
+    (function(){
+        var pfToggle = document.getElementById('v2PFToggle');
+        var pfPanel  = document.getElementById('v2PFPanel');
+        if (!pfToggle || !pfPanel) return;
+        pfToggle.addEventListener('click', function(){
+            var open = !pfPanel.hidden;
+            pfPanel.hidden = open;
+            pfToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+            var chev = pfToggle.querySelector('.v2-pf-chevron');
+            if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+        });
+    })();
     // Lang globe dropdown (mobile)
     var langWrap  = document.getElementById('langDropdownWrap');
     var langGlobe = document.getElementById('langGlobeBtn');

@@ -3688,6 +3688,13 @@ button:hover {
     gap: 10px;
     flex-shrink: 0;
 }
+/* ─── Sticky compact header on V2 product page ─── */
+.site-header--v2-compact {
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    /* inherit background from .site-header */
+}
 /* Category quick-links below product card */
 .v2-cat-links {
     display: flex;
@@ -3712,6 +3719,75 @@ button:hover {
 .v2-cat-link:hover {
     background: #243547;
 }
+/* ─── V2 product-page filter panel ─── */
+.v2-pf-wrap {
+    margin: 16px 0 8px;
+}
+.v2-pf-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border: none;
+    border-radius: 999px;
+    background: #1b2a3b;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1.2;
+}
+.v2-pf-toggle:hover { background: #243547; }
+.v2-pf-chevron { transition: transform .25s ease; }
+.v2-pf-panel {
+    margin-top: 10px;
+    padding: 14px;
+    background: #f8f9fa;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.v2-pf-group { display: flex; flex-direction: column; gap: 6px; }
+.v2-pf-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+.v2-pf-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.v2-pf-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1.5px solid #e5e7eb;
+    color: #111827;
+    font-size: 13px;
+    text-decoration: none;
+    white-space: nowrap;
+    line-height: 1.3;
+    transition: background .15s, border-color .15s;
+}
+.v2-pf-chip:hover { background: #e5f0fa; border-color: #2e86c1; }
+.v2-pf-chip.active { background: var(--site-primary, #2e86c1); color: #fff; border-color: var(--site-primary, #2e86c1); }
+.v2-pf-all-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--site-primary, #2e86c1);
+    text-decoration: none;
+    margin-top: 4px;
+}
+.v2-pf-all-link:hover { text-decoration: underline; }
 
 @media (max-width: 768px) {
     .site-header--v2 {

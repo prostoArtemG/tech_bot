@@ -15163,6 +15163,28 @@ async def site_v2_product(request: Request, product_id: int):
             spec_field_order.append(name)
             _seen_norm.add(name_norm)
 
+    # ─── Фільтри категорії для блоку на сторінці товару ────────────────────────
+    filter_fields_for_product = await db.v2_get_filters_for_site(raw["category_slug"])
+    dyn_attrs: list = []
+    dyn_options: dict = {}
+    for _ff in filter_fields_for_product:
+        dyn_attrs.append({
+            "attribute_key": _ff["field_key"],
+            "name_ru": _ff["label_ru"] or _ff["label_uk"] or _ff["field_key"],
+            "name_ua": _ff["label_uk"] or _ff["label_ru"] or _ff["field_key"],
+            "unit": _ff["unit"] or "",
+        })
+        dyn_options[_ff["field_key"]] = [
+            {
+                "value": v["value_key"],
+                "label_ru": v["label_ru"] or v["label_uk"] or v["value_key"],
+                "label_uk": v["label_uk"] or v["label_ru"] or v["value_key"],
+            }
+            for v in _ff["values"]
+        ]
+    _brands_raw = await db.v2_list_brands_by_category(raw["category_id"])
+    v2_brands = [{"name": b["name"], "slug": make_slug(b["name"])} for b in _brands_raw]
+
     # Адаптований product-dict для product.html
     product = {
         "id": raw["id"],
@@ -15231,6 +15253,9 @@ async def site_v2_product(request: Request, product_id: int):
             "v2_cat_name": raw["category_name_uk"] or raw["category_name_ru"] or raw["category_slug"],
             "v2_brand_name": raw["brand_name"],
             "v2_brand_slug": make_slug(raw["brand_name"]),
+            "dyn_attrs": dyn_attrs,
+            "dyn_options": dyn_options,
+            "v2_brands": v2_brands,
         },
     )
 
