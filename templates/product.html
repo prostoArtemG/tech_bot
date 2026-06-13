@@ -20,7 +20,7 @@
     {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
     {% if product.photo_url %}<meta property="og:image" content="{{ product.photo_url | e }}">
     {% elif images %}<meta property="og:image" content="{{ images[0].image_url | e }}">{% endif %}
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2">
     {% if site_design %}
     <style>
         :root {
@@ -28,6 +28,17 @@
             --site-accent: {{ site_design.accent_color }};
             --site-header-bg: {{ site_design.header_bg }};
         }
+    </style>
+    {% endif %}
+    {% if is_v2 %}
+    <style>
+    /* diagnostic: force drawer positioning */
+    .v2-catalog-drawer{position:fixed!important;left:0!important;top:0!important;height:100vh!important;width:320px!important;max-width:86vw!important;background:#fff!important;z-index:9999!important;transform:translateX(-100%)!important;transition:transform .32s ease!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;box-shadow:4px 0 24px rgba(0,0,0,.18)!important;}
+    .v2-catalog-drawer.is-open{transform:translateX(0)!important;}
+    .v2-contacts-drawer{position:fixed!important;right:0!important;top:0!important;height:100vh!important;width:300px!important;max-width:88vw!important;background:#fff!important;z-index:9999!important;transform:translateX(100%)!important;transition:transform .32s ease!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;box-shadow:-4px 0 24px rgba(0,0,0,.18)!important;}
+    .v2-contacts-drawer.is-open{transform:translateX(0)!important;}
+    .v2-catalog-backdrop{position:fixed!important;inset:0!important;background:rgba(0,0,0,.46)!important;z-index:9998!important;opacity:0!important;pointer-events:none!important;transition:opacity .3s!important;}
+    .v2-catalog-backdrop.is-open{opacity:1!important;pointer-events:auto!important;}
     </style>
     {% endif %}
 </head>

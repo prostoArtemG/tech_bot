@@ -526,6 +526,20 @@ class Database:
         );
         """)
 
+        # ── SEO per V2 category ───────────────────────────────────
+        await self.execute("""
+        CREATE TABLE IF NOT EXISTS seo_v2_categories (
+            id              SERIAL PRIMARY KEY,
+            v2_category_id  INTEGER NOT NULL UNIQUE REFERENCES v2_categories(id) ON DELETE CASCADE,
+            meta_title      TEXT NOT NULL DEFAULT '',
+            meta_description TEXT NOT NULL DEFAULT '',
+            h1              TEXT NOT NULL DEFAULT '',
+            seo_text        TEXT NOT NULL DEFAULT '',
+            indexable       BOOLEAN NOT NULL DEFAULT TRUE,
+            updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        """)
+
         # ── SEO per product ──────────────────────────────────────
         await self.execute("""
         CREATE TABLE IF NOT EXISTS seo_products (
@@ -1835,6 +1849,66 @@ class Database:
             RETURNING indexable
             """,
             site_category_id,
+        )
+        return bool(row and row["indexable"])
+
+    # ── SEO per V2 category ──────────────────────────────────────────────────
+
+    async def v2_list_categories_for_seo(self) -> list:
+        """Returns all v2 categories with their group info, for SEO management."""
+        return await self.fetch(
+            """
+            SELECT c.id, c.slug, c.name_uk, c.name_ru, c.emoji, c.is_active,
+                   g.id AS group_id, g.name_uk AS group_name_uk,
+                   g.name_ru AS group_name_ru, g.emoji AS group_emoji
+            FROM v2_categories c
+            JOIN v2_product_groups g ON g.id = c.group_id
+            WHERE c.is_active = TRUE AND g.is_active = TRUE
+            ORDER BY g.sort_order ASC, g.id ASC, c.sort_order ASC, c.id ASC
+            """,
+        )
+
+    async def v2_get_category_seo(self, v2_category_id: int):
+        return await self.fetchrow(
+            "SELECT * FROM seo_v2_categories WHERE v2_category_id = $1",
+            v2_category_id,
+        )
+
+    async def v2_get_category_seo_by_slug(self, slug: str):
+        return await self.fetchrow(
+            """
+            SELECT s.* FROM seo_v2_categories s
+            JOIN v2_categories c ON c.id = s.v2_category_id
+            WHERE c.slug = $1
+            """,
+            slug,
+        )
+
+    async def v2_upsert_category_seo_field(self, v2_category_id: int, field: str, value: str):
+        allowed = {"meta_title", "meta_description", "h1", "seo_text"}
+        if field not in allowed:
+            raise ValueError(f"Invalid SEO field: {field}")
+        await self.execute(
+            f"""
+            INSERT INTO seo_v2_categories (v2_category_id, {field}, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (v2_category_id) DO UPDATE
+            SET {field} = EXCLUDED.{field}, updated_at = NOW()
+            """,
+            v2_category_id,
+            value,
+        )
+
+    async def v2_toggle_category_seo_indexable(self, v2_category_id: int) -> bool:
+        row = await self.fetchrow(
+            """
+            INSERT INTO seo_v2_categories (v2_category_id, indexable, updated_at)
+            VALUES ($1, FALSE, NOW())
+            ON CONFLICT (v2_category_id) DO UPDATE
+            SET indexable = NOT seo_v2_categories.indexable, updated_at = NOW()
+            RETURNING indexable
+            """,
+            v2_category_id,
         )
         return bool(row and row["indexable"])
 

@@ -1356,6 +1356,10 @@ class SeoCategoryState(StatesGroup):
     waiting_for_value = State()
 
 
+class SeoV2CategoryState(StatesGroup):
+    waiting_for_value = State()
+
+
 class SeoProductState(StatesGroup):
     waiting_for_value = State()
 
@@ -1762,7 +1766,8 @@ seo_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🏠 Главная страница")],
         [KeyboardButton(text="📂 Категории SEO")],
-        [KeyboardButton(text="🗺 Sitemap")],
+        [KeyboardButton(text="� Категорії SEO v2")],
+        [KeyboardButton(text="�🗺 Sitemap")],
         [KeyboardButton(text="🤖 Robots.txt")],
         [KeyboardButton(text="⚙️ Авто SEO")],
         [KeyboardButton(text="ℹ️ SEO Підказка")],
@@ -3967,6 +3972,194 @@ async def seo_cat_edit_save(message: Message, state: FSMContext):
         await message.answer(
             _seo_cat_card_text(cat["name_ru"], seo),
             reply_markup=_seo_cat_inline_kb(cat_id, seo),
+            parse_mode="HTML",
+        )
+
+
+# ===== SEO: V2 Categories =====
+
+def _seo_v2cat_card_text(cat_name: str, seo) -> str:
+    def _v(val):
+        return val if val else "—"
+    indexable = seo["indexable"] if seo is not None else True
+    idx_icon = "✅" if indexable else "🚫"
+    idx_label = "Так" if indexable else "Ні"
+    seo_text_preview = ""
+    if seo and seo["seo_text"]:
+        seo_text_preview = seo["seo_text"][:80] + ("…" if len(seo["seo_text"]) > 80 else "")
+    return (
+        f"📂 <b>SEO v2: {cat_name}</b>\n\n"
+        f"🔤 <b>meta title:</b> {_v(seo['meta_title'] if seo else '')}\n"
+        f"📄 <b>meta description:</b> {_v(seo['meta_description'] if seo else '')}\n"
+        f"📌 <b>H1:</b> {_v(seo['h1'] if seo else '')}\n"
+        f"📝 <b>SEO-текст:</b> {_v(seo_text_preview)}\n"
+        f"{idx_icon} <b>Індексація:</b> {idx_label}\n"
+    )
+
+
+def _seo_v2cat_inline_kb(cat_id: int, seo) -> InlineKeyboardMarkup:
+    fields = ["meta_title", "meta_description", "h1", "seo_text"]
+    rows = [
+        [InlineKeyboardButton(
+            text=f"✏️ {_seo_field_label(f)}",
+            callback_data=f"seo_v2cat_ef:{cat_id}:{f}"
+        )]
+        for f in fields
+    ]
+    indexable = seo["indexable"] if seo is not None else True
+    idx_text = "🚫 Вимкнути індексацію" if indexable else "✅ Увімкнути індексацію"
+    rows.append([InlineKeyboardButton(text=idx_text, callback_data=f"seo_v2cat_idx:{cat_id}")])
+    rows.append([InlineKeyboardButton(text="◀️ До списку", callback_data="seo_v2cat_list")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _send_seo_v2cat_list(target):
+    """target: Message or CallbackQuery.message"""
+    cats = await db.v2_list_categories_for_seo()
+    if not cats:
+        await target.answer("V2-категорій ще немає.")
+        return
+    # Group by group
+    rows = []
+    last_group = None
+    for cat in cats:
+        grp = cat["group_name_uk"] or cat["group_name_ru"] or "?"
+        if grp != last_group:
+            rows.append([InlineKeyboardButton(
+                text=f"── {cat['group_emoji'] or '📁'} {grp} ──",
+                callback_data="seo_v2cat_noop",
+            )])
+            last_group = grp
+        rows.append([InlineKeyboardButton(
+            text=f"{cat['emoji'] or '📦'} {cat['name_uk'] or cat['name_ru']}",
+            callback_data=f"seo_v2cat_open:{cat['id']}",
+        )])
+    rows.append([InlineKeyboardButton(text="❌ Закрити", callback_data="seo_close")])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    text = "📂 <b>SEO V2 категорій — оберіть:</b>"
+    if hasattr(target, "edit_text"):
+        try:
+            await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            return
+        except Exception:
+            pass
+    await target.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.message(lambda m: m.text == "📂 Категорії SEO v2")
+async def seo_v2cat_menu_handler(message: Message):
+    if not (is_system_admin(message.from_user.id) or await is_admin(message)):
+        return
+    await _send_seo_v2cat_list(message)
+
+
+@router.callback_query(lambda c: c.data == "seo_v2cat_noop")
+async def seo_v2cat_noop(callback: CallbackQuery):
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "seo_v2cat_list")
+async def seo_v2cat_list_callback(callback: CallbackQuery):
+    await _send_seo_v2cat_list(callback.message)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_v2cat_open:"))
+async def seo_v2cat_open_callback(callback: CallbackQuery):
+    cat_id = int(callback.data.split(":")[1])
+    cats = await db.v2_list_categories_for_seo()
+    cat = next((c for c in cats if c["id"] == cat_id), None)
+    if not cat:
+        await callback.answer("Категорію не знайдено", show_alert=True)
+        return
+    seo = await db.v2_get_category_seo(cat_id)
+    cat_name = cat["name_uk"] or cat["name_ru"]
+    text = _seo_v2cat_card_text(cat_name, seo)
+    kb = _seo_v2cat_inline_kb(cat_id, seo)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_v2cat_idx:"))
+async def seo_v2cat_idx_callback(callback: CallbackQuery):
+    cat_id = int(callback.data.split(":")[1])
+    new_val = await db.v2_toggle_category_seo_indexable(cat_id)
+    cats = await db.v2_list_categories_for_seo()
+    cat = next((c for c in cats if c["id"] == cat_id), None)
+    if not cat:
+        await callback.answer("Категорію не знайдено", show_alert=True)
+        return
+    seo = await db.v2_get_category_seo(cat_id)
+    cat_name = cat["name_uk"] or cat["name_ru"]
+    text = _seo_v2cat_card_text(cat_name, seo)
+    kb = _seo_v2cat_inline_kb(cat_id, seo)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    idx_label = "увімкнена" if new_val else "вимкнена"
+    await callback.answer(f"Індексація {idx_label}", show_alert=False)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("seo_v2cat_ef:"))
+async def seo_v2cat_edit_start(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    cat_id = int(parts[1])
+    field = parts[2]
+    label = _seo_field_label(field)
+    hint = _seo_field_hint(field)
+    await state.set_state(SeoV2CategoryState.waiting_for_value)
+    await state.update_data(seo_v2cat_id=cat_id, seo_field=field)
+    hint_line = f"\n{hint}" if hint else ""
+    await callback.message.answer(
+        f"✏️ Введіть нове значення для <b>{label}</b>{hint_line}\n"
+        f"Надішліть «-» щоб очистити поле.",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(SeoV2CategoryState.waiting_for_value)
+async def seo_v2cat_edit_save(message: Message, state: FSMContext):
+    data = await state.get_data()
+    cat_id = data.get("seo_v2cat_id")
+    field = data.get("seo_field")
+    if _is_cancel_text(message):
+        await state.clear()
+        await message.answer("Скасовано.", reply_markup=seo_kb)
+        if cat_id:
+            cats = await db.v2_list_categories_for_seo()
+            cat = next((c for c in cats if c["id"] == cat_id), None)
+            if cat:
+                seo = await db.v2_get_category_seo(cat_id)
+                cat_name = cat["name_uk"] or cat["name_ru"]
+                await message.answer(
+                    _seo_v2cat_card_text(cat_name, seo),
+                    reply_markup=_seo_v2cat_inline_kb(cat_id, seo),
+                    parse_mode="HTML",
+                )
+        return
+    if not cat_id or not field:
+        await state.clear()
+        await message.answer("Помилка стану.")
+        return
+    raw = (message.text or "").strip()
+    value = "" if raw == "-" else raw
+    await db.v2_upsert_category_seo_field(cat_id, field, value)
+    await state.clear()
+    warning = _seo_length_warning(field, value)
+    await message.answer(f"✅ Збережено.{warning}", parse_mode="HTML")
+    cats = await db.v2_list_categories_for_seo()
+    cat = next((c for c in cats if c["id"] == cat_id), None)
+    if cat:
+        seo = await db.v2_get_category_seo(cat_id)
+        cat_name = cat["name_uk"] or cat["name_ru"]
+        await message.answer(
+            _seo_v2cat_card_text(cat_name, seo),
+            reply_markup=_seo_v2cat_inline_kb(cat_id, seo),
             parse_mode="HTML",
         )
 
@@ -15133,13 +15326,27 @@ async def site_v2_home(
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
     site_design = await get_site_design()
     active_banners = await db.list_active_banners()
-    seo_effective = {
-        "meta_title": f"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 v2 \u2014 {site_title}",
-        "meta_description": "",
-        "h1": "",
-        "seo_text": "",
-        "indexable": False,
-    }
+
+    # SEO: load v2 category SEO if category filter is active
+    _cat_seo = None
+    if category:
+        _cat_seo = await db.v2_get_category_seo_by_slug(category)
+    if _cat_seo and (_cat_seo["meta_title"] or _cat_seo["h1"] or _cat_seo["meta_description"]):
+        seo_effective = {
+            "meta_title": _cat_seo["meta_title"] or f"{category} \u2014 {site_title}",
+            "meta_description": _cat_seo["meta_description"] or "",
+            "h1": _cat_seo["h1"] or "",
+            "seo_text": _cat_seo["seo_text"] or "",
+            "indexable": bool(_cat_seo["indexable"]),
+        }
+    else:
+        seo_effective = {
+            "meta_title": f"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 v2 \u2014 {site_title}",
+            "meta_description": "",
+            "h1": "",
+            "seo_text": "",
+            "indexable": False,
+        }
 
     return templates.TemplateResponse(
         request=request,
