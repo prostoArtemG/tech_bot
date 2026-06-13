@@ -7243,21 +7243,33 @@ async def v2_specs_bulk_text_handler(message: Message, state: FSMContext):
         await message.answer("⚠️ Товар не знайдено.")
         return
 
-    # Парсимо рядки "Назва: Значення" → list [{name, value}], зберігаємо порядок
+    # Парсимо рядки у list [{name, value}], зберігаємо порядок.
+    # Підтримуємо два формати:
+    #   1) "Назва: Значення"  — один рядок з ":"
+    #   2) Назва\nЗначення    — парні рядки без ":"
+    # Алгоритм: очищуємо порожні рядки, потім парсимо посимвольно.
+    clean_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     specs: list = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
+    i = 0
+    while i < len(clean_lines):
+        line = clean_lines[i]
         if ":" in line:
             name, _, val = line.partition(":")
             name = name.strip()
             val = val.strip()
             if name:
                 specs.append({"name": name, "value": val if val else "є"})
+            i += 1
         else:
-            # Рядок без ":" → value = "є"
-            specs.append({"name": line, "value": "є"})
+            # Немає ":" → name; наступний рядок (якщо він теж без ":") — value
+            name = line
+            if i + 1 < len(clean_lines) and ":" not in clean_lines[i + 1]:
+                specs.append({"name": name, "value": clean_lines[i + 1]})
+                i += 2
+            else:
+                # Наступний рядок з ":" або рядок останній — value = "є"
+                specs.append({"name": name, "value": "є"})
+                i += 1
 
     if not specs:
         await message.answer(
