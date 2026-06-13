@@ -52,9 +52,18 @@
         </div>
 
         <div class="v2-product-header-bar">
-            <a href="{{ catalog_base or '/v2' }}#products" class="v2-product-header-btn">☰ <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span></a>
-            {% if header_show_contacts %}
-            <a href="{{ catalog_base or '/v2' }}#contacts" class="v2-product-header-btn">📞 <span data-ru="Контакты" data-uk="Контакти">Контакти</span></a>
+            {% if category_groups %}
+            <button type="button" id="v2CatalogOpen" class="v2-product-header-btn v2-catalog-open-btn" aria-label="Каталог товарів">
+                <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 4a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2z"/></svg>
+                <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span>
+            </button>
+            {% else %}
+            <a href="/v2#products" class="v2-product-header-btn">☰ <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span></a>
+            {% endif %}
+            {% if header_show_contacts and (site_contacts.phones or site_contacts.phone or site_contacts.tg or site_contacts.instagram) %}
+            <button type="button" id="v2ContactsOpen" class="v2-product-header-btn v2-contacts-open-btn" aria-label="Контакти">
+                📞 <span data-ru="Контакты" data-uk="Контакти">Контакти</span>
+            </button>
             {% endif %}
         </div>
     </div>
@@ -652,5 +661,156 @@
   }
 }
 </script>
+
+{% if is_v2 and category_groups %}
+<div class="v2-catalog-backdrop" id="v2CatalogBackdrop" aria-hidden="true"></div>
+<aside class="v2-catalog-drawer" id="v2CatalogDrawer" aria-label="Каталог товарів" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="v2-drawer-header">
+        <span class="v2-drawer-title">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M2 4a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2zm0 5a1 1 0 000 2h16a1 1 0 100-2H2z"/></svg>
+            <span data-ru="Каталог" data-uk="Каталог">Каталог</span>
+        </span>
+        <button class="v2-drawer-close" id="v2CatalogClose" type="button" aria-label="Закрити">✕</button>
+    </div>
+    <nav class="v2-drawer-body">
+        <a href="{{ catalog_base }}{{ products_anchor }}" class="v2-drawer-all-link {% if not current_category %}active{% endif %}">
+            <span>📦</span>
+            <span data-ru="Все товары" data-uk="Всі товари">Всі товари</span>
+        </a>
+        {% for group in category_groups %}
+        {%- set ns = namespace(active=false) -%}
+        {%- for cat in group.categories -%}{%- if cat.filter_value == current_category -%}{%- set ns.active = true -%}{%- endif -%}{%- endfor -%}
+        <div class="v2-drawer-group{% if ns.active %} is-open{% endif %}">
+            <button class="v2-drawer-group-header" type="button" aria-expanded="{{ 'true' if ns.active else 'false' }}">
+                <span class="v2-drawer-group-left">
+                    <span>{{ group.emoji }}</span>
+                    <span class="v2-drawer-group-name" data-ru="{{ group.name_ru }}" data-uk="{{ group.name_uk }}">{{ group.name_uk or group.name_ru }}</span>
+                </span>
+                <span class="v2-drawer-group-right">
+                    <span class="v2-drawer-group-count">{{ group.product_count }}</span>
+                    <svg class="v2-drawer-group-chevron" viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true"><path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/></svg>
+                </span>
+            </button>
+            <div class="v2-drawer-cats">
+                {% for cat in group.categories %}
+                <a href="{{ catalog_base }}?category={{ cat.filter_value | urlencode }}{{ products_anchor }}" class="v2-drawer-cat-link {% if current_category == cat.filter_value %}active{% endif %}">
+                    <span>{{ cat.emoji }}</span>
+                    <span data-ru="{{ cat.name_ru }}" data-uk="{{ cat.name_uk }}">{{ cat.name_uk or cat.name_ru }}</span>
+                    <span class="v2-drawer-cat-count">{{ cat.product_count }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </nav>
+</aside>
+<script>
+(function(){
+    var drawer   = document.getElementById('v2CatalogDrawer');
+    var backdrop = document.getElementById('v2CatalogBackdrop');
+    var openBtn  = document.getElementById('v2CatalogOpen');
+    var closeBtn = document.getElementById('v2CatalogClose');
+    function openDrawer() {
+        if (!drawer) return;
+        drawer.classList.add('is-open');
+        if (backdrop) backdrop.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        drawer.setAttribute('aria-hidden', 'false');
+    }
+    function closeDrawer() {
+        if (!drawer) return;
+        drawer.classList.remove('is-open');
+        if (backdrop) backdrop.classList.remove('is-open');
+        document.body.style.overflow = '';
+        drawer.setAttribute('aria-hidden', 'true');
+    }
+    if (openBtn)  openBtn.addEventListener('click', openDrawer);
+    if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+    if (backdrop) backdrop.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeDrawer(); });
+    document.querySelectorAll('.v2-drawer-group-header').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var grp = btn.closest('.v2-drawer-group');
+            if (!grp) return;
+            var open = grp.classList.toggle('is-open');
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    });
+})();
+</script>
+{% endif %}
+
+{% if is_v2 and header_show_contacts and (site_contacts.phones or site_contacts.phone or site_contacts.tg or site_contacts.instagram) %}
+<div class="v2-catalog-backdrop v2-contacts-backdrop" id="v2ContactsBackdrop" aria-hidden="true"></div>
+<aside class="v2-contacts-drawer" id="v2ContactsDrawer" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="v2-drawer-header">
+        <span class="v2-drawer-title">
+            📞 <span data-ru="Контакты" data-uk="Контакти">Контакти</span>
+        </span>
+        <button class="v2-drawer-close" id="v2ContactsClose" type="button" aria-label="Закрити">✕</button>
+    </div>
+    <div class="v2-contacts-drawer-body">
+        {% if site_contacts.phones %}
+            {% for p in site_contacts.phones %}
+            <div class="contacts-row">
+                <div class="contacts-row-info">
+                    {% if p.name %}<span class="contacts-label">{{ p.name }}</span>{% endif %}
+                    <a href="tel:{{ p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="contacts-phone">{{ p.phone }}</a>
+                </div>
+                <a href="viber://chat?number=%2B{{ (p.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
+            </div>
+            {% endfor %}
+        {% elif site_contacts.phone %}
+            <div class="contacts-row">
+                <div class="contacts-row-info">
+                    <a href="tel:{{ site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}" class="contacts-phone">{{ site_contacts.phone }}</a>
+                </div>
+                <a href="viber://chat?number=%2B{{ (site_contacts.phone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') | replace('+', '')) }}" class="hdr-viber-btn" aria-label="Viber" title="Viber">💬</a>
+            </div>
+        {% endif %}
+        {% if site_contacts.tg %}
+        <a href="{{ site_contacts.tg }}" class="contacts-social-link" target="_blank" rel="noopener">
+            <span>💬</span> Telegram
+        </a>
+        {% endif %}
+        {% if site_contacts.instagram %}
+        <a href="{{ site_contacts.instagram }}" class="contacts-social-link" target="_blank" rel="noopener">
+            <span>📸</span> Instagram
+        </a>
+        {% endif %}
+        {% if site_contacts.address %}
+        <div class="contacts-info-row">📍 {{ site_contacts.address }}</div>
+        {% endif %}
+        {% if site_contacts.schedule %}
+        <div class="contacts-info-row">🕐 {{ site_contacts.schedule }}</div>
+        {% endif %}
+    </div>
+</aside>
+<script>
+(function(){
+    var drawer   = document.getElementById('v2ContactsDrawer');
+    var backdrop = document.getElementById('v2ContactsBackdrop');
+    var openBtn  = document.getElementById('v2ContactsOpen');
+    var closeBtn = document.getElementById('v2ContactsClose');
+    if (!drawer) return;
+    function openContacts() {
+        drawer.classList.add('is-open');
+        if (backdrop) backdrop.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        drawer.setAttribute('aria-hidden', 'false');
+    }
+    function closeContacts() {
+        drawer.classList.remove('is-open');
+        if (backdrop) backdrop.classList.remove('is-open');
+        document.body.style.overflow = '';
+        drawer.setAttribute('aria-hidden', 'true');
+    }
+    if (openBtn)  openBtn.addEventListener('click', openContacts);
+    if (closeBtn) closeBtn.addEventListener('click', closeContacts);
+    if (backdrop) backdrop.addEventListener('click', closeContacts);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeContacts(); });
+})();
+</script>
+{% endif %}
 </body>
 </html>

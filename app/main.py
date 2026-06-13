@@ -15268,6 +15268,43 @@ async def site_v2_product(request: Request, product_id: int):
     _brands_raw = await db.v2_list_brands_by_category(raw["category_id"])
     v2_brands = [{"name": b["name"], "slug": make_slug(b["name"])} for b in _brands_raw]
 
+    # Групова ієрархія для drawer каталогу на сторінці товару
+    _all_rows = await db.v2_list_active_products_for_site()
+    _grp_map_p: dict = {}
+    for _p in _all_rows:
+        _gid = _p["group_id"]
+        if _gid is None:
+            continue
+        if _gid not in _grp_map_p:
+            _grp_map_p[_gid] = {
+                "id": _gid,
+                "slug": _p["group_slug"],
+                "name_uk": _p["group_name_uk"] or _p["group_name_ru"] or _p["group_slug"],
+                "name_ru": _p["group_name_ru"] or _p["group_name_uk"] or _p["group_slug"],
+                "emoji": _p["group_emoji"] or "\U0001f4e6",
+                "product_count": 0,
+                "categories": {},
+            }
+        _grp_map_p[_gid]["product_count"] += 1
+        _cid = _p["category_id"]
+        if _cid not in _grp_map_p[_gid]["categories"]:
+            _grp_map_p[_gid]["categories"][_cid] = {
+                "key": _p["category_slug"],
+                "name_uk": _p["category_name_uk"] or _p["category_name_ru"] or _p["category_slug"],
+                "name_ru": _p["category_name_ru"] or _p["category_name_uk"] or _p["category_slug"],
+                "emoji": _p["category_emoji"] or "\U0001f4e6",
+                "filter_value": _p["category_slug"],
+                "product_count": 0,
+            }
+        _grp_map_p[_gid]["categories"][_cid]["product_count"] += 1
+    category_groups_for_product: list = []
+    for _g in _grp_map_p.values():
+        _cats = [c for c in _g["categories"].values() if c["product_count"] > 0]
+        if not _cats:
+            continue
+        _g["categories"] = _cats
+        category_groups_for_product.append(_g)
+
     # Адаптований product-dict для product.html
     product = {
         "id": raw["id"],
@@ -15344,6 +15381,9 @@ async def site_v2_product(request: Request, product_id: int):
             "dyn_options": dyn_options,
             "v2_brands": v2_brands,
             "product_header_text": product_header_text,
+            "category_groups": category_groups_for_product,
+            "current_category": raw["category_slug"],
+            "products_anchor": "#products",
         },
     )
 
