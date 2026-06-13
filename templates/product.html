@@ -41,6 +41,9 @@
                 <span class="logo-badge">T</span>
                 <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
             </a>
+            {% if product_header_text %}
+            <p class="v2-product-header-subtitle">{{ product_header_text }}</p>
+            {% endif %}
             <div class="v2-header-top-right">
                 {% if header_show_cart %}
                 <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
@@ -49,7 +52,7 @@
         </div>
 
         <div class="v2-product-header-bar">
-            <a href="{{ catalog_base or '/v2' }}" class="v2-product-header-btn">☰ <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span></a>
+            <a href="{{ catalog_base or '/v2' }}#products" class="v2-product-header-btn">☰ <span data-ru="Каталог товарів" data-uk="Каталог товарів">Каталог товарів</span></a>
             {% if header_show_contacts %}
             <a href="{{ catalog_base or '/v2' }}#contacts" class="v2-product-header-btn">📞 <span data-ru="Контакты" data-uk="Контакти">Контакти</span></a>
             {% endif %}
@@ -325,7 +328,7 @@
             <span data-ru="Фільтри" data-uk="Фільтри">Фільтри</span>
             <svg class="v2-pf-chevron" width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
         </button>
-        <div id="v2PFPanel" class="v2-pf-panel" hidden>
+        <div id="v2PFPanel" class="v2-pf-panel">
             {% if v2_brands %}
             <div class="v2-pf-group">
                 <div class="v2-pf-label" data-ru="Бренд" data-uk="Бренд">Бренд</div>
@@ -548,11 +551,18 @@
         var pfPanel  = document.getElementById('v2PFPanel');
         if (!pfToggle || !pfPanel) return;
         pfToggle.addEventListener('click', function(){
-            var open = !pfPanel.hidden;
-            pfPanel.hidden = open;
-            pfToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
-            var chev = pfToggle.querySelector('.v2-pf-chevron');
-            if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+            var open = pfPanel.classList.contains('v2-pf-open');
+            if (open) {
+                pfPanel.classList.remove('v2-pf-open');
+                pfToggle.setAttribute('aria-expanded', 'false');
+                var chev = pfToggle.querySelector('.v2-pf-chevron');
+                if (chev) chev.style.transform = '';
+            } else {
+                pfPanel.classList.add('v2-pf-open');
+                pfToggle.setAttribute('aria-expanded', 'true');
+                var chev = pfToggle.querySelector('.v2-pf-chevron');
+                if (chev) chev.style.transform = 'rotate(180deg)';
+            }
         });
     })();
     // Lang globe dropdown (mobile)

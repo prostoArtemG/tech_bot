@@ -1523,6 +1523,11 @@ class V2ProductSpecsState(StatesGroup):
     waiting_for_bulk_text = State()  # очікування вставки списком
 
 
+class V2ProductHeaderState(StatesGroup):
+    menu              = State()
+    waiting_for_field = State()
+
+
 class V2ProductListState(StatesGroup):
     browsing  = State()  # глобальний список з пагінацією
     searching = State()  # очікуємо текст пошуку
@@ -1939,6 +1944,7 @@ v2_site_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📞 Контакти сайту")],
         [KeyboardButton(text="🧢 Шапка сайту")],
+        [KeyboardButton(text="🧯 Шапка сторінки товару")],
         [KeyboardButton(text="🖼 Банер сайту"), KeyboardButton(text="🖼 Банери")],
         [KeyboardButton(text="📣 Промо-плашка")],
         [KeyboardButton(text="👀 Перегляд товару на сайті")],
@@ -1948,6 +1954,16 @@ v2_site_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📊 Аналітика сайту")],
         [KeyboardButton(text="📋 Заявки/Покупці")],
         [KeyboardButton(text="🔎 SEO сайту")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
+)
+
+
+v2_product_header_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="✏️ Текст UA"), KeyboardButton(text="✏️ Текст RU")],
+        [KeyboardButton(text="🧹 Очистити")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True,
@@ -7923,6 +7939,10 @@ async def site_v2_menu_handler(message: Message, state: FSMContext):
         await message.answer("Налаштування шапки сайту:", reply_markup=header_kb)
         return
 
+    if text == "🧾 Шапка сторінки товару":
+        await _show_v2_product_header_menu(message, state)
+        return
+
     if text == "🖼 Банер сайту":
         await state.set_state(V2SiteState.submenu)
         await message.answer("Банер сайту:", reply_markup=site_banner_kb)
@@ -8015,6 +8035,69 @@ async def site_v2_catalog_handler(message: Message, state: FSMContext):
         return
 
     await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+# ── V2 product page header text ──────────────────────────────────────────────
+
+async def _show_v2_product_header_menu(message: Message, state: FSMContext):
+    uk = await db.get_setting("product_header_text_uk") or "(порожньо)"
+    ru = await db.get_setting("product_header_text_ru") or "(порожньо)"
+    await state.set_state(V2ProductHeaderState.menu)
+    await message.answer(
+        f"🧾 Шапка сторінки товару\n\nUA: {uk}\nRU: {ru}",
+        reply_markup=v2_product_header_kb,
+    )
+
+
+@router.message(V2ProductHeaderState.menu)
+async def v2_product_header_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+
+    if text == "⬅️ Назад":
+        await _show_v2_site_menu(message, state)
+        return
+
+    if text == "🧹 Очистити":
+        await db.set_setting("product_header_text_uk", "")
+        await db.set_setting("product_header_text_ru", "")
+        await _show_v2_product_header_menu(message, state)
+        return
+
+    if text in ("✏️ Текст UA", "✏️ Текст RU"):
+        key = "product_header_text_uk" if text == "✏️ Текст UA" else "product_header_text_ru"
+        lang = "UA" if text == "✏️ Текст UA" else "RU"
+        await state.update_data(setting_key=key)
+        await state.set_state(V2ProductHeaderState.waiting_for_field)
+        await message.answer(
+            f"Введіть текст шапки ({lang}):",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.", reply_markup=v2_product_header_kb)
+
+
+@router.message(V2ProductHeaderState.waiting_for_field)
+async def v2_product_header_field_save(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    if _is_cancel_text(message):
+        await _show_v2_product_header_menu(message, state)
+        return
+    data = await state.get_data()
+    key = data.get("setting_key")
+    if not key:
+        await state.clear()
+        await message.answer("Помилка стану.", reply_markup=v2_product_header_kb)
+        return
+    value = (message.text or "").strip()
+    await db.set_setting(key, value)
+    await _show_v2_product_header_menu(message, state)
 
 
 @router.message(V2SiteState.submenu, lambda m: (m.text or "").strip() == "⬅️ Назад")
@@ -15219,6 +15302,10 @@ async def site_v2_product(request: Request, product_id: int):
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
+    _lang_raw = await db.get_setting("site_language") or "uk"
+    product_header_text = await db.get_setting(
+        "product_header_text_uk" if _lang_raw == "uk" else "product_header_text_ru"
+    ) or ""
     seo_product = {
         "meta_title": raw.get("seo_title") or f"{raw['brand_name']} {raw['model']} — {site_title}",
         "meta_description": raw.get("seo_description") or "",
@@ -15256,6 +15343,7 @@ async def site_v2_product(request: Request, product_id: int):
             "dyn_attrs": dyn_attrs,
             "dyn_options": dyn_options,
             "v2_brands": v2_brands,
+            "product_header_text": product_header_text,
         },
     )
 
