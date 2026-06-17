@@ -6,3 +6,4 @@ uvicorn
 jinja2
 python-multipart
 cloudinary
+Pillow

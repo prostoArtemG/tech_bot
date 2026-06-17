@@ -4,6 +4,7 @@ import json
 import math
 import os
 import re
+from pathlib import Path
 from datetime import datetime
 from urllib.parse import quote
 try:
@@ -1529,6 +1530,7 @@ class V2SiteState(StatesGroup):
 class V2SiteHeaderState(StatesGroup):
     menu               = State()
     waiting_logo_photo = State()
+    waiting_for_field  = State()
 
 
 class V2ProductSpecsState(StatesGroup):
@@ -1948,6 +1950,8 @@ header_kb = ReplyKeyboardMarkup(
 
 v2_header_kb = ReplyKeyboardMarkup(
     keyboard=[
+        [KeyboardButton(text="📝 Название сайта")],
+        [KeyboardButton(text="🏷 Подзаголовок")],
         [KeyboardButton(text="🖼 Логотип")],
         [KeyboardButton(text="🧹 Убрать логотип")],
         [KeyboardButton(text="⬅️ Назад")],
@@ -3127,6 +3131,31 @@ async def site_contact_field_start(message: Message, state: FSMContext):
 
 @router.message(lambda m: m.text in {"📝 Название сайта", "🏷 Подзаголовок"})
 async def site_header_field_start(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state in {
+        V2SiteHeaderState.menu.state,
+        V2SiteHeaderState.waiting_logo_photo.state,
+        V2SiteHeaderState.waiting_for_field.state,
+    }:
+        field_map_v2 = {
+            "📝 Название сайта": ("site_v2_title", "Введіть назву сайту для V2:"),
+            "🏷 Подзаголовок": ("site_v2_subtitle", "Введіть підзаголовок для V2:"),
+        }
+        key, prompt = field_map_v2.get(message.text, (None, None))
+        if not key:
+            await message.answer("Неизвестное поле", reply_markup=v2_header_kb)
+            return
+        await state.update_data(setting_key=key)
+        await state.set_state(V2SiteHeaderState.waiting_for_field)
+        await message.answer(
+            prompt,
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
     field_map = {
         "📝 Название сайта": ("site_title", "Введите название сайта:"),
         "🏷 Подзаголовок": ("site_subtitle", "Введите подзаголовок сайта:"),
@@ -8248,11 +8277,15 @@ async def _show_v2_site_menu(message: Message, state: FSMContext):
 
 
 async def _show_v2_site_header_menu(message: Message, state: FSMContext):
+    title = (await db.get_setting("site_v2_title") or "Technovlada Aqua").strip()
+    subtitle = (await db.get_setting("site_v2_subtitle") or "Техніка для комфортного життя").strip()
     logo_url = (await db.get_setting("site_v2_logo_url") or "").strip()
     logo_line = logo_url if logo_url else "(використовується стандартний logo-badge T)"
     await state.set_state(V2SiteHeaderState.menu)
     await message.answer(
         "🧢 <b>Шапка сайту v2</b>\n\n"
+        f"Назва: <b>{html.escape(title)}</b>\n"
+        f"Підзаголовок: <b>{html.escape(subtitle)}</b>\n\n"
         f"Поточний логотип:\n{logo_line}\n\n"
         "Оберіть дію:",
         parse_mode="HTML",
@@ -8396,7 +8429,8 @@ async def v2_site_header_menu_handler(message: Message, state: FSMContext):
         await state.set_state(V2SiteHeaderState.waiting_logo_photo)
         await message.answer(
             "Надішліть фото логотипа для V2.\n"
-            "Після збереження воно буде показано у шапці /v2 та /v2/product.",
+            "Після збереження воно буде показано у шапці /v2 та /v2/product.\n"
+            "Підтримка: фото, а також PNG/WebP як файл (для прозорого фону).",
             reply_markup=ReplyKeyboardMarkup(
                 keyboard=[[KeyboardButton(text="⬅️ Назад")]],
                 resize_keyboard=True,
@@ -8413,6 +8447,30 @@ async def v2_site_header_menu_handler(message: Message, state: FSMContext):
     await message.answer("⚠️ Оберіть дію зі списку.", reply_markup=v2_header_kb)
 
 
+@router.message(V2SiteHeaderState.waiting_for_field)
+async def v2_site_header_field_save(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    if _is_cancel_text(message):
+        await _show_v2_site_header_menu(message, state)
+        return
+
+    data = await state.get_data()
+    key = data.get("setting_key")
+    if not key:
+        await _show_v2_site_header_menu(message, state)
+        return
+
+    value = (message.text or "").strip()
+    if not value:
+        await message.answer("⚠️ Значення не може бути порожнім.")
+        return
+
+    await db.set_setting(key, value)
+    await message.answer("✅ Збережено")
+    await _show_v2_site_header_menu(message, state)
+
+
 @router.message(V2SiteHeaderState.waiting_logo_photo)
 async def v2_site_header_logo_upload_handler(message: Message, state: FSMContext):
     if not await require_admin(message):
@@ -8422,13 +8480,26 @@ async def v2_site_header_logo_upload_handler(message: Message, state: FSMContext
         await _show_v2_site_header_menu(message, state)
         return
 
-    if not message.photo:
-        await message.answer("⚠️ Надішліть фото (не файл) або натисніть ⬅️ Назад.")
-        return
-
     try:
-        file_id = message.photo[-1].file_id
-        url = await save_telegram_photo(telegram_bot, file_id)
+        file_id = None
+        file_name = ""
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            file_name = "logo.jpg"
+        elif message.document and (message.document.mime_type or "").lower() in {
+            "image/png",
+            "image/webp",
+            "image/jpeg",
+            "image/jpg",
+        }:
+            file_id = message.document.file_id
+            file_name = message.document.file_name or "logo"
+
+        if not file_id:
+            await message.answer("⚠️ Надішліть фото або файл PNG/WebP/JPG, або натисніть ⬅️ Назад.")
+            return
+
+        url = await save_telegram_logo(telegram_bot, file_id, file_name)
         await db.set_setting("site_v2_logo_url", url)
     except Exception as e:
         print(f"[v2_site_logo_upload] {e}")
@@ -15966,6 +16037,8 @@ async def site_v2_home(
     }
     site_title = await db.get_setting("site_title") or "Technovlada"
     site_subtitle = await db.get_setting("site_subtitle") or "\u0411\u044b\u0442\u043e\u0432\u0430\u044f \u0442\u0435\u0445\u043d\u0438\u043a\u0430 \u043f\u043e\u0434 \u0437\u0430\u043a\u0430\u0437 \u0438 \u0432 \u043d\u0430\u043b\u0438\u0447\u0438\u0438"
+    v2_header_title = (await db.get_setting("site_v2_title") or "Technovlada Aqua").strip()
+    v2_header_subtitle = (await db.get_setting("site_v2_subtitle") or "Техніка для комфортного життя").strip()
     site_v2_logo_url = (await db.get_setting("site_v2_logo_url") or "").strip()
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
@@ -16020,6 +16093,8 @@ async def site_v2_home(
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
+            "v2_header_title": v2_header_title,
+            "v2_header_subtitle": v2_header_subtitle,
             "site_v2_logo_url": site_v2_logo_url,
             "header_show_cart": header_show_cart,
             "header_show_contacts": header_show_contacts,
@@ -16190,6 +16265,8 @@ async def site_v2_product(request: Request, product_id: int):
     }
     site_title = await db.get_setting("site_title") or "Technovlada"
     site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+    v2_header_title = (await db.get_setting("site_v2_title") or "Technovlada Aqua").strip()
+    v2_header_subtitle = (await db.get_setting("site_v2_subtitle") or "Техніка для комфортного життя").strip()
     site_v2_logo_url = (await db.get_setting("site_v2_logo_url") or "").strip()
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
@@ -16222,6 +16299,8 @@ async def site_v2_product(request: Request, product_id: int):
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
+            "v2_header_title": v2_header_title,
+            "v2_header_subtitle": v2_header_subtitle,
             "site_v2_logo_url": site_v2_logo_url,
             "header_show_cart": header_show_cart,
             "header_show_contacts": header_show_contacts,
@@ -16404,6 +16483,74 @@ async def save_telegram_photo(bot: Bot, file_id: str) -> str:
                 os.remove(local_filename)
         except Exception as e:
             print(f"[save_telegram_photo] cleanup failed: {e}")
+
+
+def _pick_image_ext(name: str) -> str:
+    ext = (Path(name or "").suffix or "").lower()
+    if ext in {".png", ".webp", ".jpg", ".jpeg"}:
+        return ext
+    return ".jpg"
+
+
+async def save_telegram_logo(bot: Bot, file_id: str, file_name: str = "logo.jpg") -> str:
+    """Upload V2 header logo to dedicated Cloudinary folder.
+    Attempts to trim black margins and, for very wide images, keeps left square symbol.
+    """
+    tg_file = await bot.get_file(file_id)
+    tg_path = tg_file.file_path or ""
+    ext = _pick_image_ext(file_name or tg_path)
+
+    src_path = f"/tmp/{uuid4()}{ext}"
+    prepared_path = src_path
+    extra_paths: list[str] = []
+
+    try:
+        await bot.download_file(tg_path, src_path)
+
+        try:
+            from PIL import Image, ImageChops
+
+            with Image.open(src_path) as im:
+                rgba = im.convert("RGBA")
+                rgb = rgba.convert("RGB")
+                alpha = rgba.getchannel("A")
+
+                # Detect non-black/non-transparent content to remove black padding.
+                lum = rgb.convert("L")
+                lum_mask = lum.point(lambda p: 255 if p > 18 else 0)
+                alpha_mask = alpha.point(lambda a: 255 if a > 10 else 0)
+                content_mask = ImageChops.lighter(lum_mask, alpha_mask)
+                bbox = content_mask.getbbox()
+                if bbox:
+                    rgba = rgba.crop(bbox)
+
+                w, h = rgba.size
+                if h > 0 and (w / h) > 1.8:
+                    # Wide banner-like source: keep left square (icon zone) for avatar-like header logo.
+                    side = min(h, w)
+                    rgba = rgba.crop((0, 0, side, side))
+
+                rgba.thumbnail((560, 560), Image.LANCZOS)
+                out_path = f"/tmp/{uuid4()}.png"
+                rgba.save(out_path, format="PNG", optimize=True)
+                prepared_path = out_path
+                extra_paths.append(out_path)
+        except Exception as e:
+            print(f"[save_telegram_logo][prepare] {e}")
+
+        result = cloudinary.uploader.upload(
+            prepared_path,
+            folder="tech_bot_v2_logos",
+            resource_type="image",
+        )
+        return result["secure_url"]
+    finally:
+        for p in [src_path, *extra_paths]:
+            try:
+                if p and os.path.exists(p):
+                    os.remove(p)
+            except Exception as e:
+                print(f"[save_telegram_logo] cleanup failed: {e}")
 
 async def main():
     # Запускаем uvicorn; startup-хук поднимет бота (webhook или polling).
