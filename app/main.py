@@ -8441,7 +8441,14 @@ async def v2_site_header_menu_handler(message: Message, state: FSMContext):
 
     if text == "🧹 Убрать логотип":
         await db.set_setting("site_v2_logo_url", "")
-        await message.answer("✅ Логотип V2 прибрано. Використовується стандартний значок T.")
+        current_logo = (await db.get_setting("site_v2_logo_url") or "").strip()
+        logo_value = current_logo or '""'
+        shown_logo = "стандартний зелений квадрат T" if not current_logo else "img з site_v2_logo_url"
+        await message.answer(
+            "✅ Логотип V2 прибрано.\n"
+            f"site_v2_logo_url: {logo_value}\n"
+            f"Поточне відображення: {shown_logo}"
+        )
         await _show_v2_site_header_menu(message, state)
         return
 
@@ -8457,6 +8464,22 @@ async def v2_site_header_menu_handler(message: Message, state: FSMContext):
         return
 
     await message.answer("⚠️ Оберіть дію зі списку.", reply_markup=v2_header_kb)
+
+
+@router.message(Command("v2_clear_logo"))
+async def v2_clear_logo_command(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    await db.set_setting("site_v2_logo_url", "")
+    current_logo = (await db.get_setting("site_v2_logo_url") or "").strip()
+    logo_value = current_logo or '""'
+    shown_logo = "стандартний зелений квадрат T" if not current_logo else "img з site_v2_logo_url"
+    await message.answer(
+        "✅ site_v2_logo_url очищено.\n"
+        f"site_v2_logo_url: {logo_value}\n"
+        f"Поточне відображення: {shown_logo}"
+    )
+    await _show_v2_site_header_menu(message, state)
 
 
 @router.message(V2SiteHeaderState.waiting_for_field)
