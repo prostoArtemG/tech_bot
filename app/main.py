@@ -1953,6 +1953,7 @@ v2_header_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="📝 Название сайта")],
         [KeyboardButton(text="🏷 Подзаголовок")],
         [KeyboardButton(text="🖼 Логотип")],
+        [KeyboardButton(text="🧪 Применить тестовый логотип")],
         [KeyboardButton(text="🧹 Убрать логотип")],
         [KeyboardButton(text="⬅️ Назад")],
     ],
@@ -8441,6 +8442,17 @@ async def v2_site_header_menu_handler(message: Message, state: FSMContext):
     if text == "🧹 Убрать логотип":
         await db.set_setting("site_v2_logo_url", "")
         await message.answer("✅ Логотип V2 прибрано. Використовується стандартний значок T.")
+        await _show_v2_site_header_menu(message, state)
+        return
+
+    if text == "🧪 Применить тестовый логотип":
+        await db.set_setting(
+            "site_v2_logo_url",
+            "https://res.cloudinary.com/dvp3v0yfn/image/upload/v1781729790/tech_bot_v2_logos/v2_test_logo_symbol.png",
+        )
+        await db.set_setting("site_v2_title", "Technovlada Aqua")
+        await db.set_setting("site_v2_subtitle", "Техніка для комфортного життя")
+        await message.answer("✅ Тестовый логотип применён")
         await _show_v2_site_header_menu(message, state)
         return
 
