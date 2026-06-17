@@ -49,8 +49,15 @@
     <div class="v2-header-inner">
         <div class="v2-header-top">
             <a href="/v2" class="site-logo v2-header-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                {% if site_v2_logo_url %}
+                <img src="{{ site_v2_logo_url }}" alt="{{ site_title or 'Technovlada' }}" class="v2-logo-image">
+                {% else %}
                 <span class="logo-badge">T</span>
-                <span class="logo-text">{{ site_title or 'Technovlada' }}</span>
+                {% endif %}
+                <span class="v2-logo-copy">
+                    <span class="logo-text">Technovlada Aqua</span>
+                    <span class="v2-header-subtitle" data-ru="Бытовая техника под заказ и в наличии" data-uk="Побутова техніка під замовлення та в наявності">{{ site_subtitle or 'Бытовая техника под заказ и в наличии' }}</span>
+                </span>
             </a>
             <div class="v2-header-top-right">
                 {% if header_show_cart %}

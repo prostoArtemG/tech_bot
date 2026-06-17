@@ -3588,19 +3588,38 @@ button:hover {
     width: 100%;
 }
 .site-header--v2 .v2-header-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     min-width: 0;
     margin-bottom: 0;
 }
+.site-header--v2 .v2-logo-image {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    border-radius: 12px;
+    flex-shrink: 0;
+    background: rgba(255,255,255,.08);
+}
+.site-header--v2 .v2-logo-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
 .site-header--v2 .v2-header-logo .logo-text {
+    display: block;
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
     line-height: 1.12;
 }
 .site-header--v2 .v2-header-subtitle {
-    margin: 0 0 0 60px;
+    margin: 0;
+    display: block;
     color: #d1d5db;
-    font-size: 15px;
+    font-size: 13px;
     line-height: 1.35;
 }
 .site-header--v2 .v2-header-cart-row {
@@ -3815,6 +3834,11 @@ button:hover {
     .site-header--v2 .v2-header-logo {
         gap: 10px;
     }
+    .site-header--v2 .v2-logo-image {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+    }
     .site-header--v2 .v2-header-logo .logo-badge {
         width: 40px;
         height: 40px;
@@ -3822,7 +3846,10 @@ button:hover {
         border-radius: 10px;
     }
     .site-header--v2 .v2-header-logo .logo-text {
-        font-size: 20px;
+        font-size: 18px;
+    }
+    .site-header--v2 .v2-header-subtitle {
+        font-size: 12px;
     }
     .v2-header-top-right .header-pill {
         height: 38px !important;

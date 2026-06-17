@@ -1526,6 +1526,11 @@ class V2SiteState(StatesGroup):
     waiting_for_preview_query = State()
 
 
+class V2SiteHeaderState(StatesGroup):
+    menu               = State()
+    waiting_logo_photo = State()
+
+
 class V2ProductSpecsState(StatesGroup):
     menu              = State()  # меню характеристик
     waiting_for_bulk_text = State()  # очікування вставки списком
@@ -1938,6 +1943,16 @@ header_kb = ReplyKeyboardMarkup(
         [KeyboardButton(text="⬅️ Назад")],
     ],
     resize_keyboard=True
+)
+
+
+v2_header_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🖼 Логотип")],
+        [KeyboardButton(text="🧹 Убрать логотип")],
+        [KeyboardButton(text="⬅️ Назад")],
+    ],
+    resize_keyboard=True,
 )
 
 
@@ -8232,6 +8247,19 @@ async def _show_v2_site_menu(message: Message, state: FSMContext):
     )
 
 
+async def _show_v2_site_header_menu(message: Message, state: FSMContext):
+    logo_url = (await db.get_setting("site_v2_logo_url") or "").strip()
+    logo_line = logo_url if logo_url else "(використовується стандартний logo-badge T)"
+    await state.set_state(V2SiteHeaderState.menu)
+    await message.answer(
+        "🧢 <b>Шапка сайту v2</b>\n\n"
+        f"Поточний логотип:\n{logo_line}\n\n"
+        "Оберіть дію:",
+        parse_mode="HTML",
+        reply_markup=v2_header_kb,
+    )
+
+
 async def _show_v2_site_catalog_menu(message: Message, state: FSMContext):
     await state.set_state(V2SiteState.catalog)
     await message.answer(
@@ -8293,8 +8321,7 @@ async def site_v2_menu_handler(message: Message, state: FSMContext):
         return
 
     if text == "🧢 Шапка сайту":
-        await state.set_state(V2SiteState.submenu)
-        await message.answer("Налаштування шапки сайту:", reply_markup=header_kb)
+        await _show_v2_site_header_menu(message, state)
         return
 
     if text == "🧯 Шапка сторінки товару":
@@ -8353,6 +8380,63 @@ async def site_v2_menu_handler(message: Message, state: FSMContext):
         return
 
     await message.answer("⚠️ Оберіть дію зі списку.")
+
+
+@router.message(V2SiteHeaderState.menu)
+async def v2_site_header_menu_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+
+    if text == "⬅️ Назад":
+        await _show_v2_site_menu(message, state)
+        return
+
+    if text == "🖼 Логотип":
+        await state.set_state(V2SiteHeaderState.waiting_logo_photo)
+        await message.answer(
+            "Надішліть фото логотипа для V2.\n"
+            "Після збереження воно буде показано у шапці /v2 та /v2/product.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "🧹 Убрать логотип":
+        await db.set_setting("site_v2_logo_url", "")
+        await message.answer("✅ Логотип V2 прибрано. Використовується стандартний значок T.")
+        await _show_v2_site_header_menu(message, state)
+        return
+
+    await message.answer("⚠️ Оберіть дію зі списку.", reply_markup=v2_header_kb)
+
+
+@router.message(V2SiteHeaderState.waiting_logo_photo)
+async def v2_site_header_logo_upload_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+
+    if (message.text or "").strip() == "⬅️ Назад":
+        await _show_v2_site_header_menu(message, state)
+        return
+
+    if not message.photo:
+        await message.answer("⚠️ Надішліть фото (не файл) або натисніть ⬅️ Назад.")
+        return
+
+    try:
+        file_id = message.photo[-1].file_id
+        url = await save_telegram_photo(telegram_bot, file_id)
+        await db.set_setting("site_v2_logo_url", url)
+    except Exception as e:
+        print(f"[v2_site_logo_upload] {e}")
+        await message.answer("⚠️ Не вдалося завантажити логотип. Спробуйте ще раз.")
+        return
+
+    await message.answer("✅ Логотип V2 збережено.")
+    await _show_v2_site_header_menu(message, state)
 
 
 @router.message(V2SiteState.catalog)
@@ -15882,6 +15966,7 @@ async def site_v2_home(
     }
     site_title = await db.get_setting("site_title") or "Technovlada"
     site_subtitle = await db.get_setting("site_subtitle") or "\u0411\u044b\u0442\u043e\u0432\u0430\u044f \u0442\u0435\u0445\u043d\u0438\u043a\u0430 \u043f\u043e\u0434 \u0437\u0430\u043a\u0430\u0437 \u0438 \u0432 \u043d\u0430\u043b\u0438\u0447\u0438\u0438"
+    site_v2_logo_url = (await db.get_setting("site_v2_logo_url") or "").strip()
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
@@ -15935,6 +16020,7 @@ async def site_v2_home(
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
+            "site_v2_logo_url": site_v2_logo_url,
             "header_show_cart": header_show_cart,
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
@@ -16104,6 +16190,7 @@ async def site_v2_product(request: Request, product_id: int):
     }
     site_title = await db.get_setting("site_title") or "Technovlada"
     site_subtitle = await db.get_setting("site_subtitle") or "Бытовая техника под заказ и в наличии"
+    site_v2_logo_url = (await db.get_setting("site_v2_logo_url") or "").strip()
     header_show_cart = (await db.get_setting("header_show_cart") or "true") == "true"
     header_show_contacts = (await db.get_setting("header_show_contacts") or "true") == "true"
     header_show_language = (await db.get_setting("header_show_language") or "true") == "true"
@@ -16135,6 +16222,7 @@ async def site_v2_product(request: Request, product_id: int):
             "site_contacts": site_contacts,
             "site_title": site_title,
             "site_subtitle": site_subtitle,
+            "site_v2_logo_url": site_v2_logo_url,
             "header_show_cart": header_show_cart,
             "header_show_contacts": header_show_contacts,
             "header_show_language": header_show_language,
