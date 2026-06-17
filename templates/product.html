@@ -47,28 +47,30 @@
 {% if is_v2 %}
 <header class="site-header site-header--v2 site-header--v2-compact">
     <div class="v2-header-inner">
-        <div class="v2-header-top">
-            <a href="/v2" class="site-logo v2-header-logo" aria-label="{{ site_title or 'Technovlada' }}">
-                {% if site_v2_logo_url %}
-                <img src="{{ site_v2_logo_url }}" alt="{{ site_title or 'Technovlada' }}" class="v2-logo-image">
-                {% else %}
-                <span class="logo-badge">T</span>
-                {% endif %}
-                <span class="v2-logo-copy">
-                    <span class="logo-text">{{ v2_header_title or 'Technovlada Aqua' }}</span>
-                    <span class="v2-header-subtitle" data-ru="Техника для комфортной жизни" data-uk="Техніка для комфортного життя">{{ v2_header_subtitle or 'Техніка для комфортного життя' }}</span>
-                </span>
-            </a>
-            <div class="v2-header-top-right">
-                {% if header_show_cart %}
-                <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
-                {% endif %}
+        <div class="v2-header-main">
+            <div class="v2-header-top">
+                <a href="/v2" class="site-logo v2-header-logo" aria-label="{{ site_title or 'Technovlada' }}">
+                    {% if site_v2_logo_url %}
+                    <img src="{{ site_v2_logo_url }}" alt="{{ site_title or 'Technovlada' }}" class="v2-logo-image">
+                    {% else %}
+                    <span class="logo-badge">T</span>
+                    {% endif %}
+                    <span class="v2-logo-copy">
+                        <span class="logo-text">{{ v2_header_title or 'Technovlada Aqua' }}</span>
+                        <span class="v2-header-subtitle" data-ru="Техника для комфортной жизни" data-uk="Техніка для комфортного життя">{{ v2_header_subtitle or 'Техніка для комфортного життя' }}</span>
+                    </span>
+                </a>
+                <div class="v2-header-top-right">
+                    {% if header_show_cart %}
+                    <a href="/cart" class="header-pill cart-pill">🛒 <span id="cartCount">0</span></a>
+                    {% endif %}
+                </div>
             </div>
-        </div>
 
-        {% if product_header_text %}
-        <div class="v2-product-header-note">{{ product_header_text }}</div>
-        {% endif %}
+            {% if product_header_text %}
+            <div class="v2-product-header-note">{{ product_header_text }}</div>
+            {% endif %}
+        </div>
 
         <div class="v2-product-header-bar">
             {% if category_groups %}
@@ -829,6 +831,30 @@
     if (backdrop) backdrop.addEventListener('click', closeContacts);
     document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeContacts(); });
 })();
+</script>
+{% endif %}
+
+{% if is_v2 %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var header = document.querySelector(".site-header--v2-compact");
+    if (!header) return;
+
+    var lastY = window.scrollY;
+
+    function updateHeader() {
+        var y = window.scrollY;
+        if (y > 80 && y > lastY) {
+            header.classList.add("is-collapsed");
+        } else if (y < 40 || y < lastY) {
+            header.classList.remove("is-collapsed");
+        }
+        lastY = y;
+    }
+
+    window.addEventListener("scroll", updateHeader, { passive: true });
+    updateHeader();
+});
 </script>
 {% endif %}
 </body>
