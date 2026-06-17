@@ -3679,6 +3679,7 @@ button:hover {
     align-items: stretch;
     gap: 10px;
     width: 100%;
+    transition: margin .22s ease;
 }
 .v2-product-header-btn {
     flex: 1 1 0;
@@ -3712,16 +3713,33 @@ button:hover {
     position: sticky;
     top: 0;
     z-index: 1000;
-    transition: padding .2s ease, transform .2s ease;
+    transition:
+        padding .24s ease,
+        box-shadow .24s ease,
+        background .24s ease;
 }
 .site-header--v2-compact .v2-header-main {
-    display: block;
+    max-height: 140px;
+    opacity: 1;
+    transform: translateY(0);
+    overflow: hidden;
+    transition:
+        max-height .28s ease,
+        opacity .22s ease,
+        transform .22s ease,
+        margin .22s ease;
 }
 .site-header--v2-compact.is-collapsed .v2-header-main {
-    display: none;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-8px);
+    margin: 0;
+    pointer-events: none;
 }
 .site-header--v2-compact.is-collapsed {
-    padding: 8px 16px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
 }
 .site-header--v2-compact.is-collapsed .v2-product-header-bar {
     margin-top: 0;

@@ -840,19 +840,24 @@ document.addEventListener("DOMContentLoaded", function () {
     var header = document.querySelector(".site-header--v2-compact");
     if (!header) return;
 
-    var lastY = window.scrollY;
+    var ticking = false;
 
     function updateHeader() {
         var y = window.scrollY;
-        if (y > 80 && y > lastY) {
+        if (y > 120) {
             header.classList.add("is-collapsed");
-        } else if (y < 40 || y < lastY) {
+        } else if (y < 60) {
             header.classList.remove("is-collapsed");
         }
-        lastY = y;
+        ticking = false;
     }
 
-    window.addEventListener("scroll", updateHeader, { passive: true });
+    window.addEventListener("scroll", function () {
+        if (!ticking) {
+            requestAnimationFrame(updateHeader);
+            ticking = true;
+        }
+    }, { passive: true });
     updateHeader();
 });
 </script>
