@@ -3594,13 +3594,14 @@ button:hover {
     min-width: 0;
     margin-bottom: 0;
 }
-.site-header--v2 .v2-logo-image {
+.v2-site-logo {
     width: 56px;
     height: 56px;
+    min-width: 56px;
+    max-width: 56px;
     object-fit: contain;
     border-radius: 12px;
-    flex-shrink: 0;
-    background: rgba(255,255,255,.08);
+    display: block;
 }
 .site-header--v2 .v2-logo-copy {
     min-width: 0;
@@ -3864,9 +3865,11 @@ button:hover {
     .site-header--v2 .v2-header-logo {
         gap: 10px;
     }
-    .site-header--v2 .v2-logo-image {
+    .v2-site-logo {
         width: 48px;
         height: 48px;
+        min-width: 48px;
+        max-width: 48px;
         border-radius: 12px;
     }
     .site-header--v2 .v2-header-logo .logo-badge {
