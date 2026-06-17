@@ -1541,6 +1541,16 @@ class V2ProductListState(StatesGroup):
     searching = State()  # очікуємо текст пошуку
 
 
+class V2QuickAddProductState(StatesGroup):
+    choosing_group   = State()
+    choosing_category = State()
+    choosing_brand   = State()
+    waiting_new_brand = State()
+    waiting_model    = State()
+    waiting_price    = State()
+    collecting_photos = State()
+
+
 admin_menu_kb = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📦 Товары"), KeyboardButton(text="📋 Заказы")],
@@ -2020,6 +2030,7 @@ site_v2_settings_kb = ReplyKeyboardMarkup(
 # ── v2: глобальний список товарів ────────────────────────────────────────────
 v2_products_global_kb = ReplyKeyboardMarkup(
     keyboard=[
+        [KeyboardButton(text="➕ Додати товар")],
         [KeyboardButton(text="📋 Список товарів")],
         [KeyboardButton(text="⚪ Без фільтрів"), KeyboardButton(text="🟡 Частково заповнені"), KeyboardButton(text="✅ Готові")],
         [KeyboardButton(text="🔍 Пошук товару")],
@@ -8596,6 +8607,7 @@ async def _v2_show_global_product_list(
         nav_row.append(KeyboardButton(text="➡️ Наступна"))
     if nav_row:
         buttons.append(nav_row)
+    buttons.append([KeyboardButton(text="➕ Додати товар")])
     buttons.append([KeyboardButton(text="🔍 Пошук товару")])
     buttons.append([KeyboardButton(text="⬅️ Назад до меню")])
 
@@ -8673,6 +8685,10 @@ async def v2_product_list_browsing_handler(message: Message, state: FSMContext):
         )
         return
 
+    if text == "➕ Додати товар":
+        await _v2_quick_add_show_groups(message, state)
+        return
+
     # клік на товар — шукаємо id по лейблу кнопки
     for entry in pl_products:
         if text == entry.get("label"):
@@ -8710,6 +8726,397 @@ async def v2_product_list_search_handler(message: Message, state: FSMContext):
         return
 
     await _v2_show_global_product_list(message, state, page=1, status=None, q=text)
+
+
+async def _v2_quick_add_show_groups(message: Message, state: FSMContext):
+    groups = await db.v2_list_product_groups()
+    if not groups:
+        await state.set_state(V2ProductListState.browsing)
+        await message.answer(
+            "⚠️ Немає жодної групи товарів. Спочатку створіть групу та категорію.",
+            reply_markup=v2_products_global_kb,
+        )
+        return
+
+    buttons = []
+    for g in groups:
+        em = (g["emoji"] or "").strip()
+        name = (g["name_uk"] or g["name_ru"] or g["slug"] or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if label:
+            buttons.append([KeyboardButton(text=label)])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+
+    await state.update_data(
+        v2_qa_groups=[dict(g) for g in groups],
+        v2_qa_group_id=None,
+        v2_qa_category_id=None,
+        v2_qa_brand_id=None,
+        v2_qa_model=None,
+        v2_qa_price=None,
+        v2_qa_photo_urls=[],
+    )
+    await state.set_state(V2QuickAddProductState.choosing_group)
+    await message.answer(
+        "1/5 📁 Оберіть групу:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+async def _v2_quick_add_show_categories(message: Message, state: FSMContext, group_id: int):
+    cats = await db.v2_list_categories_by_group(group_id)
+    if not cats:
+        await message.answer("⚠️ У цій групі немає категорій.")
+        await _v2_quick_add_show_groups(message, state)
+        return
+
+    buttons = []
+    for c in cats:
+        em = (c["emoji"] or "").strip()
+        name = (c["name_uk"] or c["name_ru"] or c["slug"] or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if label:
+            buttons.append([KeyboardButton(text=label)])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+
+    await state.update_data(v2_qa_group_id=group_id, v2_qa_categories=[dict(c) for c in cats])
+    await state.set_state(V2QuickAddProductState.choosing_category)
+    await message.answer(
+        "1/5 📂 Оберіть категорію:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+async def _v2_quick_add_show_brands(message: Message, state: FSMContext, category_id: int):
+    brands = await db.v2_list_brands_by_category(category_id)
+    buttons = [[KeyboardButton(text=b["name"])] for b in brands]
+    buttons.append([KeyboardButton(text="➕ Новий бренд")])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+
+    await state.update_data(v2_qa_category_id=category_id, v2_qa_brands=[dict(b) for b in brands])
+    await state.set_state(V2QuickAddProductState.choosing_brand)
+    await message.answer(
+        "2/5 🏷 Оберіть бренд:",
+        reply_markup=ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True),
+    )
+
+
+async def _v2_quick_add_finalize(message: Message, state: FSMContext):
+    data = await state.get_data()
+    category_id = data.get("v2_qa_category_id")
+    brand_id = data.get("v2_qa_brand_id")
+    brand_name = data.get("v2_qa_brand_name") or ""
+    model = (data.get("v2_qa_model") or "").strip()
+    price = float(data.get("v2_qa_price") or 0)
+    photo_urls = data.get("v2_qa_photo_urls") or []
+
+    if not category_id or not brand_id or not model:
+        await message.answer("⚠️ Помилка даних. Почніть додавання ще раз.", reply_markup=v2_products_global_kb)
+        await state.set_state(V2ProductListState.browsing)
+        return
+
+    try:
+        product_id = await db.v2_create_product(
+            category_id=int(category_id),
+            brand_id=int(brand_id),
+            model=model,
+            price=float(price),
+        )
+    except Exception as _e:
+        print(f"[v2_quick_add_create_product] {_e}")
+        await message.answer("⚠️ Помилка при створенні товару.")
+        return
+
+    if not product_id:
+        await message.answer("⚠️ Не вдалося створити товар.")
+        return
+
+    added_photos = 0
+    for url in photo_urls:
+        try:
+            await db.v2_add_product_image(int(product_id), url)
+            added_photos += 1
+        except Exception as _e:
+            print(f"[v2_quick_add_add_photo] {_e}")
+
+    await message.answer(
+        f"✅ Товар створено: <b>{brand_name} {model}</b>\n"
+        f"💰 Ціна: <b>{float(price):.2f} грн</b>\n"
+        f"🖼 Фото: <b>{added_photos}</b>",
+        parse_mode="HTML",
+    )
+    await _v2_show_product_card(message, state, int(product_id))
+
+
+@router.message(V2QuickAddProductState.choosing_group)
+async def v2_quick_add_choose_group_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    groups = data.get("v2_qa_groups") or []
+
+    if text == "⬅️ Назад":
+        await state.set_state(V2ProductListState.browsing)
+        total = await db.v2_count_products()
+        await message.answer(
+            f"🛍 <b>Товари v2</b>\n\nВсього товарів: <b>{total}</b>\n\nОберіть дію:",
+            parse_mode="HTML",
+            reply_markup=v2_products_global_kb,
+        )
+        return
+
+    selected = None
+    for g in groups:
+        em = (g.get("emoji") or "").strip()
+        name = (g.get("name_uk") or g.get("name_ru") or g.get("slug") or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if text == label:
+            selected = g
+            break
+
+    if not selected:
+        await message.answer("⚠️ Оберіть групу зі списку.")
+        return
+
+    await _v2_quick_add_show_categories(message, state, int(selected["id"]))
+
+
+@router.message(V2QuickAddProductState.choosing_category)
+async def v2_quick_add_choose_category_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+
+    if text == "⬅️ Назад":
+        await _v2_quick_add_show_groups(message, state)
+        return
+
+    cats = data.get("v2_qa_categories") or []
+    selected = None
+    for c in cats:
+        em = (c.get("emoji") or "").strip()
+        name = (c.get("name_uk") or c.get("name_ru") or c.get("slug") or "?").strip()
+        label = f"{em} {name}".strip() if em else name
+        if text == label:
+            selected = c
+            break
+
+    if not selected:
+        await message.answer("⚠️ Оберіть категорію зі списку.")
+        return
+
+    await _v2_quick_add_show_brands(message, state, int(selected["id"]))
+
+
+@router.message(V2QuickAddProductState.choosing_brand)
+async def v2_quick_add_choose_brand_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_qa_category_id")
+
+    if text == "⬅️ Назад":
+        group_id = data.get("v2_qa_group_id")
+        if group_id:
+            await _v2_quick_add_show_categories(message, state, int(group_id))
+        else:
+            await _v2_quick_add_show_groups(message, state)
+        return
+
+    if text == "➕ Новий бренд":
+        await state.set_state(V2QuickAddProductState.waiting_new_brand)
+        await message.answer(
+            "Введіть назву нового бренду:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    brands = data.get("v2_qa_brands") or []
+    selected = next((b for b in brands if (b.get("name") or "") == text), None)
+    if not selected:
+        await message.answer("⚠️ Оберіть бренд зі списку або натисніть ➕ Новий бренд.")
+        return
+
+    await state.update_data(v2_qa_brand_id=int(selected["id"]), v2_qa_brand_name=selected["name"])
+    await state.set_state(V2QuickAddProductState.waiting_model)
+    await message.answer(
+        f"3/5 📝 Бренд: <b>{selected['name']}</b>\n\nВведіть модель:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2QuickAddProductState.waiting_new_brand)
+async def v2_quick_add_new_brand_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_qa_category_id")
+
+    if text == "⬅️ Назад":
+        if category_id:
+            await _v2_quick_add_show_brands(message, state, int(category_id))
+        else:
+            await _v2_quick_add_show_groups(message, state)
+        return
+
+    if not text:
+        await message.answer("⚠️ Введіть назву бренду.")
+        return
+    if not category_id:
+        await message.answer("⚠️ Категорію не знайдено.")
+        return
+
+    try:
+        brand_id = await db.v2_create_category_brand(int(category_id), text)
+    except Exception as _e:
+        print(f"[v2_quick_add_new_brand] {_e}")
+        await message.answer("⚠️ Не вдалося створити бренд.")
+        return
+
+    if not brand_id:
+        await message.answer("⚠️ Не вдалося створити бренд.")
+        return
+
+    await state.update_data(v2_qa_brand_id=int(brand_id), v2_qa_brand_name=text)
+    await state.set_state(V2QuickAddProductState.waiting_model)
+    await message.answer(
+        f"✅ Бренд створено: <b>{text}</b>\n\n3/5 Введіть модель:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2QuickAddProductState.waiting_model)
+async def v2_quick_add_model_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    category_id = data.get("v2_qa_category_id")
+
+    if text == "⬅️ Назад":
+        if category_id:
+            await _v2_quick_add_show_brands(message, state, int(category_id))
+        else:
+            await _v2_quick_add_show_groups(message, state)
+        return
+
+    if not text:
+        await message.answer("⚠️ Введіть модель.")
+        return
+
+    await state.update_data(v2_qa_model=text)
+    await state.set_state(V2QuickAddProductState.waiting_price)
+    await message.answer(
+        "4/5 💰 Введіть ціну (грн) або «-» щоб пропустити:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2QuickAddProductState.waiting_price)
+async def v2_quick_add_price_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+    model = (data.get("v2_qa_model") or "").strip()
+
+    if text == "⬅️ Назад":
+        await state.set_state(V2QuickAddProductState.waiting_model)
+        await message.answer(
+            "3/5 📝 Введіть модель:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text == "-":
+        price = 0.0
+    else:
+        try:
+            price = float(text.replace(",", "."))
+            if price < 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("⚠️ Невірна ціна. Введіть число або «-».")
+            return
+
+    await state.update_data(v2_qa_price=price, v2_qa_photo_urls=[])
+    await state.set_state(V2QuickAddProductState.collecting_photos)
+    await message.answer(
+        f"5/5 🖼 Модель: <b>{model}</b>\n"
+        f"💰 Ціна: <b>{price:.2f} грн</b>\n\n"
+        "Надішліть фото (можна кілька підряд)\n"
+        "або натисніть кнопку нижче:",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="✅ Готово")],
+                [KeyboardButton(text="⏭ Пропустити")],
+                [KeyboardButton(text="⬅️ Назад")],
+            ],
+            resize_keyboard=True,
+        ),
+    )
+
+
+@router.message(V2QuickAddProductState.collecting_photos)
+async def v2_quick_add_photos_handler(message: Message, state: FSMContext):
+    if not await require_admin(message):
+        return
+    text = (message.text or "").strip()
+    data = await state.get_data()
+
+    if text == "⬅️ Назад":
+        await state.set_state(V2QuickAddProductState.waiting_price)
+        await message.answer(
+            "4/5 💰 Введіть ціну (грн) або «-» щоб пропустити:",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="⬅️ Назад")]],
+                resize_keyboard=True,
+            ),
+        )
+        return
+
+    if text in {"✅ Готово", "⏭ Пропустити"}:
+        await _v2_quick_add_finalize(message, state)
+        return
+
+    if not message.photo:
+        await message.answer("⚠️ Надішліть фото або натисніть ✅ Готово / ⏭ Пропустити.")
+        return
+
+    try:
+        file_id = message.photo[-1].file_id
+        url = await save_telegram_photo(telegram_bot, file_id)
+    except Exception as _e:
+        print(f"[v2_quick_add_photo_upload] {_e}")
+        await message.answer("⚠️ Не вдалося завантажити фото. Спробуйте ще раз.")
+        return
+
+    photo_urls = list(data.get("v2_qa_photo_urls") or [])
+    photo_urls.append(url)
+    await state.update_data(v2_qa_photo_urls=photo_urls)
+    await message.answer(f"🖼 Додано фото: {len(photo_urls)}")
 
 
 def _make_category_key(text: str) -> str:
